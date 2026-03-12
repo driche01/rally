@@ -1,0 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* React Native Web: root elements need explicit height so flex:1 works */
+html,
+body,
+#root {
+  height: 100%;
+}
