@@ -5,7 +5,6 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
-  Keyboard,
   Linking,
   Modal,
   PanResponder,
@@ -17,7 +16,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -506,7 +504,6 @@ export default function TripDetailScreen() {
 
   return (
     <>
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
     <View className="flex-1 bg-neutral-50" style={{ paddingTop: insets.top }}>
 
       {/* ── Sticky header ──────────────────────────────────────────────────── */}
@@ -678,6 +675,8 @@ export default function TripDetailScreen() {
       <ScrollView
         ref={mainScrollRef}
         contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: insets.bottom + 100 }}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#FF6B5B" />
         }
@@ -848,7 +847,6 @@ export default function TripDetailScreen() {
       </ScrollView>
 
     </View>
-    </TouchableWithoutFeedback>
 
     <PreciseGroupSizeModal
       visible={preciseModalVisible}
