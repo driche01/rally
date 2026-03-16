@@ -4,8 +4,8 @@
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "export:web": "expo export --platform web",
     "typescript": "tsc --noEmit",
@@ -25,6 +25,7 @@
     "expo-constants": "~55.0.7",
     "expo-device": "~55.0.9",
     "expo-font": "~55.0.4",
+    "expo-iap": "^3.4.9",
     "expo-linking": "~55.0.7",
     "expo-notifications": "~55.0.11",
     "expo-router": "~55.0.4",

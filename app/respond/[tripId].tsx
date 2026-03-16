@@ -36,6 +36,9 @@ import {
 import { getResponseCountsForTrip } from '@/lib/api/responses';
 import { capture, Events } from '@/lib/analytics';
 import type { TripWithPolls, PollWithOptions, Respondent } from '@/types/database';
+import { supabase } from '@/lib/supabase';
+import { getBlocksForTrip, upsertDayRsvp, formatDayLabel, formatTime } from '@/lib/api/itinerary';
+import type { ItineraryBlock, DayRsvpStatus } from '@/types/database';
 
 // ─── Name storage ─────────────────────────────────────────────────────────────
 
@@ -408,9 +411,42 @@ function PollResultsCard({
 
 // ─── Download prompt (post-submission) ────────────────────────────────────────
 
-function DownloadPrompt({ tripName }: { tripName?: string }) {
-  const APP_STORE_URL = 'https://apps.apple.com/app/rally/id0000000000'; // replace at launch
+function DownloadPrompt({ tripName, tripId }: { tripName?: string; tripId: string }) {
+  // Set EXPO_PUBLIC_APP_STORE_ID in your .env once your App Store listing is live
+  const appStoreId = process.env.EXPO_PUBLIC_APP_STORE_ID ?? '';
+  const APP_STORE_URL = appStoreId
+    ? `https://apps.apple.com/app/rally/id${appStoreId}`
+    : 'https://rallyapp.io';
   const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.rally.app';
+  const VIRAL_KEY = 'rally_viral_' + tripId;
+
+  const [shown, setShown] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    async function checkShown() {
+      if (Platform.OS === 'web') {
+        const val = localStorage.getItem(VIRAL_KEY);
+        if (val) {
+          setShown(false);
+        } else {
+          localStorage.setItem(VIRAL_KEY, '1');
+          setShown(true);
+        }
+      } else {
+        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+        const val = await AsyncStorage.getItem(VIRAL_KEY);
+        if (val) {
+          setShown(false);
+        } else {
+          await AsyncStorage.setItem(VIRAL_KEY, '1');
+          setShown(true);
+        }
+      }
+    }
+    checkShown();
+  }, []);
+
+  if (shown === null || shown === false) return null;
 
   function handleDownload(store: 'ios' | 'android') {
     capture(Events.DOWNLOAD_PROMPT_TAPPED, { store });
@@ -420,11 +456,10 @@ function DownloadPrompt({ tripName }: { tripName?: string }) {
   return (
     <View className="mt-6 rounded-3xl bg-coral-500 px-6 py-8">
       <Text className="text-center text-xl font-bold text-white">
-        Results are coming in 👀
+        Planning your own trip? Try Rally.
       </Text>
       <Text className="mt-2 text-center text-sm text-coral-100">
-        Download rally to watch the votes roll in and get notified when{' '}
-        {tripName ? `the group decides on ${tripName}` : 'the group makes a decision'}.
+        Rally makes group trip planning stupid simple — polls, itinerary, expenses, and a shared group hub. Free to start.
       </Text>
       <View className="mt-5 gap-3">
         <Pressable
@@ -446,9 +481,188 @@ function DownloadPrompt({ tripName }: { tripName?: string }) {
           <Text className="font-semibold text-neutral-800">Google Play</Text>
         </Pressable>
       </View>
-      <Text className="mt-4 text-center text-xs text-coral-200">
-        Or plan your own trip — it's free.
+      <Pressable
+        onPress={() => Linking.openURL('https://rallyapp.io')}
+        accessibilityRole="link"
+        accessibilityLabel="Start planning free"
+      >
+        <Text className="mt-4 text-center text-sm font-semibold text-white underline">
+          Start planning free →
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+// ─── Itinerary day range helper ────────────────────────────────────────────────
+
+function getDaysInRange(startDate: string, endDate: string): string[] {
+  const days: string[] = [];
+  const current = new Date(startDate + 'T12:00:00');
+  const end = new Date(endDate + 'T12:00:00');
+  while (current <= end) {
+    days.push(current.toISOString().split('T')[0]);
+    current.setDate(current.getDate() + 1);
+  }
+  return days;
+}
+
+// ─── Block type icon map ───────────────────────────────────────────────────────
+
+const BLOCK_TYPE_ICONS: Record<string, React.ComponentProps<typeof Ionicons>['name']> = {
+  activity: 'walk-outline',
+  meal: 'restaurant-outline',
+  travel: 'car-outline',
+  accommodation: 'bed-outline',
+  free_time: 'sunny-outline',
+};
+
+// ─── Itinerary RSVP section (Phase 2 only) ────────────────────────────────────
+
+function ItineraryRsvpSection({
+  trip,
+  blocks,
+  dayRsvps,
+  respondentId,
+  onRsvpChange,
+  rsvpSaving,
+}: {
+  trip: TripWithPolls;
+  blocks: ItineraryBlock[];
+  dayRsvps: Record<string, DayRsvpStatus>;
+  respondentId: string;
+  onRsvpChange: (dayDate: string, status: DayRsvpStatus) => void;
+  rsvpSaving: string | null;
+}) {
+  if (!trip.start_date || !trip.end_date || blocks.length === 0) return null;
+
+  const days = getDaysInRange(trip.start_date, trip.end_date);
+  if (days.length === 0) return null;
+
+  return (
+    <View className="mt-6">
+      <Text className="text-lg font-bold text-neutral-800">📅 Are you in?</Text>
+      <Text className="mt-1 text-sm text-neutral-500">
+        Let the planner know which days work for you.
       </Text>
+
+      {days.map((dayDate) => {
+        const dayBlocks = blocks
+          .filter((b) => b.day_date === dayDate)
+          .sort((a, b) => a.position - b.position);
+        const currentStatus = dayRsvps[dayDate];
+        const isSaving = rsvpSaving === dayDate;
+
+        return (
+          <View key={dayDate} className="mt-4 rounded-2xl border border-neutral-100 bg-white p-4">
+            {/* Day header */}
+            <Text className="mb-3 text-sm font-semibold text-neutral-700">
+              {formatDayLabel(dayDate)}
+            </Text>
+
+            {/* Blocks list */}
+            {dayBlocks.length > 0 ? (
+              <View className="mb-4 gap-2">
+                {dayBlocks.map((block) => (
+                  <View key={block.id} className="flex-row items-start gap-2">
+                    <View className="mt-0.5">
+                      <Ionicons
+                        name={BLOCK_TYPE_ICONS[block.type] ?? 'ellipse-outline'}
+                        size={16}
+                        color="#6B7280"
+                      />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-sm font-medium text-neutral-800">{block.title}</Text>
+                      {block.start_time ? (
+                        <Text className="text-xs text-neutral-400">{formatTime(block.start_time)}</Text>
+                      ) : null}
+                      {block.location ? (
+                        <Text className="text-xs text-neutral-400" numberOfLines={1}>
+                          {block.location}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
+            {/* RSVP buttons */}
+            {isSaving ? (
+              <ActivityIndicator size="small" color="#FF6B5B" />
+            ) : (
+              <View className="flex-row gap-2">
+                <Pressable
+                  onPress={() => onRsvpChange(dayDate, 'going')}
+                  className={[
+                    'flex-1 items-center justify-center rounded-xl border py-2',
+                    currentStatus === 'going'
+                      ? 'border-green-500 bg-green-500'
+                      : 'border-green-200 bg-green-50',
+                  ].join(' ')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Going"
+                  accessibilityState={{ selected: currentStatus === 'going' }}
+                >
+                  <Text
+                    className={[
+                      'text-xs font-semibold',
+                      currentStatus === 'going' ? 'text-white' : 'text-green-700',
+                    ].join(' ')}
+                  >
+                    ✓ Going
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => onRsvpChange(dayDate, 'not_sure')}
+                  className={[
+                    'flex-1 items-center justify-center rounded-xl border py-2',
+                    currentStatus === 'not_sure'
+                      ? 'border-amber-400 bg-amber-400'
+                      : 'border-amber-200 bg-amber-50',
+                  ].join(' ')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Maybe"
+                  accessibilityState={{ selected: currentStatus === 'not_sure' }}
+                >
+                  <Text
+                    className={[
+                      'text-xs font-semibold',
+                      currentStatus === 'not_sure' ? 'text-white' : 'text-amber-700',
+                    ].join(' ')}
+                  >
+                    ? Maybe
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => onRsvpChange(dayDate, 'cant_make_it')}
+                  className={[
+                    'flex-1 items-center justify-center rounded-xl border py-2',
+                    currentStatus === 'cant_make_it'
+                      ? 'border-neutral-400 bg-neutral-400'
+                      : 'border-neutral-200 bg-neutral-100',
+                  ].join(' ')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Can't make it"
+                  accessibilityState={{ selected: currentStatus === 'cant_make_it' }}
+                >
+                  <Text
+                    className={[
+                      'text-xs font-semibold',
+                      currentStatus === 'cant_make_it' ? 'text-white' : 'text-neutral-500',
+                    ].join(' ')}
+                  >
+                    ✕ Can't make it
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -475,6 +689,10 @@ export default function RespondScreen() {
   const [responses, setResponses] = useState<Record<string, string[]>>({});
   // live vote counts fetched after submission: { [pollId]: { [optionId]: count } }
   const [resultCounts, setResultCounts] = useState<Record<string, Record<string, number>>>({});
+  const [respondentId, setRespondentId] = useState<string | null>(null);
+  const [itineraryBlocks, setItineraryBlocks] = useState<ItineraryBlock[]>([]);
+  const [dayRsvps, setDayRsvps] = useState<Record<string, DayRsvpStatus>>({});
+  const [rsvpSaving, setRsvpSaving] = useState<string | null>(null);
   const nameInputRef = useRef<TextInput>(null);
 
   // ─── Load trip ────────────────────────────────────────────────────────────
@@ -588,6 +806,7 @@ export default function RespondScreen() {
     setSubmitting(true);
     try {
       const respondent = await getOrCreateRespondent(trip.id, name.trim());
+      setRespondentId(respondent.id);
       const polls = trip.polls ?? [];
       for (const poll of polls) {
         const optionIds = responses[poll.id] ?? [];
@@ -601,6 +820,27 @@ export default function RespondScreen() {
       } catch {
         // non-fatal — confirmation screen will just show empty bars
       }
+      // Fetch itinerary + existing RSVPs for this respondent if Phase 2 is active
+      if (trip.phase2_unlocked && trip.start_date && trip.end_date) {
+        try {
+          const [blocks, rsvpResult] = await Promise.all([
+            getBlocksForTrip(trip.id),
+            supabase
+              .from('day_rsvps')
+              .select('day_date, status')
+              .eq('trip_id', trip.id)
+              .eq('respondent_id', respondent.id),
+          ]);
+          setItineraryBlocks(blocks);
+          if (rsvpResult.data) {
+            const rsvpMap: Record<string, DayRsvpStatus> = {};
+            rsvpResult.data.forEach((r: { day_date: string; status: string }) => {
+              rsvpMap[r.day_date] = r.status as DayRsvpStatus;
+            });
+            setDayRsvps(rsvpMap);
+          }
+        } catch { /* non-fatal — itinerary section will just not show */ }
+      }
       setStep('done');
     } catch (err: unknown) {
       const msg =
@@ -611,6 +851,20 @@ export default function RespondScreen() {
       Alert.alert('Submission failed', 'Could not save your responses. Please check your connection and try again.');
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  // ─── Handle RSVP change ────────────────────────────────────────────────────
+  async function handleRsvpChange(dayDate: string, status: DayRsvpStatus) {
+    if (!respondentId || !trip) return;
+    setRsvpSaving(dayDate);
+    try {
+      await upsertDayRsvp(trip.id, respondentId, dayDate, status);
+      setDayRsvps((prev) => ({ ...prev, [dayDate]: status }));
+    } catch {
+      Alert.alert('Error', 'Could not save your RSVP. Please try again.');
+    } finally {
+      setRsvpSaving(null);
     }
   }
 
@@ -790,8 +1044,20 @@ export default function RespondScreen() {
           </View>
         ) : null}
 
+        {/* Itinerary RSVP section (Phase 2 only) */}
+        {trip.phase2_unlocked && trip.start_date && trip.end_date && respondentId && (
+          <ItineraryRsvpSection
+            trip={trip}
+            blocks={itineraryBlocks}
+            dayRsvps={dayRsvps}
+            respondentId={respondentId}
+            onRsvpChange={handleRsvpChange}
+            rsvpSaving={rsvpSaving}
+          />
+        )}
+
         {/* Download prompt */}
-        <DownloadPrompt tripName={trip.name} />
+        <DownloadPrompt tripName={trip.name} tripId={trip.id} />
       </ScrollView>
     );
   }

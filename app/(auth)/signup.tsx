@@ -27,7 +27,7 @@ export default function SignupScreen() {
     setLoading(true);
     try {
       await signUp(name.trim(), email.trim().toLowerCase(), password);
-      router.replace('/(app)');
+      router.replace('/(app)/(tabs)');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Signup failed.';
       const isDuplicate = message.toLowerCase().includes('already');

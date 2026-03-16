@@ -8,7 +8,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ProgressBar, Badge } from '@/components/ui';
 import { PreciseGroupSizeModal } from '@/components/PreciseGroupSizeModal';
 import { useDeleteTrip, useTripsWithRespondentCounts, useUpdateTrip } from '@/hooks/useTrips';
-import { useSignOut } from '@/hooks/useAuth';
 import { getParticipationRate } from '@/types/database';
 import type { TripWithRespondentCount } from '@/lib/api/trips';
 
@@ -78,31 +77,28 @@ function TripCard({
         friction={2}
         containerStyle={{ marginBottom: 12 }}
       >
-        {/* TouchableOpacity from RNGH integrates with the swipe gesture,
-            preventing onPress from firing during horizontal swipes */}
-        <TouchableOpacity
-          onPress={() => router.push(`/(app)/trips/${trip.id}`)}
-          onLongPress={() => router.push(`/(app)/trips/${trip.id}/edit`)}
-          activeOpacity={0.85}
-          style={[styles.card, { backgroundColor: 'rgba(255, 255, 255, 0.82)' }]}
-          accessibilityRole="button"
-        >
-          <View className="flex-row items-start justify-between">
-            <View className="flex-1 gap-1">
-              <Text className="text-lg font-semibold text-neutral-800" numberOfLines={1}>
-                {trip.name}
-              </Text>
-              {trip.travel_window ? (
-                <View className="flex-row gap-1.5">
-                  {trip.travel_window.split(', ').map((season) => (
-                    <View key={season} className="flex-row items-center gap-1 rounded-full border border-neutral-200 bg-white px-2.5 py-1">
-                      <Ionicons name={SEASON_ICON[season] ?? 'sunny-outline'} size={12} color="#737373" />
-                      <Text className="text-xs text-neutral-500">{season}</Text>
-                    </View>
-                  ))}
-                </View>
-              ) : null}
-            </View>
+        <View style={[styles.cardShell, { backgroundColor: 'rgba(255, 255, 255, 0.82)' }]}>
+          {/* TouchableOpacity from RNGH integrates with the swipe gesture,
+              preventing onPress from firing during horizontal swipes */}
+          <TouchableOpacity
+            onPress={() => router.push(`/(app)/trips/${trip.id}/edit`)}
+            activeOpacity={0.85}
+            style={styles.cardLeft}
+            accessibilityRole="button"
+          >
+            <Text style={styles.tripName} numberOfLines={1}>{trip.name}</Text>
+
+            {trip.travel_window ? (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
+                {trip.travel_window.split(', ').map((season) => (
+                  <View key={season} style={styles.seasonPill}>
+                    <Ionicons name={SEASON_ICON[season] ?? 'sunny-outline'} size={12} color="#737373" />
+                    <Text style={styles.seasonText}>{season}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
             {/* Tapping the badge opens the precise-number modal */}
             <Pressable
               onPress={() => setPreciseModalVisible(true)}
@@ -112,17 +108,40 @@ function TripCard({
             >
               <Badge variant="muted">{sizeLabel}</Badge>
             </Pressable>
-          </View>
 
-          <View className="mt-3">
-            <ProgressBar
-              value={percent}
-              max={100}
-              label={`${count} of ${total} responded`}
-              showPercent
-            />
+            <View style={{ marginTop: 2 }}>
+              <ProgressBar
+                value={percent}
+                max={100}
+                label={`${count} of ${total} responded`}
+                showPercent
+              />
+            </View>
+          </TouchableOpacity>
+
+          {/* Right: Poll + Build pill CTAs */}
+          <View style={styles.cardRight}>
+            <Pressable
+              onPress={() => router.push(`/(app)/trips/${trip.id}`)}
+              style={styles.pollPill}
+              accessibilityRole="button"
+              accessibilityLabel="View polls"
+            >
+              <Ionicons name="stats-chart" size={13} color="white" />
+              <Text style={[styles.pillText, { color: 'white' }]}>Poll</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => router.push(`/(app)/trips/${trip.id}/hub`)}
+              style={styles.buildPill}
+              accessibilityRole="button"
+              accessibilityLabel="Launch trip builder"
+            >
+              <Ionicons name="map-outline" size={13} color="#FF6B5B" />
+              <Text style={[styles.pillText, { color: '#FF6B5B' }]}>Build</Text>
+            </Pressable>
           </View>
-        </TouchableOpacity>
+        </View>
       </Swipeable>
 
       <PreciseGroupSizeModal
@@ -141,7 +160,6 @@ function TripCard({
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const signOut = useSignOut();
   const { data: trips, isLoading, refetch } = useTripsWithRespondentCounts();
   const deleteTrip = useDeleteTrip();
   const updateTrip = useUpdateTrip();
@@ -156,7 +174,7 @@ export default function HomeScreen() {
 
   return (
     <ImageBackground
-      source={require('../../assets/yosemite.jpg')}
+      source={require('../../../assets/yosemite.jpg')}
       style={{ flex: 1, paddingTop: insets.top }}
       resizeMode="cover"
     >
@@ -186,7 +204,7 @@ export default function HomeScreen() {
         <FlatList
           data={trips ?? []}
           keyExtractor={(t) => t.id}
-          contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 20, paddingBottom: insets.bottom + 100 }}
+          contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24 }}
           refreshControl={
             <RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor="#FF6B5B" />
           }
@@ -216,38 +234,81 @@ export default function HomeScreen() {
           )}
         />
       </View>
-
-      {/* Sign out */}
-      <View
-        className="absolute bottom-0 right-0 pr-6"
-        style={{ paddingBottom: insets.bottom + 16 }}
-      >
-        <Pressable
-          onPress={() =>
-            Alert.alert('Sign out?', '', [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Sign out', style: 'destructive', onPress: () => signOut() },
-            ])
-          }
-          className="h-12 w-12 items-center justify-center rounded-full bg-white/80"
-          accessibilityRole="button"
-          accessibilityLabel="Sign out"
-        >
-          <Ionicons name="log-out-outline" size={22} color="#6B6B6B" />
-        </Pressable>
-      </View>
     </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
+  cardShell: {
     borderRadius: 16,
-    padding: 16,
+    overflow: 'hidden',
+    flexDirection: 'row',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 3,
+  },
+  cardLeft: {
+    flex: 1,
+    padding: 14,
+    gap: 7,
+  },
+  tripName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    lineHeight: 18,
+  },
+  seasonPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    borderWidth: 1,
+    borderColor: '#e8e8e8',
+    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: '#fafafa',
+  },
+  seasonText: {
+    fontSize: 10.5,
+    color: '#666',
+  },
+  cardRight: {
+    width: 112,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: '#f2f2f2',
+    alignItems: 'stretch',
+    justifyContent: 'center',
+    gap: 8,
+    paddingLeft: 10,
+    paddingRight: 6,
+    paddingVertical: 12,
+  },
+  pollPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: '#FF6B5B',
+  },
+  buildPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: 'white',
+    borderWidth: 1.5,
+    borderColor: '#FF6B5B',
+  },
+  pillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.1,
   },
 });

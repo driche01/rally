@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
 import { identify, reset } from '../lib/analytics';
+import { registerPushToken, deregisterPushToken } from '../lib/notifications';
 
 export function useAuthListener() {
   const { setSession, setLoading } = useAuthStore();
@@ -13,20 +14,25 @@ export function useAuthListener() {
       setLoading(false);
       if (session?.user) {
         identify(session.user.id, { email: session.user.email });
+        registerPushToken();
       }
     });
 
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
       setLoading(false);
       if (session?.user) {
         identify(session.user.id, { email: session.user.email });
+        if (event === 'SIGNED_IN') {
+          registerPushToken();
+        }
       } else {
-        // User signed out — reset PostHog identity
+        // User signed out — reset PostHog identity and remove push token
         reset();
+        deregisterPushToken();
       }
     });
 

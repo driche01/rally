@@ -5,6 +5,18 @@ export type TripStatus = 'active' | 'closed';
 export type PollType = 'destination' | 'dates' | 'budget' | 'custom';
 export type PollStatus = 'draft' | 'live' | 'closed' | 'decided';
 
+// ─── Phase 2 enums ───────────────────────────────────────────────────────────
+
+export type Phase2UnlockMethod = 'iap' | 'code' | 'free';
+export type BlockType = 'activity' | 'meal' | 'travel' | 'accommodation' | 'free_time';
+export type LodgingPlatform = 'airbnb' | 'vrbo' | 'booking' | 'manual';
+export type LodgingStatus = 'option' | 'voted' | 'booked';
+export type DayRsvpStatus = 'going' | 'not_sure' | 'cant_make_it';
+export type ExpenseCategory = 'accommodation' | 'food' | 'transport' | 'activities' | 'gear' | 'other';
+export type DiscountType = 'percentage' | 'flat' | 'full';
+export type PushPlatform = 'ios' | 'android';
+export type ReactorType = 'planner' | 'respondent';
+
 export interface Profile {
   id: string;
   name: string;
@@ -22,6 +34,12 @@ export interface Trip {
   travel_window: string | null;
   share_token: string;
   status: TripStatus;
+  // Phase 2 fields
+  start_date: string | null;        // ISO date 'YYYY-MM-DD'
+  end_date: string | null;          // ISO date 'YYYY-MM-DD'
+  phase2_unlocked: boolean;
+  phase2_unlocked_at: string | null;
+  phase2_unlock_method: Phase2UnlockMethod | null;
   created_at: string;
   updated_at: string;
 }
@@ -60,6 +78,171 @@ export interface PollResponse {
   respondent_id: string;
   option_id: string;
   created_at: string;
+}
+
+// ─── Phase 2 interfaces ──────────────────────────────────────────────────────
+
+export interface PushToken {
+  id: string;
+  user_id: string;
+  token: string;
+  platform: PushPlatform;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ItineraryBlock {
+  id: string;
+  trip_id: string;
+  day_date: string;         // 'YYYY-MM-DD'
+  type: BlockType;
+  title: string;
+  start_time: string | null; // 'HH:MM'
+  end_time: string | null;
+  location: string | null;
+  notes: string | null;
+  position: number;
+  attendee_ids: string[] | null; // null = all group members
+  lodging_option_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DayRsvp {
+  id: string;
+  trip_id: string;
+  respondent_id: string;
+  day_date: string;  // 'YYYY-MM-DD'
+  status: DayRsvpStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LodgingOption {
+  id: string;
+  trip_id: string;
+  platform: LodgingPlatform;
+  title: string;
+  url: string | null;
+  notes: string | null;
+  check_in_date: string | null;
+  check_out_date: string | null;
+  check_in_time: string | null;
+  check_out_time: string | null;
+  total_cost_cents: number | null;
+  nightly_rate_cents: number | null;
+  status: LodgingStatus;
+  booking_confirmation: string | null;
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LodgingVote {
+  id: string;
+  lodging_option_id: string;
+  trip_id: string;
+  respondent_id: string;
+  created_at: string;
+}
+
+export interface TripMessage {
+  id: string;
+  trip_id: string;
+  sender_id: string;
+  content: string;
+  itinerary_block_id: string | null;
+  is_pinned: boolean;
+  read_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MessageReaction {
+  id: string;
+  message_id: string;
+  reactor_type: ReactorType;
+  reactor_id: string;
+  emoji: string;
+  created_at: string;
+}
+
+export interface DiscountCode {
+  id: string;
+  code: string;
+  discount_type: DiscountType;
+  discount_value: number;
+  max_uses: number;
+  use_count: number;
+  expires_at: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface DiscountCodeRedemption {
+  id: string;
+  code_id: string;
+  planner_id: string;
+  trip_id: string;
+  discount_applied_cents: number;
+  created_at: string;
+}
+
+export interface Expense {
+  id: string;
+  trip_id: string;
+  description: string;
+  category: ExpenseCategory;
+  amount_cents: number;
+  paid_by_planner_id: string | null;
+  paid_by_respondent_id: string | null;
+  itinerary_block_id: string | null;
+  lodging_option_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExpenseSplit {
+  id: string;
+  expense_id: string;
+  amount_cents: number;
+  split_planner_id: string | null;
+  split_respondent_id: string | null;
+  is_settled: boolean;
+  settled_at: string | null;
+  created_at: string;
+}
+
+// ─── Phase 2 rich / joined types ─────────────────────────────────────────────
+
+export interface ItineraryDay {
+  date: string;           // 'YYYY-MM-DD'
+  blocks: ItineraryBlock[];
+  rsvpCounts: { going: number; not_sure: number; cant_make_it: number };
+}
+
+export interface LodgingOptionWithVotes extends LodgingOption {
+  votes: LodgingVote[];
+  voteCount: number;
+}
+
+export interface TripMessageWithReactions extends TripMessage {
+  reactions: MessageReaction[];
+  senderProfile?: Pick<Profile, 'id' | 'name'>;
+}
+
+export interface ExpenseWithSplits extends Expense {
+  splits: ExpenseSplit[];
+}
+
+// Balance for a single participant (respondent or planner)
+export interface ParticipantBalance {
+  id: string;          // respondent_id or planner_id
+  name: string;
+  type: 'planner' | 'respondent';
+  owes: number;        // cents — what this person owes others
+  owed: number;        // cents — what others owe this person
+  net: number;         // cents — positive = net owed to them, negative = net they owe
 }
 
 // ─── Rich / joined types ─────────────────────────────────────────────────────

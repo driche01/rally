@@ -25,7 +25,7 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await signIn(email.trim().toLowerCase(), password);
-      router.replace('/(app)');
+      router.replace('/(app)/(tabs)');
     } catch {
       Alert.alert('Login failed', 'Incorrect email or password.');
     } finally {

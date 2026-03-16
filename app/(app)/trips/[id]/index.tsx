@@ -21,6 +21,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Badge, Button, Card } from '@/components/ui';
 import { PreciseGroupSizeModal } from '@/components/PreciseGroupSizeModal';
+import { PlanConfirmedModal } from '@/components/PlanConfirmedModal';
 import { usePolls, useUpdatePollStatus, useDecidePoll, useUndecidePoll, useDeletePoll, useDuplicatePoll, pollKeys } from '@/hooks/usePolls';
 import { useRespondents, respondentKeys } from '@/hooks/useRespondents';
 import { useResponseCounts, responseCountKeys } from '@/hooks/useResponseCounts';
@@ -380,6 +381,13 @@ export default function TripDetailScreen() {
   const [decidedSectionY, setDecidedSectionY] = useState(0);
   const [decidedCardYs, setDecidedCardYs] = useState<Record<string, number>>({});
 
+  // ─── Phase 1→2 handoff modal ──────────────────────────────────────────────
+  const [planConfirmedVisible, setPlanConfirmedVisible] = useState(false);
+  const [decidedDestination, setDecidedDestination] = useState<string | null>(null);
+  // Tracks which poll IDs have already auto-triggered the modal this session
+  // (prevents re-showing on every re-render / query refetch)
+  const shownModalForPollIds = useRef<Set<string>>(new Set());
+
   const { data: trip } = useTrip(id);
   const { data: polls = [], refetch: refetchPolls } = usePolls(id);
   const updateTrip = useUpdateTrip();
@@ -501,6 +509,24 @@ export default function TripDetailScreen() {
   const draftPolls = useMemo(() => sortedPolls.filter((p) => p.status === 'draft'), [sortedPolls]);
   const closedPolls = useMemo(() => sortedPolls.filter((p) => p.status === 'closed'), [sortedPolls]);
   const decidedPolls = useMemo(() => sortedPolls.filter((p) => p.status === 'decided'), [sortedPolls]);
+
+  // Auto-show the Plan Confirmed modal when a destination poll is decided for
+  // the first time in this session (emotionally resonant Phase 1→2 handoff moment).
+  useEffect(() => {
+    const destinationDecided = decidedPolls.find(
+      (p) => p.type === 'destination' && !shownModalForPollIds.current.has(p.id)
+    );
+    if (!destinationDecided) return;
+
+    const label =
+      destinationDecided.poll_options.find(
+        (o) => o.id === destinationDecided.decided_option_id
+      )?.label ?? null;
+
+    shownModalForPollIds.current.add(destinationDecided.id);
+    setDecidedDestination(label);
+    setPlanConfirmedVisible(true);
+  }, [decidedPolls]);
 
   return (
     <>
@@ -660,6 +686,30 @@ export default function TripDetailScreen() {
             <Ionicons name="copy-outline" size={20} color="#4A4A4A" />
           </Pressable>
         </View>
+
+        {/* Build the trip — persistent Phase 2 entry point.
+            Shown once the planner has at least one poll, or has already unlocked Phase 2. */}
+        {(polls.length > 0 || trip?.phase2_unlocked) ? (
+          <Pressable
+            onPress={() => {
+              if (trip?.phase2_unlocked) {
+                // Already paid — skip the upsell modal and go straight to the hub
+                router.push(`/(app)/trips/${id}/hub`);
+              } else {
+                // Show the celebratory modal → paywall
+                setPlanConfirmedVisible(true);
+              }
+            }}
+            className="mt-3 flex-row items-center justify-center gap-1.5 rounded-2xl border border-coral-200 bg-coral-50 px-4 py-3"
+            accessibilityRole="button"
+            accessibilityLabel={trip?.phase2_unlocked ? 'Open trip builder' : 'Build the trip'}
+          >
+            <Ionicons name="map-outline" size={16} color="#FF6B5B" />
+            <Text className="text-sm font-semibold text-coral-600">
+              {trip?.phase2_unlocked ? 'Open trip builder' : 'Build the trip'} →
+            </Text>
+          </Pressable>
+        ) : null}
 
         {/* Warning: no live polls yet */}
         {polls.length > 0 && !hasLivePolls ? (
@@ -866,6 +916,15 @@ export default function TripDetailScreen() {
         setTravelWindowModalVisible(false);
       }}
       onClose={() => setTravelWindowModalVisible(false)}
+    />
+
+    <PlanConfirmedModal
+      visible={planConfirmedVisible}
+      tripId={id}
+      tripName={trip?.name ?? ''}
+      decidedDestination={decidedDestination}
+      phase2Unlocked={trip?.phase2_unlocked ?? false}
+      onClose={() => setPlanConfirmedVisible(false)}
     />
     </>
   );

@@ -14,14 +14,14 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.rally.app"
+      "bundleIdentifier": "io.rallyapp.app"
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#FF6B5B",
         "foregroundImage": "./assets/android-icon-foreground.png"
       },
-      "package": "com.rally.app"
+      "package": "io.rallyapp.app"
     },
     "web": {
       "bundler": "metro",
@@ -37,7 +37,8 @@
           "color": "#FF6B5B"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-iap"
     ],
     "experiments": {
       "typedRoutes": true

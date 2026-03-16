@@ -7,19 +7,43 @@ import {
   Inter_700Bold,
   useFonts,
 } from '@expo-google-fonts/inter';
-import { SplashScreen, Stack } from 'expo-router';
-import { useEffect } from 'react';
+import * as Notifications from 'expo-notifications';
+import { SplashScreen, Stack, useRouter } from 'expo-router';
+import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { queryClient } from '@/lib/queryClient';
 import { initAnalytics } from '@/lib/analytics';
 import { useAuthListener } from '@/hooks/useAuth';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { getInitialNotificationUrl } from '@/lib/notifications';
 
 if (Platform.OS !== 'web') SplashScreen.preventAutoHideAsync();
 
 function AppInitializer({ children }: { children: React.ReactNode }) {
   useAuthListener();
+  const router = useRouter();
+  const notificationResponseRef = useRef<Notifications.Subscription | null>(null);
+
+  useEffect(() => {
+    // Handle notification tap when app is killed (cold start)
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      const url = getInitialNotificationUrl(response);
+      if (url) router.push(url as Parameters<typeof router.push>[0]);
+    });
+
+    // Handle notification tap when app is backgrounded
+    notificationResponseRef.current =
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        const url = getInitialNotificationUrl(response);
+        if (url) router.push(url as Parameters<typeof router.push>[0]);
+      });
+
+    return () => {
+      notificationResponseRef.current?.remove();
+    };
+  }, [router]);
+
   return <>{children}</>;
 }
 

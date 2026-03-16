@@ -6,6 +6,7 @@ import {
   getTripsWithRespondentCounts,
   getTripById,
   updateTrip,
+  updateTripStatus,
   type CreateTripInput,
 } from '../lib/api/trips';
 
@@ -67,6 +68,18 @@ export function useUpdateTrip() {
       qc.invalidateQueries({ queryKey: tripKeys.all });
       qc.invalidateQueries({ queryKey: tripKeys.allWithCounts });
       qc.invalidateQueries({ queryKey: tripKeys.detail(data.id) });
+    },
+  });
+}
+
+export function useCloseTrip() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => updateTripStatus(id, 'closed'),
+    onSuccess: (_void, id) => {
+      qc.invalidateQueries({ queryKey: tripKeys.all });
+      qc.invalidateQueries({ queryKey: tripKeys.allWithCounts });
+      qc.invalidateQueries({ queryKey: tripKeys.detail(id) });
     },
   });
 }
