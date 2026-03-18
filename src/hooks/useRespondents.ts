@@ -3,6 +3,7 @@ import {
   getRespondentsForTrip,
   getOrCreateRespondent,
   submitPollResponses,
+  setRespondentPlanner,
 } from '../lib/api/respondents';
 
 export const respondentKeys = {
@@ -14,6 +15,15 @@ export function useRespondents(tripId: string) {
     queryKey: respondentKeys.forTrip(tripId),
     queryFn: () => getRespondentsForTrip(tripId),
     enabled: Boolean(tripId),
+  });
+}
+
+export function useSetRespondentPlanner(tripId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ respondentId, isPlanner }: { respondentId: string; isPlanner: boolean }) =>
+      setRespondentPlanner(respondentId, isPlanner),
+    onSuccess: () => qc.invalidateQueries({ queryKey: respondentKeys.forTrip(tripId) }),
   });
 }
 

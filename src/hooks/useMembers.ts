@@ -4,12 +4,14 @@ import {
   leaveTrip,
   getTripMembers,
   getMembershipStatus,
+  getTripMemberCount,
 } from '../lib/api/members';
 import { tripKeys } from './useTrips';
 
 export const memberKeys = {
   forTrip: (tripId: string) => ['members', tripId] as const,
   membership: (tripId: string) => ['members', tripId, 'me'] as const,
+  count: (tripId: string) => ['members', tripId, 'count'] as const,
 };
 
 export function useTripMembers(tripId: string) {
@@ -28,6 +30,14 @@ export function useMembershipStatus(tripId: string) {
   });
 }
 
+export function useTripMemberCount(tripId: string) {
+  return useQuery({
+    queryKey: memberKeys.count(tripId),
+    queryFn: () => getTripMemberCount(tripId),
+    enabled: Boolean(tripId),
+  });
+}
+
 export function useJoinTrip(tripId: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -35,6 +45,7 @@ export function useJoinTrip(tripId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: memberKeys.forTrip(tripId) });
       qc.invalidateQueries({ queryKey: memberKeys.membership(tripId) });
+      qc.invalidateQueries({ queryKey: memberKeys.count(tripId) });
       qc.invalidateQueries({ queryKey: tripKeys.allWithCounts });
     },
   });
@@ -47,6 +58,7 @@ export function useLeaveTrip(tripId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: memberKeys.forTrip(tripId) });
       qc.invalidateQueries({ queryKey: memberKeys.membership(tripId) });
+      qc.invalidateQueries({ queryKey: memberKeys.count(tripId) });
       qc.invalidateQueries({ queryKey: tripKeys.allWithCounts });
     },
   });

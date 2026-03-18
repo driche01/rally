@@ -88,7 +88,16 @@ export async function getExistingRespondentForTrip(tripId: string): Promise<Resp
 
 /**
  * Find or create a respondent for this trip using per-trip session storage.
- * Falls back to the global token for users who responded before this update.
+ *
+ * Deduplication order:
+ *   1. Per-trip session token   — same device/browser returning
+ *   2. Email or phone match     — same person on a different device / fresh browser
+ *   3. Legacy global token      — backward compat for pre-per-trip-token users
+ *   4. Create new               — genuinely new respondent
+ *
+ * When a contact-based match is found the existing row is updated with the
+ * latest name/email/phone and this device adopts that row's session token,
+ * so the person is never double-counted.
  */
 export async function getOrCreateRespondent(
   tripId: string,
@@ -96,7 +105,27 @@ export async function getOrCreateRespondent(
   email?: string | null,
   phone?: string | null,
 ): Promise<Respondent> {
-  // 1. Check per-trip token first
+  const trimmedEmail = email?.trim() || null;
+  const trimmedPhone = phone?.trim() || null;
+  const contactPatch = {
+    ...(trimmedEmail != null ? { email: trimmedEmail } : {}),
+    ...(trimmedPhone != null ? { phone: trimmedPhone } : {}),
+  };
+
+  // Helper: update a matched row with the latest details and adopt its token
+  async function adoptExisting(existing: Respondent): Promise<Respondent> {
+    await setTripSessionToken(tripId, existing.session_token);
+    const patch = {
+      ...(existing.name !== name ? { name } : {}),
+      ...contactPatch,
+    };
+    if (Object.keys(patch).length > 0) {
+      await supabase.from('respondents').update(patch).eq('id', existing.id);
+    }
+    return { ...existing, name, ...contactPatch };
+  }
+
+  // 1. Per-trip session token — same device returning
   const tripToken = await getTripSessionToken(tripId);
   if (tripToken) {
     const { data: existing } = await supabase
@@ -104,22 +133,30 @@ export async function getOrCreateRespondent(
       .select('*')
       .eq('trip_id', tripId)
       .eq('session_token', tripToken)
-      .single();
-
-    if (existing) {
-      const updates: Record<string, unknown> = {};
-      if (existing.name !== name) updates.name = name;
-      if (email != null && existing.email !== email) updates.email = email.trim() || null;
-      if (phone != null && existing.phone !== phone) updates.phone = phone.trim() || null;
-      if (Object.keys(updates).length > 0) {
-        await supabase.from('respondents').update(updates).eq('id', existing.id);
-      }
-      return { ...existing, name, ...(email != null ? { email: email.trim() || null } : {}), ...(phone != null ? { phone: phone.trim() || null } : {}) };
-    }
-    // Trip token present but no matching row — fall through to create
+      .maybeSingle();
+    if (existing) return adoptExisting(existing);
+    // Token present but row gone — fall through
   }
 
-  // 2. Backward compat: check global token
+  // 2. Contact-based deduplication — same person, different device/browser
+  if (trimmedEmail || trimmedPhone) {
+    const orParts: string[] = [];
+    if (trimmedEmail) orParts.push(`email.eq.${trimmedEmail}`);
+    if (trimmedPhone) orParts.push(`phone.eq.${trimmedPhone}`);
+
+    const { data: contactMatch } = await supabase
+      .from('respondents')
+      .select('*')
+      .eq('trip_id', tripId)
+      .or(orParts.join(','))
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (contactMatch) return adoptExisting(contactMatch);
+  }
+
+  // 3. Backward compat: legacy global token
   if (!tripToken) {
     const globalToken = await getGlobalSessionToken();
     const { data: existing } = await supabase
@@ -127,35 +164,18 @@ export async function getOrCreateRespondent(
       .select('*')
       .eq('trip_id', tripId)
       .eq('session_token', globalToken)
-      .single();
+      .maybeSingle();
 
-    if (existing) {
-      // Migrate to per-trip storage so future visits use it
-      await setTripSessionToken(tripId, globalToken);
-      const updates: Record<string, unknown> = {};
-      if (existing.name !== name) updates.name = name;
-      if (email != null && existing.email !== email) updates.email = email.trim() || null;
-      if (phone != null && existing.phone !== phone) updates.phone = phone.trim() || null;
-      if (Object.keys(updates).length > 0) {
-        await supabase.from('respondents').update(updates).eq('id', existing.id);
-      }
-      return { ...existing, name, ...(email != null ? { email: email.trim() || null } : {}), ...(phone != null ? { phone: phone.trim() || null } : {}) };
-    }
+    if (existing) return adoptExisting(existing);
   }
 
-  // 3. No existing respondent — create a new one with a fresh per-trip token
+  // 4. Genuinely new respondent
   const newToken = generateToken();
   await setTripSessionToken(tripId, newToken);
 
   const { data, error } = await supabase
     .from('respondents')
-    .insert({
-      trip_id: tripId,
-      name,
-      session_token: newToken,
-      ...(email ? { email: email.trim() || null } : {}),
-      ...(phone ? { phone: phone.trim() || null } : {}),
-    })
+    .insert({ trip_id: tripId, name, session_token: newToken, ...contactPatch })
     .select()
     .single();
   if (error) throw error;
@@ -231,4 +251,21 @@ export async function getExistingResponses(
     map[row.poll_id].push(row.option_id);
   }
   return map;
+}
+
+// ─── Planner designation ──────────────────────────────────────────────────────
+
+/**
+ * Promote or demote a respondent to/from planner status.
+ * Only the trip owner (authenticated) can call this.
+ */
+export async function setRespondentPlanner(
+  respondentId: string,
+  isPlanner: boolean,
+): Promise<void> {
+  const { error } = await supabase
+    .from('respondents')
+    .update({ is_planner: isPlanner })
+    .eq('id', respondentId);
+  if (error) throw error;
 }

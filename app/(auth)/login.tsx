@@ -1,15 +1,18 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { Button, Input } from '@/components/ui';
-import { useSignIn } from '@/hooks/useAuth';
+import { useGoogleSignIn, useSignIn } from '@/hooks/useAuth';
 
 export default function LoginScreen() {
   const router = useRouter();
   const signIn = useSignIn();
+  const googleSignIn = useGoogleSignIn();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
   function validate(): boolean {
@@ -25,11 +28,24 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await signIn(email.trim().toLowerCase(), password);
-      router.replace('/(app)');
+      router.replace('/(app)/(tabs)');
     } catch {
       Alert.alert('Login failed', 'Incorrect email or password.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleGoogleSignIn() {
+    setGoogleLoading(true);
+    try {
+      const result = await googleSignIn();
+      if (result) router.replace('/(app)/(tabs)');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Google sign-in failed.';
+      Alert.alert('Sign-in failed', message);
+    } finally {
+      setGoogleLoading(false);
     }
   }
 
@@ -51,6 +67,29 @@ export default function LoginScreen() {
         </View>
 
         <View className="gap-4">
+          {/* Google sign-in */}
+          <Pressable
+            onPress={handleGoogleSignIn}
+            disabled={googleLoading}
+            className="flex-row items-center justify-center gap-3 rounded-xl border border-neutral-200 bg-white py-3.5"
+          >
+            {googleLoading ? (
+              <Text className="text-sm font-medium text-neutral-600">Signing in…</Text>
+            ) : (
+              <>
+                <Ionicons name="logo-google" size={18} color="#4285F4" />
+                <Text className="text-sm font-medium text-neutral-700">Continue with Google</Text>
+              </>
+            )}
+          </Pressable>
+
+          {/* Divider */}
+          <View className="flex-row items-center gap-3">
+            <View className="h-px flex-1 bg-neutral-200" />
+            <Text className="text-xs text-neutral-400">or</Text>
+            <View className="h-px flex-1 bg-neutral-200" />
+          </View>
+
           <Input
             label="Email"
             placeholder="you@example.com"

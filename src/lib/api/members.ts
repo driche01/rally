@@ -49,6 +49,16 @@ export async function getTripMembers(tripId: string): Promise<TripMemberWithProf
   return (data ?? []) as TripMemberWithProfile[];
 }
 
+/** Get the member count for a trip. */
+export async function getTripMemberCount(tripId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from('trip_members')
+    .select('*', { count: 'exact', head: true })
+    .eq('trip_id', tripId);
+  if (error) throw error;
+  return count ?? 0;
+}
+
 /** Remove the current user from a trip. */
 export async function leaveTrip(tripId: string): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();

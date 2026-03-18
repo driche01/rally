@@ -40,7 +40,9 @@
           "color": "#FF6B5B"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-iap",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true

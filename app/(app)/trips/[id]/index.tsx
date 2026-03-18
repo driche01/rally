@@ -1,1001 +1,563 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActionSheetIOS,
   Alert,
-  Animated,
   Linking,
-  Modal,
-  PanResponder,
   Platform,
   Pressable,
-  RefreshControl,
   ScrollView,
   Share,
+  StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SortableEntryList, type CardKey } from '@/components/SortableEntryList';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Badge, Button, Card } from '@/components/ui';
-import { PreciseGroupSizeModal } from '@/components/PreciseGroupSizeModal';
-import { usePolls, useUpdatePollStatus, useDecidePoll, useUndecidePoll, useDeletePoll, useDuplicatePoll, pollKeys } from '@/hooks/usePolls';
+import { usePolls, pollKeys } from '@/hooks/usePolls';
 import { useRespondents, respondentKeys } from '@/hooks/useRespondents';
-import { useResponseCounts, responseCountKeys } from '@/hooks/useResponseCounts';
-import { useTrip, useUpdateTrip } from '@/hooks/useTrips';
+import { useTrip } from '@/hooks/useTrips';
+import { usePermissions } from '@/hooks/usePermissions';
 import { supabase } from '@/lib/supabase';
 import { getShareUrl } from '@/lib/api/trips';
 import { capture, Events } from '@/lib/analytics';
 import { queryClient } from '@/lib/queryClient';
-import { getParticipationRate, type GroupSizeBucket } from '@/types/database';
-import type { PollWithOptions } from '@/types/database';
+import { getTripStage, type TripStage } from '@/lib/tripStage';
+import { GROUP_SIZE_MIDPOINTS } from '@/types/database';
+import type { Respondent, Trip } from '@/types/database';
 
-const SEASON_ICON: Record<string, React.ComponentProps<typeof Ionicons>['name']> = {
-  Winter: 'snow-outline',
-  Spring: 'flower-outline',
-  Summer: 'sunny-outline',
-  Fall: 'leaf-outline',
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatDateRange(start: string | null, end: string | null): string | null {
+  if (!start) return null;
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const s = new Date(start + 'T12:00:00');
+  const sm = months[s.getMonth()]; const sd = s.getDate();
+  if (!end) return `${sm} ${sd}`;
+  const e = new Date(end + 'T12:00:00');
+  const em = months[e.getMonth()]; const ed = e.getDate();
+  return sm === em ? `${sm} ${sd}–${ed}` : `${sm} ${sd} – ${em} ${ed}`;
+}
+
+function calcNights(start: string | null, end: string | null): number | null {
+  if (!start || !end) return null;
+  return Math.round((new Date(end + 'T12:00:00').getTime() - new Date(start + 'T12:00:00').getTime()) / 86400000);
+}
+
+function formatWhoIsIn(respondents: Respondent[]): string | null {
+  if (respondents.length === 0) return null;
+  const names = respondents.map((r) => r.name);
+  if (names.length === 1) return `${names[0]} is in`;
+  const last = names[names.length - 1];
+  return `${names.slice(0, -1).join(', ')} and ${last} are all in`;
+}
+
+// ─── Stage-aware hero config ──────────────────────────────────────────────────
+
+const HERO_CONFIG: Record<TripStage, {
+  bg: string;
+  badge: string;
+  badgeColor: string;
+  titleColor: string;
+  subtitleColor: string;
+  pillBg: string;
+  ctaLabel: string;
+  ctaBg: string;
+}> = {
+  deciding:     { bg: '#F5F4F0', badge: 'DECIDING',       badgeColor: '#888',    titleColor: '#1A1A1A', subtitleColor: '#666',                pillBg: 'rgba(0,0,0,0.06)', ctaLabel: 'Chat with group!', ctaBg: '#D85A30' },
+  confirmed:    { bg: '#DDE8D8', badge: "YOU'RE GOING",   badgeColor: '#3A7A55', titleColor: '#1A3020', subtitleColor: '#3A6045',             pillBg: 'rgba(255,255,255,0.55)', ctaLabel: 'Chat with group!', ctaBg: '#235C38' },
+  planning:     { bg: '#D8E4EE', badge: 'PLANNING',       badgeColor: '#2A5068', titleColor: '#0D2B3E', subtitleColor: '#2A5068',             pillBg: 'rgba(255,255,255,0.55)', ctaLabel: 'Chat with group!', ctaBg: '#1A4060' },
+  experiencing: { bg: '#085041', badge: "YOU'RE HERE",    badgeColor: 'rgba(255,255,255,0.7)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.75)', pillBg: 'rgba(255,255,255,0.15)', ctaLabel: 'Chat with group!', ctaBg: 'rgba(255,255,255,0.2)' },
+  reconciling:  { bg: '#F0EDE8', badge: 'WRAPPING UP',    badgeColor: '#666',    titleColor: '#2C2C2A', subtitleColor: '#666',                pillBg: 'rgba(0,0,0,0.06)', ctaLabel: 'Chat with group!', ctaBg: '#2C2C2A' },
+  done:         { bg: '#2C2C2A', badge: 'DONE',           badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'Chat with group!', ctaBg: 'rgba(255,255,255,0.15)' },
 };
 
-// ─── Poll result bar ───────────────────────────────────────────────────────────
+// ─── Group Members Card ───────────────────────────────────────────────────────
 
-function PollResultBar({
-  label,
-  votes,
-  total,
-  isLeading,
-  isDecided,
+function GroupMembersCard({
+  trip,
+  respondents,
+  onViewRoster,
+  editMode = false,
 }: {
-  label: string;
-  votes: number;
-  total: number;
-  isLeading: boolean;
-  isDecided: boolean;
+  trip: Trip;
+  respondents: Respondent[];
+  onViewRoster: () => void;
+  editMode?: boolean;
 }) {
-  const pct = total > 0 ? Math.round((votes / total) * 100) : 0;
+  const memberCount = respondents.length;
+  const total = trip.group_size_precise ?? GROUP_SIZE_MIDPOINTS[trip.group_size_bucket];
+
   return (
-    <View className="gap-1">
-      <View className="flex-row items-center justify-between">
-        <Text
-          className={[
-            'flex-1 text-sm',
-            isLeading || isDecided ? 'font-semibold text-neutral-800' : 'text-neutral-600',
-          ].join(' ')}
-          numberOfLines={1}
-        >
-          {label}
-          {isDecided ? '  ✓' : ''}
-        </Text>
-        <Text className="ml-2 text-sm text-neutral-400">
-          {votes} vote{votes !== 1 ? 's' : ''}
+    <Pressable
+      onPress={editMode ? undefined : onViewRoster}
+      style={styles.membersCard}
+      accessibilityRole="button"
+      accessibilityLabel="View group members"
+    >
+      <View style={styles.entryIcon}>
+        <Ionicons name="people-outline" size={20} color="#555" />
+      </View>
+      <View style={styles.entryText}>
+        <Text style={styles.entryTitle}>Group members</Text>
+        <Text style={styles.entrySubtitle}>
+          {memberCount === 0
+            ? 'No one has joined yet'
+            : `${memberCount} of ${total} joined`}
         </Text>
       </View>
-      <View className="h-2 overflow-hidden rounded-full bg-neutral-100">
-        <View
-          className={[
-            'h-full rounded-full',
-            isLeading || isDecided ? 'bg-coral-500' : 'bg-neutral-300',
-          ].join(' ')}
-          style={{ width: `${pct}%` }}
-        />
-      </View>
-    </View>
+      {editMode
+        ? <Ionicons name="reorder-three-outline" size={20} color="#CCC" />
+        : <Ionicons name="chevron-forward" size={16} color="#CCC" />
+      }
+    </Pressable>
   );
 }
 
-// ─── Poll card ─────────────────────────────────────────────────────────────────
+// ─── Main screen ──────────────────────────────────────────────────────────────
 
-const PollCard = memo(function PollCard({
-  poll,
-  tripId,
-  counts,
-  groupSizeBucket,
-  groupSizePrecise,
-  router,
-}: {
-  poll: PollWithOptions;
-  tripId: string;
-  counts: Record<string, number>;
-  groupSizeBucket?: GroupSizeBucket;
-  groupSizePrecise?: number | null;
-  router: ReturnType<typeof useRouter>;
-}) {
-  const updateStatus = useUpdatePollStatus(tripId);
-  const decide = useDecidePoll(tripId);
-  const undecide = useUndecidePoll(tripId);
-  const deletePoll = useDeletePoll(tripId);
-  const duplicate = useDuplicatePoll(tripId);
-
-  const totalVotes = Object.values(counts).reduce((s, n) => s + n, 0);
-  const hasResponses = totalVotes > 0;
-  const leadingOptionId =
-    totalVotes > 0
-      ? Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0]
-      : null;
-
-  const statusBadge: Record<string, 'muted' | 'success' | 'default' | 'coral'> = {
-    draft: 'muted',
-    live: 'success',
-    closed: 'default',
-    decided: 'coral',
-  };
-
-  const mutationError = useCallback(
-    (action: string) => () =>
-      Alert.alert('Error', `Could not ${action}. Please try again.`),
-    []
-  );
-
-  function handleGoLive() {
-    Alert.alert(
-      'Go live?',
-      'Once this poll receives its first response it can no longer be edited — only closed or copied.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Go live',
-          onPress: () =>
-            updateStatus.mutate(
-              { pollId: poll.id, status: 'live' },
-              { onError: mutationError('go live') }
-            ),
-        },
-      ]
-    );
-  }
-
-  function handleClose() {
-    updateStatus.mutate(
-      { pollId: poll.id, status: 'closed' },
-      {
-        onSuccess: () => capture(Events.POLL_CLOSED, { poll_type: poll.type, trip_id: tripId }),
-        onError: mutationError('close poll'),
-      }
-    );
-  }
-
-  function handleDecide(optionId: string, label: string) {
-    // Tapping the already-decided option does nothing
-    if (poll.decided_option_id === optionId) return;
-    const isChanging = poll.status === 'decided';
-    Alert.alert(
-      isChanging ? `Change decision to "${label}"?` : `Lock in "${label}"?`,
-      isChanging ? 'This will replace the current decision.' : 'This marks the poll as decided.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: isChanging ? 'Change' : 'Decide',
-          onPress: () => {
-            decide.mutate(
-              { pollId: poll.id, optionId },
-              { onError: mutationError('save decision') }
-            );
-            capture(Events.POLL_DECIDED, { poll_type: poll.type, trip_id: tripId });
-          },
-        },
-      ]
-    );
-  }
-
-  function handleDelete() {
-    Alert.alert('Delete this poll?', 'This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => deletePoll.mutate(poll.id, { onError: mutationError('delete poll') }),
-      },
-    ]);
-  }
-
-  function handleCopy() {
-    Alert.alert(
-      'Clone poll?',
-      'Creates a new draft poll with the same question and options.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clone',
-          onPress: () => duplicate.mutate(poll.id, { onError: mutationError('clone poll') }),
-        },
-      ]
-    );
-  }
-
-  // A poll is editable if it's draft, or live with no responses yet
-  const isEditable = poll.status === 'draft' || (poll.status === 'live' && !hasResponses);
-  // Show copy option when poll is locked (has responses) or closed/decided
-  const showCopy = hasResponses || poll.status === 'closed' || poll.status === 'decided';
-
-  const decidedLabel = poll.decided_option_id
-    ? poll.poll_options.find((o) => o.id === poll.decided_option_id)?.label
-    : null;
-
-  const statusLabel = poll.status.charAt(0).toUpperCase() + poll.status.slice(1);
-
-  return (
-    <Card className="mb-3">
-      <View className="flex-row items-start justify-between gap-2">
-        <View className="flex-1 gap-1.5">
-          <Text className="text-base font-semibold text-neutral-800">{poll.title}</Text>
-          <Badge variant={statusBadge[poll.status] ?? 'default'}>
-            {statusLabel}
-          </Badge>
-        </View>
-        <View className="flex-row items-center gap-2">
-          {/* Edit — available for draft and live-with-no-responses */}
-          {isEditable && (
-            <Pressable
-              onPress={() => router.push(`/(app)/trips/${tripId}/polls/${poll.id}/edit`)}
-              className="rounded-xl border border-neutral-200 bg-white px-3 py-1.5"
-              accessibilityRole="button"
-            >
-              <Text className="text-xs font-medium text-neutral-600">Edit</Text>
-            </Pressable>
-          )}
-          {/* Go live — only on draft */}
-          {poll.status === 'draft' && (
-            <Pressable
-              onPress={handleGoLive}
-              className="rounded-xl bg-coral-500 px-3 py-1.5"
-              accessibilityRole="button"
-            >
-              <Text className="text-xs font-semibold text-white">Go live</Text>
-            </Pressable>
-          )}
-          {/* Close — only on live */}
-          {poll.status === 'live' && (
-            <Pressable
-              onPress={handleClose}
-              className="rounded-xl border border-neutral-200 bg-white px-3 py-1.5"
-              accessibilityRole="button"
-            >
-              <Text className="text-xs font-medium text-neutral-600">Close</Text>
-            </Pressable>
-          )}
-          {/* Undo decision — only on decided polls */}
-          {poll.status === 'decided' && (
-            <Pressable
-              onPress={() => undecide.mutate(poll.id, { onError: mutationError('undo decision') })}
-              className="rounded-xl border border-neutral-200 bg-white px-3 py-1.5"
-              accessibilityRole="button"
-            >
-              <Text className="text-xs font-medium text-neutral-600">Undo</Text>
-            </Pressable>
-          )}
-          {/* Copy — available when poll is locked or finished */}
-          {showCopy && (
-            <Pressable
-              onPress={handleCopy}
-              className="rounded-xl border border-neutral-200 bg-white px-3 py-1.5"
-              accessibilityRole="button"
-            >
-              <Text className="text-xs font-medium text-neutral-600">Clone</Text>
-            </Pressable>
-          )}
-          <Pressable onPress={handleDelete} className="p-1" accessibilityRole="button">
-            <Ionicons name="trash-outline" size={16} color="#A8A8A8" />
-          </Pressable>
-        </View>
-      </View>
-
-      {poll.status === 'decided' && decidedLabel ? (
-        <View className="mt-3 rounded-xl bg-coral-50 px-3 py-2.5">
-          <Text className="text-sm font-semibold text-coral-700">✓ Decided: {decidedLabel}</Text>
-        </View>
-      ) : null}
-
-      {poll.poll_options.length > 0 ? (
-        <View className="mt-4 gap-3">
-          {poll.poll_options.map((opt) => {
-            const canDecide =
-              poll.status === 'live' ||
-              poll.status === 'closed' ||
-              poll.status === 'decided';
-            return (
-              <Pressable
-                key={opt.id}
-                onPress={canDecide ? () => handleDecide(opt.id, opt.label) : undefined}
-                disabled={!canDecide}
-              >
-                <PollResultBar
-                  label={opt.label}
-                  votes={counts[opt.id] ?? 0}
-                  total={totalVotes}
-                  isLeading={leadingOptionId === opt.id}
-                  isDecided={poll.decided_option_id === opt.id}
-                />
-              </Pressable>
-            );
-          })}
-          {poll.status !== 'draft' ? (
-            <View className="mt-1">
-              {(() => {
-                const participation = groupSizeBucket
-                  ? getParticipationRate(totalVotes, groupSizeBucket, groupSizePrecise)
-                  : null;
-                return (
-                  <>
-                    {participation ? (
-                      <>
-                        <View className="h-1.5 overflow-hidden rounded-full bg-neutral-100">
-                          <View
-                            className="h-full rounded-full bg-coral-400"
-                            style={{ width: `${participation.percent}%` }}
-                          />
-                        </View>
-                        <Text className="mt-1 text-xs text-neutral-400">
-                          {participation.count} of {participation.total} responded
-                          {poll.status === 'live' || poll.status === 'closed'
-                            ? '  ·  Tap an option to decide.'
-                            : poll.status === 'decided'
-                              ? '  ·  Tap an option to change.'
-                              : ''}
-                        </Text>
-                      </>
-                    ) : (
-                      <Text className="text-xs text-neutral-400">
-                        {totalVotes === 0
-                          ? 'No responses yet.'
-                          : `${totalVotes} response${totalVotes !== 1 ? 's' : ''}`}
-                        {poll.status === 'live' || poll.status === 'closed'
-                          ? '  ·  Tap an option to decide.'
-                          : poll.status === 'decided'
-                            ? '  ·  Tap an option to change.'
-                            : ''}
-                      </Text>
-                    )}
-                  </>
-                );
-              })()}
-            </View>
-          ) : null}
-        </View>
-      ) : null}
-    </Card>
-  );
-});
-
-// ─── Main screen ───────────────────────────────────────────────────────────────
-
-export default function TripDetailScreen() {
+export default function TripDashboard() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const [sortNewest, setSortNewest] = useState(true);
-  const [liveCollapsed, setLiveCollapsed] = useState(false);
-  const [draftCollapsed, setDraftCollapsed] = useState(false);
-  const [closedCollapsed, setClosedCollapsed] = useState(true);
-  const [preciseModalVisible, setPreciseModalVisible] = useState(false);
-  const [travelWindowModalVisible, setTravelWindowModalVisible] = useState(false);
-  const [editingName, setEditingName] = useState(false);
-  const [nameValue, setNameValue] = useState('');
-  const nameInputRef = useRef<TextInput>(null);
-
-  // Scroll-to-card: ref on the main ScrollView + layout positions of decided cards
-  const mainScrollRef = useRef<ScrollView>(null);
-  const [decidedSectionY, setDecidedSectionY] = useState(0);
-  const [decidedCardYs, setDecidedCardYs] = useState<Record<string, number>>({});
 
   const { data: trip } = useTrip(id);
-  const { data: polls = [], refetch: refetchPolls } = usePolls(id);
-  const updateTrip = useUpdateTrip();
-  const undecidePollMutation = useUndecidePoll(id);
+  const { data: polls = [] } = usePolls(id);
   const { data: respondents = [] } = useRespondents(id);
-  const { data: responseCounts = {}, refetch: refetchCounts } = useResponseCounts(id);
+  const { canEditTrip, canReorderCards } = usePermissions(id);
 
-  const [refreshing, setRefreshing] = useState(false);
-  async function handleRefresh() {
-    setRefreshing(true);
-    try {
-      await Promise.all([refetchPolls(), refetchCounts()]);
-    } finally {
-      setRefreshing(false);
-    }
-  }
-
-  const sortedPolls = useMemo(() => {
-    return [...polls].sort((a, b) => {
-      const diff = new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      return sortNewest ? diff : -diff;
-    });
-  }, [polls, sortNewest]);
-
-  // Stable string of sorted poll IDs — only changes when polls are added/removed,
-  // not on status changes, preventing unnecessary channel re-subscriptions.
-  const pollIdString = useMemo(
-    () => polls.map((p) => p.id).sort().join(','),
-    [polls]
-  );
-
-  // ─── Supabase Realtime ────────────────────────────────────────────────────
+  // Realtime: keep badge counts fresh
+  const pollIdString = useMemo(() => polls.map((p) => p.id).sort().join(','), [polls]);
   useEffect(() => {
-    const pollIds = pollIdString ? pollIdString.split(',') : [];
-
-    let builder = supabase
+    const channel = supabase
       .channel(`trip-dashboard:${id}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'respondents', filter: `trip_id=eq.${id}` },
-        () => queryClient.invalidateQueries({ queryKey: respondentKeys.forTrip(id) })
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'polls', filter: `trip_id=eq.${id}` },
-        () => queryClient.invalidateQueries({ queryKey: pollKeys.forTrip(id) })
-      );
-
-    // Only subscribe to poll_responses for polls that belong to this trip,
-    // avoiding spurious invalidations from other trips' responses.
-    if (pollIds.length > 0) {
-      builder = builder.on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'poll_responses',
-          filter: `poll_id=in.(${pollIds.join(',')})`,
-        },
-        () => queryClient.invalidateQueries({ queryKey: responseCountKeys.forTrip(id) })
-      );
-    }
-
-    const channel = builder.subscribe();
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'respondents', filter: `trip_id=eq.${id}` },
+        () => queryClient.invalidateQueries({ queryKey: respondentKeys.forTrip(id) }))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'polls', filter: `trip_id=eq.${id}` },
+        () => queryClient.invalidateQueries({ queryKey: pollKeys.forTrip(id) }))
+      .subscribe();
     return () => void supabase.removeChannel(channel);
   }, [id, pollIdString]);
 
-  // Track trip views for funnel analysis
   useEffect(() => {
     if (id) capture(Events.TRIP_VIEWED, { trip_id: id });
   }, [id]);
 
-  const handleShare = useCallback(() => {
+  const decidedPolls = useMemo(() => polls.filter((p) => p.status === 'decided'), [polls]);
+  const livePolls = useMemo(() => polls.filter((p) => p.status === 'live'), [polls]);
+
+const stage = trip ? getTripStage(trip) : 'deciding';
+  const hero = HERO_CONFIG[stage];
+
+  // Hero content
+  const destPoll   = decidedPolls.find((p) => p.type === 'destination');
+  const datesPoll  = decidedPolls.find((p) => p.type === 'dates');
+  const budgetPoll = decidedPolls.find((p) => p.type === 'budget');
+
+  const decidedDestination2 = destPoll?.poll_options.find((o) => o.id === destPoll.decided_option_id)?.label ?? null;
+  const decidedDatesLabel   = datesPoll?.poll_options.find((o) => o.id === datesPoll.decided_option_id)?.label ?? null;
+  const decidedBudgetLabel  = budgetPoll?.poll_options.find((o) => o.id === budgetPoll.decided_option_id)?.label ?? null;
+
+  // Priority: planner-entered destination > decided poll > trip name
+  const destination = trip?.destination ?? decidedDestination2 ?? trip?.name ?? '';
+  const dateRange = formatDateRange(trip?.start_date ?? null, trip?.end_date ?? null);
+  const nights = calcNights(trip?.start_date ?? null, trip?.end_date ?? null);
+  const whoIsIn = formatWhoIsIn(respondents);
+
+  // If we have explicit dates, show those; otherwise fall back to decided dates poll label
+  const dateDisplay = dateRange ?? decidedDatesLabel ?? null;
+  const sizeLabel = trip?.group_size_precise != null ? `${trip.group_size_precise} people` : `${trip?.group_size_bucket ?? ''} people`;
+
+  // Budget: explicit trip field takes precedence, then decided poll
+  const budgetDisplay = trip?.budget_per_person ?? decidedBudgetLabel ?? null;
+
+  // Poll badge
+  const pollBadge = livePolls.length > 0 ? `${livePolls.length} live` : polls.length > 0 ? `${polls.length} polls` : null;
+
+  const handleShare = () => {
     if (!trip) return;
     const url = getShareUrl(trip.share_token);
     const msg = `${trip.name} — help us decide! ${url}`;
     const encoded = encodeURIComponent(msg);
-
     Alert.alert('Share with group', 'Choose how to send:', [
-      {
-        text: 'iMessage / SMS',
-        onPress: () => {
-          const smsUrl = Platform.OS === 'ios' ? `sms:&body=${encoded}` : `sms:?body=${encoded}`;
-          Linking.openURL(smsUrl);
-          capture(Events.SHARE_LINK_COPIED, { trip_id: id, method: 'sms' });
-        },
-      },
-      {
-        text: 'WhatsApp',
-        onPress: () => {
-          Linking.openURL(`whatsapp://send?text=${encoded}`);
-          capture(Events.SHARE_LINK_COPIED, { trip_id: id, method: 'whatsapp' });
-        },
-      },
-      {
-        text: 'More options…',
-        onPress: async () => {
-          try {
-            await Share.share({ message: msg });
-            capture(Events.SHARE_LINK_COPIED, { trip_id: id, method: 'native' });
-          } catch {}
-        },
-      },
+      { text: 'iMessage / SMS', onPress: () => Linking.openURL(Platform.OS === 'ios' ? `sms:&body=${encoded}` : `sms:?body=${encoded}`) },
+      { text: 'WhatsApp', onPress: () => Linking.openURL(`whatsapp://send?text=${encoded}`) },
+      { text: 'More options…', onPress: async () => { try { await Share.share({ message: msg }); } catch {} } },
       { text: 'Cancel', style: 'cancel' },
     ]);
-  }, [trip, id]);
+  };
 
-  const handleCopyLink = useCallback(async () => {
-    if (!trip) return;
-    const url = getShareUrl(trip.share_token);
-    await Clipboard.setStringAsync(url);
-    capture(Events.SHARE_LINK_COPIED, { trip_id: id });
-    Alert.alert('Copied!', 'Share link copied to clipboard.');
-  }, [trip, id]);
+  const openMapsSheet = () => {
+    if (!destination) return;
+    const mapQuery = trip?.destination_address ?? destination;
+    const encoded = encodeURIComponent(mapQuery);
+    const actions = [
+      { label: 'Open in Apple Maps', url: `maps://?q=${encoded}` },
+      { label: 'Open in Google Maps', url: `https://maps.google.com/?q=${encoded}` },
+      { label: 'Open in Waze', url: `waze://?q=${encoded}` },
+    ];
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title: destination,
+          message: trip?.destination_address ?? undefined,
+          options: ['Cancel', ...actions.map((a) => a.label), 'Copy address'],
+          cancelButtonIndex: 0,
+        },
+        (i) => {
+          if (i >= 1 && i <= 3) Linking.openURL(actions[i - 1].url).catch(() => {});
+          if (i === 4) Clipboard.setStringAsync(mapQuery);
+        },
+      );
+    } else {
+      Alert.alert(destination, trip?.destination_address ?? undefined, [
+        { text: 'Google Maps', onPress: () => Linking.openURL(actions[1].url).catch(() => {}) },
+        { text: 'Waze', onPress: () => Linking.openURL(actions[2].url).catch(() => {}) },
+        { text: 'Copy address', onPress: () => Clipboard.setStringAsync(mapQuery) },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+    }
+  };
 
-  const hasLivePolls = useMemo(() => polls.some((p) => p.status === 'live'), [polls]);
+  const handleCtaPress = () => {
+    router.push(`/(app)/trips/${id}/hub?tab=chat`);
+  };
 
-  const livePolls = useMemo(() => sortedPolls.filter((p) => p.status === 'live'), [sortedPolls]);
-  const draftPolls = useMemo(() => sortedPolls.filter((p) => p.status === 'draft'), [sortedPolls]);
-  const closedPolls = useMemo(() => sortedPolls.filter((p) => p.status === 'closed'), [sortedPolls]);
-  const decidedPolls = useMemo(() => sortedPolls.filter((p) => p.status === 'decided'), [sortedPolls]);
+  const ENTRY_CONFIG: Record<Exclude<CardKey, 'members'>, {
+    icon: React.ComponentProps<typeof Ionicons>['name'];
+    title: string;
+    subtitle: string;
+    onPress: () => void;
+  }> = useMemo(() => ({
+    polls: {
+      icon: 'stats-chart-outline',
+      title: 'Polls',
+      subtitle: pollBadge ?? 'Vote on destination, dates & more',
+      onPress: () => router.push(`/(app)/trips/${id}/polls`),
+    },
+    itinerary: {
+      icon: 'calendar-outline',
+      title: 'Itinerary',
+      subtitle: nights ? `${nights}-day plan` : 'Build your day-by-day plan',
+      onPress: () => router.push(`/(app)/trips/${id}/hub?tab=itinerary`),
+    },
+    lodging: {
+      icon: 'bed-outline',
+      title: 'Lodging',
+      subtitle: 'Find a place to stay',
+      onPress: () => router.push(`/(app)/trips/${id}/hub?tab=lodging`),
+    },
+    travel: {
+      icon: 'airplane-outline',
+      title: 'Travel',
+      subtitle: 'Flights, trains, cars & more',
+      onPress: () => router.push(`/(app)/trips/${id}/hub?tab=travel`),
+    },
+    expenses: {
+      icon: 'receipt-outline',
+      title: 'Expenses',
+      subtitle: 'Track and split costs',
+      onPress: () => router.push(`/(app)/trips/${id}/hub?tab=expenses`),
+    },
+  }), [id, nights, pollBadge, router]);
+
+  const renderCard = useCallback((key: CardKey, isEditMode: boolean) => {
+    if (key === 'members') {
+      if (!trip) return null;
+      return (
+        <GroupMembersCard
+          trip={trip}
+          respondents={respondents}
+          onViewRoster={() => router.push(`/(app)/trips/${id}/members`)}
+          editMode={isEditMode}
+        />
+      );
+    }
+    const ep = ENTRY_CONFIG[key as Exclude<CardKey, 'members'>];
+    if (!ep) return null;
+    return (
+      <Pressable
+        onPress={isEditMode ? undefined : ep.onPress}
+        style={styles.entryCard}
+        accessibilityRole="button"
+      >
+        <View style={styles.entryIcon}>
+          <Ionicons name={ep.icon} size={20} color="#555" />
+        </View>
+        <View style={styles.entryText}>
+          <Text style={styles.entryTitle}>{ep.title}</Text>
+          <Text style={styles.entrySubtitle}>{ep.subtitle}</Text>
+        </View>
+        {isEditMode
+          ? <Ionicons name="reorder-three-outline" size={20} color="#CCC" />
+          : <Ionicons name="chevron-forward" size={16} color="#CCC" />
+        }
+      </Pressable>
+    );
+  }, [ENTRY_CONFIG, trip, respondents, router, id]);
 
   return (
     <>
-    <View className="flex-1 bg-neutral-50" style={{ paddingTop: insets.top }}>
-
-      {/* ── Sticky header ──────────────────────────────────────────────────── */}
-      <View className="px-6 pb-3 pt-4 border-b border-neutral-200 bg-neutral-50">
-        {/* Row: back + add poll */}
-        <View className="flex-row items-center justify-between">
-          <TouchableOpacity onPress={() => router.back()} accessibilityRole="button">
-            <Text className="text-base text-coral-500">← Trips</Text>
-          </TouchableOpacity>
-          {sortedPolls.length > 0 ? (
-            <Pressable
-              onPress={() => router.push(`/(app)/trips/${id}/polls/new`)}
-              className="flex-row items-center gap-1 rounded-xl bg-coral-500 px-4 py-2"
-              accessibilityRole="button"
-            >
-              <Ionicons name="add" size={16} color="white" />
-              <Text className="text-sm font-semibold text-white">Add poll</Text>
-            </Pressable>
-          ) : <View />}
-        </View>
-
-        {/* Trip info */}
-        {editingName ? (
-          <TextInput
-            ref={nameInputRef}
-            value={nameValue}
-            onChangeText={(t) => { if (t.length <= 60) setNameValue(t); }}
-            maxLength={60}
-            returnKeyType="done"
-            onSubmitEditing={() => {
-              const trimmed = nameValue.trim();
-              if (trimmed && trip) updateTrip.mutate({ id: trip.id, name: trimmed });
-              setEditingName(false);
-            }}
-            onBlur={() => {
-              const trimmed = nameValue.trim();
-              if (trimmed && trip) updateTrip.mutate({ id: trip.id, name: trimmed });
-              setEditingName(false);
-            }}
-            className="mt-2 text-2xl font-bold text-neutral-800 rounded-xl bg-white px-3 py-2"
-            style={{ borderWidth: 1, borderColor: '#E5E5E5' }}
-          />
-        ) : (
-          <Pressable
-            onPress={() => {
-              setNameValue(trip?.name ?? '');
-              setEditingName(true);
-              setTimeout(() => nameInputRef.current?.focus(), 50);
-            }}
-            hitSlop={4}
-          >
-            <Text className="mt-2 text-2xl font-bold text-neutral-800">{trip?.name ?? ''}</Text>
-          </Pressable>
-        )}
-        <View className="mt-1 flex-row items-center gap-2">
-          {trip?.travel_window
-            ? trip.travel_window.split(', ').map((season) => (
-                <Pressable
-                  key={season}
-                  onPress={() => setTravelWindowModalVisible(true)}
-                  className="flex-row items-center gap-1 rounded-full border border-neutral-200 bg-white px-2.5 py-1"
-                  hitSlop={6}
-                >
-                  <Ionicons name={SEASON_ICON[season] ?? 'sunny-outline'} size={12} color="#737373" />
-                  <Text className="text-xs text-neutral-500">{season}</Text>
-                </Pressable>
-              ))
-            : null}
-          {trip ? (
-            <Pressable
-              onPress={() => setPreciseModalVisible(true)}
-              className="flex-row items-center gap-1 rounded-full border border-neutral-200 bg-white px-2.5 py-1"
-              accessibilityRole="button"
-              accessibilityLabel="Group size — tap to set exact number"
-              hitSlop={6}
-            >
-              <Ionicons name="people-outline" size={12} color="#737373" />
-              <Text className="text-xs text-neutral-500">
-                {trip.group_size_precise != null
-                  ? `${trip.group_size_precise} people`
-                  : `${trip.group_size_bucket} people`}
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
-
-        {/* Decision summary strip — compact chips for decided polls */}
-        {decidedPolls.length > 0 ? (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8, paddingVertical: 2 }}>
-            {decidedPolls.map((poll) => {
-              const label = poll.poll_options.find((o) => o.id === poll.decided_option_id)?.label;
-              if (!label) return null;
-              return (
-                <View key={poll.id} className="flex-row items-center gap-1 rounded-full border border-coral-200 bg-coral-50 px-2.5 py-1">
-                  <Pressable
-                    onPress={() => {
-                      const y = decidedSectionY + (decidedCardYs[poll.id] ?? 0) - 8;
-                      mainScrollRef.current?.scrollTo({ y: Math.max(0, y), animated: true });
-                    }}
-                    className="flex-row items-center gap-1"
-                    accessibilityRole="button"
-                    accessibilityLabel={`Scroll to ${label}`}
-                  >
-                    <Ionicons name="checkmark-circle" size={12} color="#FF6B5B" />
-                    <Text className="text-xs font-medium text-coral-600" numberOfLines={1}>
-                      {label}
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => undecidePollMutation.mutate(poll.id)}
-                    hitSlop={6}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Undo decision for ${label}`}
-                  >
-                    <Ionicons name="refresh-outline" size={12} color="#FF6B5B" style={{ transform: [{ scaleX: -1 }] }} />
-                  </Pressable>
-                </View>
-              );
-            })}
-          </View>
-        ) : null}
-
-        {respondents.length > 0 ? (
-          <Pressable
-            onPress={() =>
-              Alert.alert(
-                `${respondents.length} respondent${respondents.length !== 1 ? 's' : ''}`,
-                respondents.map((r) => `• ${r.name}`).join('\n')
-              )
-            }
-            className="mt-2 flex-row items-center gap-1.5"
-          >
-            <Ionicons name="people-outline" size={14} color="#A8A8A8" />
-            <Text className="text-xs text-neutral-400">
-              {respondents.slice(0, 3).map((r) => r.name).join(', ')}
-              {respondents.length > 3 ? ` +${respondents.length - 3} more` : ''}
-              {' · Tap to see all'}
-            </Text>
-          </Pressable>
-        ) : null}
-
-        {/* Share buttons */}
-        <View className="mt-3 flex-row gap-2">
-          <Button variant="secondary" onPress={handleShare} fullWidth className="flex-1">
-            Share with group
-          </Button>
-          <Pressable
-            onPress={handleCopyLink}
-            className="items-center justify-center rounded-2xl border border-neutral-200 bg-white px-4"
-            style={{ elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 }}
-            accessibilityRole="button"
-            accessibilityLabel="Copy share link"
-          >
-            <Ionicons name="copy-outline" size={20} color="#4A4A4A" />
-          </Pressable>
-        </View>
-
-        {/* Warning: no live polls yet */}
-        {polls.length > 0 && !hasLivePolls ? (
-          <View className="mt-3 rounded-xl bg-amber-50 px-4 py-2 flex-row items-center">
-            <Text className="text-sm text-amber-700" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
-              No polls are live yet — tap "Go live" before sharing the link.
-            </Text>
-          </View>
-        ) : null}
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} accessibilityRole="button">
+          <Text style={styles.backBtn}>← Back</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={handleShare} accessibilityRole="button" hitSlop={8}>
+          <Ionicons name="share-outline" size={18} color="#888" />
+        </TouchableOpacity>
       </View>
 
-      {/* ── Scrollable polls ───────────────────────────────────────────────── */}
-      <ScrollView
-        ref={mainScrollRef}
-        contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: insets.bottom + 100 }}
-        keyboardDismissMode="on-drag"
-        keyboardShouldPersistTaps="handled"
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#FF6B5B" />
-        }
-      >
-
-        {/* Empty state */}
-        {polls.length === 0 ? (
-          <View className="mt-12 items-center gap-4">
-            <Button onPress={() => router.push(`/(app)/trips/${id}/polls/new`)} className="self-center">
-              Add first poll
-            </Button>
-            <Text className="text-lg font-semibold text-neutral-800">
-              Create a poll to rally your squad
-            </Text>
-            <Text className="text-center text-sm text-neutral-400">
-              Build polls for destination, dates, and budget — then share the link.
-            </Text>
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]} showsVerticalScrollIndicator={false}>
+        {/* Hero card — planners can tap to edit rally details */}
+        <TouchableOpacity
+          onPress={canEditTrip ? () => router.push(`/(app)/trips/${id}/edit`) : undefined}
+          activeOpacity={canEditTrip ? 0.85 : 1}
+          accessibilityRole={canEditTrip ? 'button' : 'none'}
+          accessibilityLabel={canEditTrip ? 'Edit rally details' : undefined}
+          style={[styles.heroCard, { backgroundColor: hero.bg }]}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={[styles.heroBadge, { color: hero.badgeColor }]}>{hero.badge}</Text>
           </View>
-        ) : null}
-
-        {/* Polls section header */}
-        {sortedPolls.length > 0 ? (
-          <View className="flex-row items-center justify-between pt-4 pb-2">
-            <Text className="text-base font-bold text-neutral-800">Polls</Text>
-            <Pressable
-              onPress={() => setSortNewest((prev) => !prev)}
-              className="flex-row items-center gap-1"
-              accessibilityRole="button"
-              accessibilityLabel={`Sort by ${sortNewest ? 'oldest' : 'newest'} first`}
+          {destination ? (
+            <TouchableOpacity
+              onPress={(e) => { e.stopPropagation(); openMapsSheet(); }}
+              activeOpacity={0.75}
+              accessibilityRole="link"
+              accessibilityLabel={`Directions to ${destination}`}
             >
-              <Ionicons name={sortNewest ? 'arrow-down' : 'arrow-up'} size={13} color="#A8A8A8" />
-              <Text className="text-xs text-neutral-400">
-                {sortNewest ? 'Newest first' : 'Oldest first'}
+              <Text style={[styles.heroTitle, styles.heroTitleLink, { color: hero.titleColor }]}>
+                {destination}
               </Text>
-            </Pressable>
-          </View>
-        ) : null}
+            </TouchableOpacity>
+          ) : null}
+          {dateDisplay ? (
+            <Text style={[styles.heroTitle, { color: hero.titleColor }]}>{dateDisplay}</Text>
+          ) : null}
+          {whoIsIn ? (
+            <Text style={[styles.heroSubtitle, { color: hero.subtitleColor }]}>{whoIsIn}</Text>
+          ) : null}
 
-        {/* Live polls — collapsible */}
-        {livePolls.length > 0 ? (
-          <View className="mb-1">
-            <Pressable
-              onPress={() => setLiveCollapsed((prev) => !prev)}
-              className="mb-2 flex-row items-center justify-between"
-              accessibilityRole="button"
-              accessibilityLabel={liveCollapsed ? 'Expand live polls' : 'Collapse live polls'}
-            >
-              <Text className="text-xs font-semibold uppercase tracking-wider text-green-600">
-                Live
-              </Text>
-              <Ionicons
-                name={liveCollapsed ? 'chevron-up' : 'chevron-down'}
-                size={13}
-                color="#A8A8A8"
-              />
-            </Pressable>
-            {!liveCollapsed && livePolls.map((poll) => (
-              <PollCard
-                key={poll.id}
-                poll={poll}
-                tripId={id}
-                counts={responseCounts[poll.id] ?? {}}
-                groupSizeBucket={trip?.group_size_bucket}
-                groupSizePrecise={trip?.group_size_precise}
-                router={router}
-              />
-            ))}
-          </View>
-        ) : null}
-
-        {/* Draft polls — collapsible */}
-        {draftPolls.length > 0 ? (
-          <View className="mb-1">
-            <Pressable
-              onPress={() => setDraftCollapsed((prev) => !prev)}
-              className="mb-2 flex-row items-center justify-between"
-              accessibilityRole="button"
-              accessibilityLabel={draftCollapsed ? 'Expand draft polls' : 'Collapse draft polls'}
-            >
-              <Text className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
-                Draft
-              </Text>
-              <Ionicons
-                name={draftCollapsed ? 'chevron-up' : 'chevron-down'}
-                size={13}
-                color="#A8A8A8"
-              />
-            </Pressable>
-            {!draftCollapsed && draftPolls.map((poll) => (
-              <PollCard
-                key={poll.id}
-                poll={poll}
-                tripId={id}
-                counts={responseCounts[poll.id] ?? {}}
-                groupSizeBucket={trip?.group_size_bucket}
-                groupSizePrecise={trip?.group_size_precise}
-                router={router}
-              />
-            ))}
-          </View>
-        ) : null}
-
-        {/* Closed polls — collapsible */}
-        {closedPolls.length > 0 ? (
-          <View className="mb-1">
-            <Pressable
-              onPress={() => setClosedCollapsed((prev) => !prev)}
-              className="mb-2 flex-row items-center justify-between"
-              accessibilityRole="button"
-              accessibilityLabel={closedCollapsed ? 'Expand closed polls' : 'Collapse closed polls'}
-            >
-              <Text className="text-xs font-semibold uppercase tracking-wider text-neutral-700">
-                Closed
-              </Text>
-              <Ionicons
-                name={closedCollapsed ? 'chevron-up' : 'chevron-down'}
-                size={13}
-                color="#A8A8A8"
-              />
-            </Pressable>
-            {!closedCollapsed && closedPolls.map((poll) => (
-              <PollCard
-                key={poll.id}
-                poll={poll}
-                tripId={id}
-                counts={responseCounts[poll.id] ?? {}}
-                groupSizeBucket={trip?.group_size_bucket}
-                groupSizePrecise={trip?.group_size_precise}
-                router={router}
-              />
-            ))}
-          </View>
-        ) : null}
-
-        {/* Decided polls */}
-        {decidedPolls.length > 0 ? (
-          <View
-            className="mt-2"
-            onLayout={(e) => setDecidedSectionY(e.nativeEvent.layout.y)}
-          >
-            <View className="mb-2 flex-row items-center gap-2">
-              <View className="h-px flex-1 bg-neutral-200" />
-              <Text className="text-xs font-semibold uppercase tracking-wider text-coral-500">
-                Decided
-              </Text>
-              <View className="h-px flex-1 bg-neutral-200" />
+          {/* Info pills */}
+          <View style={styles.pillRow}>
+            <View style={[styles.pill, { backgroundColor: hero.pillBg }]}>
+              <Text style={[styles.pillText, { color: hero.titleColor }]}>{sizeLabel}</Text>
             </View>
-            {decidedPolls.map((poll) => (
-              <View
-                key={poll.id}
-                onLayout={(e) => {
-                  const y = e.nativeEvent.layout.y;
-                  setDecidedCardYs((prev) => ({ ...prev, [poll.id]: y }));
-                }}
-              >
-                <PollCard
-                  poll={poll}
-                  tripId={id}
-                  counts={responseCounts[poll.id] ?? {}}
-                  groupSizeBucket={trip?.group_size_bucket}
-                  router={router}
-                />
+            {nights ? (
+              <View style={[styles.pill, { backgroundColor: hero.pillBg }]}>
+                <Text style={[styles.pillText, { color: hero.titleColor }]}>{nights} nights</Text>
               </View>
-            ))}
+            ) : null}
+            {budgetDisplay ? (
+              <View style={[styles.pill, { backgroundColor: hero.pillBg }]}>
+                <Text style={[styles.pillText, { color: hero.titleColor }]}>{budgetDisplay} pp</Text>
+              </View>
+            ) : null}
+            {trip?.trip_type ? trip.trip_type.split(',').map((t) => (
+              <View key={t} style={[styles.pill, { backgroundColor: hero.pillBg }]}>
+                <Text style={[styles.pillText, { color: hero.titleColor }]}>{t.trim()}</Text>
+              </View>
+            )) : null}
           </View>
-        ) : null}
 
+          {/* CTA — stop propagation so it doesn't also trigger the hero card's edit nav */}
+          <Pressable
+            onPress={(e) => { e.stopPropagation(); handleCtaPress(); }}
+            style={[styles.ctaBtn, { backgroundColor: hero.ctaBg }]}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.ctaText, { color: stage === 'experiencing' || stage === 'done' ? hero.titleColor : '#fff' }]}>
+              {hero.ctaLabel}
+            </Text>
+          </Pressable>
+        </TouchableOpacity>
+
+
+        {/* Entry points — long-press any card to reorder */}
+        <Text style={styles.sectionLabel}>Where do you want to start?</Text>
+
+        <SortableEntryList tripId={id} renderCard={renderCard} reorderEnabled={canReorderCards} />
       </ScrollView>
-
     </View>
 
-    <PreciseGroupSizeModal
-      visible={preciseModalVisible}
-      current={trip?.group_size_precise ?? null}
-      onSave={(n) => {
-        if (trip) updateTrip.mutate({ id: trip.id, group_size_precise: n });
-        setPreciseModalVisible(false);
-      }}
-      onClose={() => setPreciseModalVisible(false)}
-    />
-
-    <TravelWindowModal
-      visible={travelWindowModalVisible}
-      current={trip?.travel_window ?? null}
-      onSave={(value) => {
-        if (trip) updateTrip.mutate({ id: trip.id, travel_window: value ?? undefined });
-        setTravelWindowModalVisible(false);
-      }}
-      onClose={() => setTravelWindowModalVisible(false)}
-    />
     </>
   );
 }
 
-const SEASONS = ['Winter', 'Spring', 'Summer', 'Fall'] as const;
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#F5F4F0' },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 12,
+  },
+  backBtn: { fontSize: 15, color: '#888' },
+  scroll: { paddingHorizontal: 16 },
 
-function TravelWindowModal({
-  visible,
-  current,
-  onSave,
-  onClose,
-}: {
-  visible: boolean;
-  current: string | null;
-  onSave: (value: string | null) => void;
-  onClose: () => void;
-}) {
-  const [selected, setSelected] = useState<string[]>([]);
-  const translateY = useRef(new Animated.Value(0)).current;
+  // Hero
+  heroCard: { borderRadius: 24, padding: 24, gap: 10, marginBottom: 8 },
+  heroBadge: { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase' },
+  heroTitle: { fontSize: 30, fontWeight: '800', lineHeight: 36 },
+  heroTitleLink: { textDecorationLine: 'underline' },
+  heroSubtitle: { fontSize: 15, lineHeight: 22 },
+  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 2 },
+  pill: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999 },
+  pillText: { fontSize: 13 },
+  ctaBtn: { marginTop: 8, borderRadius: 999, paddingVertical: 16, alignItems: 'center' },
+  ctaText: { fontSize: 16, fontWeight: '600' },
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, { dy }) => dy > 5,
-      onPanResponderMove: (_, { dy }) => {
-        if (dy > 0) translateY.setValue(dy);
-      },
-      onPanResponderRelease: (_, { dy, vy }) => {
-        if (dy > 80 || vy > 0.5) {
-          Animated.timing(translateY, {
-            toValue: 600,
-            duration: 200,
-            useNativeDriver: true,
-          }).start(() => {
-            translateY.setValue(0);
-            onClose();
-          });
-        } else {
-          Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start();
-        }
-      },
-    })
-  ).current;
+  // Entry points
+  sectionLabel: { fontSize: 13, color: '#999', textAlign: 'center', marginVertical: 16 },
+  entryList: { gap: 10 },
+  entryCard: {
+    backgroundColor: 'white', borderRadius: 16, padding: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    borderWidth: 1, borderColor: '#EBEBEB',
+  },
+  entryIcon: {
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: '#F3F3F3', alignItems: 'center', justifyContent: 'center',
+  },
+  entryText: { flex: 1, gap: 2 },
+  entryTitle: { fontSize: 15, fontWeight: '600', color: '#1A1A1A' },
+  entrySubtitle: { fontSize: 13, color: '#888', lineHeight: 18 },
 
-  useEffect(() => {
-    if (visible) {
-      translateY.setValue(0);
-      setSelected(current ? current.split(', ') : []);
-    }
-  }, [visible, current]);
-
-  function toggle(season: string) {
-    setSelected((prev) =>
-      prev.includes(season) ? prev.filter((s) => s !== season) : [...prev, season]
-    );
-  }
-
-  function handleSave() {
-    onSave(selected.length > 0 ? selected.join(', ') : null);
-  }
-
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <Pressable
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}
-        onPress={onClose}
-      >
-        <Animated.View style={{ transform: [{ translateY }], backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>
-          {/* Drag handle */}
-          <View {...panResponder.panHandlers} style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
-            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#E5E5E5' }} />
-          </View>
-
-          <Pressable onPress={() => {}} style={{ padding: 24, paddingTop: 12, gap: 16 }}>
-            <Text style={{ fontSize: 17, fontWeight: '600', color: '#1C1C1C' }}>Rough travel window</Text>
-            <Text style={{ fontSize: 14, color: '#737373', marginTop: -8 }}>
-              Select the seasons you're considering.
-            </Text>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              {SEASONS.map((season) => {
-                const isSelected = selected.includes(season);
-                return (
-                  <Pressable
-                    key={season}
-                    onPress={() => toggle(season)}
-                    style={{
-                      flex: 1,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 6,
-                      paddingVertical: 10,
-                      borderRadius: 999,
-                      borderWidth: 1.5,
-                      borderColor: isSelected ? '#FF6B5B' : '#E5E5E5',
-                      backgroundColor: isSelected ? '#FFF4F2' : 'white',
-                    }}
-                  >
-                    <Ionicons
-                      name={SEASON_ICON[season] ?? 'sunny-outline'}
-                      size={14}
-                      color={isSelected ? '#FF6B5B' : '#737373'}
-                    />
-                    <Text style={{ fontSize: 14, fontWeight: '500', color: isSelected ? '#FF6B5B' : '#525252' }}>
-                      {season}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <Pressable
-                onPress={onClose}
-                style={{ flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#E5E5E5', alignItems: 'center' }}
-              >
-                <Text style={{ fontSize: 15, fontWeight: '600', color: '#525252' }}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                onPress={handleSave}
-                style={{ flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: '#FF6B5B', alignItems: 'center' }}
-              >
-                <Text style={{ fontSize: 15, fontWeight: '600', color: 'white' }}>
-                  {selected.length === 0 ? 'Clear' : 'Save'}
-                </Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </Animated.View>
-      </Pressable>
-    </Modal>
-  );
-}
+  // Group members card
+  membersCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    padding: 16,
+    backgroundColor: 'white',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#EBEBEB',
+  },
+  memberList: {
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+    paddingHorizontal: 16,
+  },
+  memberRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    paddingVertical: 12,
+  },
+  memberRowBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#F0F0F0',
+  },
+  memberAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#E8F4EE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  memberAvatarText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#235C38',
+  },
+  memberName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1A1A1A',
+  },
+  memberContact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  memberContactText: {
+    fontSize: 12,
+    color: '#888',
+    flex: 1,
+  },
+  memberNoContact: {
+    fontSize: 12,
+    color: '#C0C0C0',
+    fontStyle: 'italic',
+  },
+  memberExpandedBody: {
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+    padding: 16,
+    gap: 12,
+  },
+  memberProgressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  memberProgressTrack: {
+    flex: 1,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#EBEBEB',
+    overflow: 'hidden',
+  },
+  memberProgressFill: {
+    height: '100%',
+    borderRadius: 3,
+    backgroundColor: '#235C38',
+  },
+  memberProgressLabel: {
+    fontSize: 12,
+    color: '#888',
+    minWidth: 60,
+    textAlign: 'right',
+  },
+  joinLinkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F7F7F5',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  joinLinkText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#888',
+  },
+  joinShareBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#235C38',
+    paddingVertical: 10,
+  },
+  joinShareBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#235C38',
+  },
+  viewRosterBtn: {
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  viewRosterText: {
+    fontSize: 13,
+    color: '#235C38',
+    fontWeight: '600',
+  },
+  memberEmptyText: {
+    fontSize: 13,
+    color: '#A0A0A0',
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+});

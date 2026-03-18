@@ -33,11 +33,58 @@ import {
   submitPollResponses,
   clearTripSession,
 } from '@/lib/api/respondents';
-import { joinTrip, getMembershipStatus } from '@/lib/api/members';
 import { getResponseCountsForTrip } from '@/lib/api/responses';
-import { supabase } from '@/lib/supabase';
 import { capture, Events } from '@/lib/analytics';
 import type { TripWithPolls, PollWithOptions, Respondent } from '@/types/database';
+import { supabase } from '@/lib/supabase';
+import { getBlocksForTrip, upsertDayRsvp, formatDayLabel, formatTime } from '@/lib/api/itinerary';
+import type { ItineraryBlock, DayRsvpStatus } from '@/types/database';
+
+// ─── Web layout ───────────────────────────────────────────────────────────────
+
+const IS_WEB = Platform.OS === 'web';
+
+/**
+ * On web: renders a full-screen branded background with a centered white card.
+ * On native: transparent passthrough — no change to layout.
+ */
+function WebPageShell({
+  children,
+  cardStyle,
+}: {
+  children: React.ReactNode;
+  cardStyle?: object;
+}) {
+  if (!IS_WEB) return <>{children}</>;
+  return (
+    <View
+      style={{
+        flex: 1,
+        backgroundColor: '#F0EDE8',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16,
+      }}
+    >
+      <View
+        style={[
+          {
+            width: '100%',
+            maxWidth: 480,
+            backgroundColor: 'white',
+            borderRadius: 24,
+            overflow: 'hidden',
+            // @ts-ignore — web-only CSS property
+            boxShadow: '0 4px 40px rgba(0,0,0,0.10)',
+          },
+          cardStyle,
+        ]}
+      >
+        {children}
+      </View>
+    </View>
+  );
+}
 
 // ─── Name storage ─────────────────────────────────────────────────────────────
 
@@ -410,9 +457,42 @@ function PollResultsCard({
 
 // ─── Download prompt (post-submission) ────────────────────────────────────────
 
-function DownloadPrompt({ tripName }: { tripName?: string }) {
-  const APP_STORE_URL = 'https://apps.apple.com/app/rally/id0000000000'; // replace at launch
+function DownloadPrompt({ tripName, tripId }: { tripName?: string; tripId: string }) {
+  // Set EXPO_PUBLIC_APP_STORE_ID in your .env once your App Store listing is live
+  const appStoreId = process.env.EXPO_PUBLIC_APP_STORE_ID ?? '';
+  const APP_STORE_URL = appStoreId
+    ? `https://apps.apple.com/app/rally/id${appStoreId}`
+    : 'https://rallyapp.io';
   const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.rally.app';
+  const VIRAL_KEY = 'rally_viral_' + tripId;
+
+  const [shown, setShown] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    async function checkShown() {
+      if (Platform.OS === 'web') {
+        const val = localStorage.getItem(VIRAL_KEY);
+        if (val) {
+          setShown(false);
+        } else {
+          localStorage.setItem(VIRAL_KEY, '1');
+          setShown(true);
+        }
+      } else {
+        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+        const val = await AsyncStorage.getItem(VIRAL_KEY);
+        if (val) {
+          setShown(false);
+        } else {
+          await AsyncStorage.setItem(VIRAL_KEY, '1');
+          setShown(true);
+        }
+      }
+    }
+    checkShown();
+  }, []);
+
+  if (shown === null || shown === false) return null;
 
   function handleDownload(store: 'ios' | 'android') {
     capture(Events.DOWNLOAD_PROMPT_TAPPED, { store });
@@ -422,11 +502,10 @@ function DownloadPrompt({ tripName }: { tripName?: string }) {
   return (
     <View className="mt-6 rounded-3xl bg-coral-500 px-6 py-8">
       <Text className="text-center text-xl font-bold text-white">
-        Results are coming in 👀
+        Planning your own trip? Try Rally.
       </Text>
       <Text className="mt-2 text-center text-sm text-coral-100">
-        Download rally to watch the votes roll in and get notified when{' '}
-        {tripName ? `the group decides on ${tripName}` : 'the group makes a decision'}.
+        Rally makes group trip planning stupid simple — polls, itinerary, expenses, and a shared group hub. Free to start.
       </Text>
       <View className="mt-5 gap-3">
         <Pressable
@@ -448,9 +527,188 @@ function DownloadPrompt({ tripName }: { tripName?: string }) {
           <Text className="font-semibold text-neutral-800">Google Play</Text>
         </Pressable>
       </View>
-      <Text className="mt-4 text-center text-xs text-coral-200">
-        Or plan your own trip — it's free.
+      <Pressable
+        onPress={() => Linking.openURL('https://rallyapp.io')}
+        accessibilityRole="link"
+        accessibilityLabel="Start planning free"
+      >
+        <Text className="mt-4 text-center text-sm font-semibold text-white underline">
+          Start planning free →
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+// ─── Itinerary day range helper ────────────────────────────────────────────────
+
+function getDaysInRange(startDate: string, endDate: string): string[] {
+  const days: string[] = [];
+  const current = new Date(startDate + 'T12:00:00');
+  const end = new Date(endDate + 'T12:00:00');
+  while (current <= end) {
+    days.push(current.toISOString().split('T')[0]);
+    current.setDate(current.getDate() + 1);
+  }
+  return days;
+}
+
+// ─── Block type icon map ───────────────────────────────────────────────────────
+
+const BLOCK_TYPE_ICONS: Record<string, React.ComponentProps<typeof Ionicons>['name']> = {
+  activity: 'walk-outline',
+  meal: 'restaurant-outline',
+  travel: 'car-outline',
+  accommodation: 'bed-outline',
+  free_time: 'sunny-outline',
+};
+
+// ─── Itinerary RSVP section (Phase 2 only) ────────────────────────────────────
+
+function ItineraryRsvpSection({
+  trip,
+  blocks,
+  dayRsvps,
+  respondentId,
+  onRsvpChange,
+  rsvpSaving,
+}: {
+  trip: TripWithPolls;
+  blocks: ItineraryBlock[];
+  dayRsvps: Record<string, DayRsvpStatus>;
+  respondentId: string;
+  onRsvpChange: (dayDate: string, status: DayRsvpStatus) => void;
+  rsvpSaving: string | null;
+}) {
+  if (!trip.start_date || !trip.end_date || blocks.length === 0) return null;
+
+  const days = getDaysInRange(trip.start_date, trip.end_date);
+  if (days.length === 0) return null;
+
+  return (
+    <View className="mt-6">
+      <Text className="text-lg font-bold text-neutral-800">📅 Are you in?</Text>
+      <Text className="mt-1 text-sm text-neutral-500">
+        Let the planner know which days work for you.
       </Text>
+
+      {days.map((dayDate) => {
+        const dayBlocks = blocks
+          .filter((b) => b.day_date === dayDate)
+          .sort((a, b) => a.position - b.position);
+        const currentStatus = dayRsvps[dayDate];
+        const isSaving = rsvpSaving === dayDate;
+
+        return (
+          <View key={dayDate} className="mt-4 rounded-2xl border border-neutral-100 bg-white p-4">
+            {/* Day header */}
+            <Text className="mb-3 text-sm font-semibold text-neutral-700">
+              {formatDayLabel(dayDate)}
+            </Text>
+
+            {/* Blocks list */}
+            {dayBlocks.length > 0 ? (
+              <View className="mb-4 gap-2">
+                {dayBlocks.map((block) => (
+                  <View key={block.id} className="flex-row items-start gap-2">
+                    <View className="mt-0.5">
+                      <Ionicons
+                        name={BLOCK_TYPE_ICONS[block.type] ?? 'ellipse-outline'}
+                        size={16}
+                        color="#6B7280"
+                      />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-sm font-medium text-neutral-800">{block.title}</Text>
+                      {block.start_time ? (
+                        <Text className="text-xs text-neutral-400">{formatTime(block.start_time)}</Text>
+                      ) : null}
+                      {block.location ? (
+                        <Text className="text-xs text-neutral-400" numberOfLines={1}>
+                          {block.location}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
+            {/* RSVP buttons */}
+            {isSaving ? (
+              <ActivityIndicator size="small" color="#FF6B5B" />
+            ) : (
+              <View className="flex-row gap-2">
+                <Pressable
+                  onPress={() => onRsvpChange(dayDate, 'going')}
+                  className={[
+                    'flex-1 items-center justify-center rounded-xl border py-2',
+                    currentStatus === 'going'
+                      ? 'border-green-500 bg-green-500'
+                      : 'border-green-200 bg-green-50',
+                  ].join(' ')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Going"
+                  accessibilityState={{ selected: currentStatus === 'going' }}
+                >
+                  <Text
+                    className={[
+                      'text-xs font-semibold',
+                      currentStatus === 'going' ? 'text-white' : 'text-green-700',
+                    ].join(' ')}
+                  >
+                    ✓ Going
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => onRsvpChange(dayDate, 'not_sure')}
+                  className={[
+                    'flex-1 items-center justify-center rounded-xl border py-2',
+                    currentStatus === 'not_sure'
+                      ? 'border-amber-400 bg-amber-400'
+                      : 'border-amber-200 bg-amber-50',
+                  ].join(' ')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Maybe"
+                  accessibilityState={{ selected: currentStatus === 'not_sure' }}
+                >
+                  <Text
+                    className={[
+                      'text-xs font-semibold',
+                      currentStatus === 'not_sure' ? 'text-white' : 'text-amber-700',
+                    ].join(' ')}
+                  >
+                    ? Maybe
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => onRsvpChange(dayDate, 'cant_make_it')}
+                  className={[
+                    'flex-1 items-center justify-center rounded-xl border py-2',
+                    currentStatus === 'cant_make_it'
+                      ? 'border-neutral-400 bg-neutral-400'
+                      : 'border-neutral-200 bg-neutral-100',
+                  ].join(' ')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Can't make it"
+                  accessibilityState={{ selected: currentStatus === 'cant_make_it' }}
+                >
+                  <Text
+                    className={[
+                      'text-xs font-semibold',
+                      currentStatus === 'cant_make_it' ? 'text-white' : 'text-neutral-500',
+                    ].join(' ')}
+                  >
+                    ✕ Can't make it
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -467,21 +725,24 @@ export default function RespondScreen() {
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState('');
   const [email, setEmail] = useState('');
+  const [emailError, setEmailError] = useState('');
   const [phone, setPhone] = useState('');
+  const [phoneError, setPhoneError] = useState('');
   const [trip, setTrip] = useState<TripWithPolls | null>(null);
   const [loadError, setLoadError] = useState<'not_found' | 'closed' | 'error' | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [hasExistingResponses, setHasExistingResponses] = useState(false);
   const [existingRespondent, setExistingRespondent] = useState<Respondent | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isMember, setIsMember] = useState(false);
-  const [joiningTrip, setJoiningTrip] = useState(false);
 
   // responses: { [pollId]: optionId[] }
   const [responses, setResponses] = useState<Record<string, string[]>>({});
   // live vote counts fetched after submission: { [pollId]: { [optionId]: count } }
   const [resultCounts, setResultCounts] = useState<Record<string, Record<string, number>>>({});
+  const [respondentId, setRespondentId] = useState<string | null>(null);
+  const [itineraryBlocks, setItineraryBlocks] = useState<ItineraryBlock[]>([]);
+  const [dayRsvps, setDayRsvps] = useState<Record<string, DayRsvpStatus>>({});
+  const [rsvpSaving, setRsvpSaving] = useState<string | null>(null);
   const nameInputRef = useRef<TextInput>(null);
 
   // ─── Load trip ────────────────────────────────────────────────────────────
@@ -517,18 +778,6 @@ export default function RespondScreen() {
         } catch {
           // No existing respondent — fine, fresh start
           if (stored) setName(stored);
-        }
-
-        // Check if this device is signed in and whether they've already joined
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            setIsAuthenticated(true);
-            const membership = await getMembershipStatus(data.id);
-            setIsMember(membership !== null);
-          }
-        } catch {
-          // Non-fatal — continue as anonymous user
         }
 
         setLoading(false);
@@ -572,12 +821,34 @@ export default function RespondScreen() {
   // ─── Name step → polls step ────────────────────────────────────────────────
   async function handleNameContinue() {
     const trimmed = name.trim();
+    const trimmedEmail = email.trim();
+    const trimmedPhone = phone.trim();
+
+    let hasError = false;
     if (!trimmed) {
-      setNameError('Please enter your first name');
-      return;
+      setNameError('Please enter your name');
+      hasError = true;
+    } else {
+      setNameError('');
     }
+    if (!trimmedEmail) {
+      setEmailError('Email is required');
+      hasError = true;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setEmailError('Please enter a valid email');
+      hasError = true;
+    } else {
+      setEmailError('');
+    }
+    if (!trimmedPhone) {
+      setPhoneError('Phone number is required');
+      hasError = true;
+    } else {
+      setPhoneError('');
+    }
+    if (hasError) return;
+
     await storeName(trimmed);
-    setNameError('');
 
     // If they entered a different name than the existing respondent, clear the
     // trip session so a new respondent gets created on submit. This allows a
@@ -602,27 +873,9 @@ export default function RespondScreen() {
     setName('');
     setNameError('');
     setEmail('');
+    setEmailError('');
     setPhone('');
-  }
-
-  // ─── Join trip as authenticated member ────────────────────────────────────
-  async function handleJoinTrip() {
-    if (!trip) return;
-    setJoiningTrip(true);
-    try {
-      await joinTrip(trip.id);
-      setIsMember(true);
-    } catch (err: unknown) {
-      // Ignore unique-constraint error (already a member) — treat as success
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('unique') || msg.includes('duplicate')) {
-        setIsMember(true);
-      } else {
-        Alert.alert('Could not join trip', 'Please check your connection and try again.');
-      }
-    } finally {
-      setJoiningTrip(false);
-    }
+    setPhoneError('');
   }
 
   // ─── Submit all responses ──────────────────────────────────────────────────
@@ -631,6 +884,7 @@ export default function RespondScreen() {
     setSubmitting(true);
     try {
       const respondent = await getOrCreateRespondent(trip.id, name.trim(), email.trim() || null, phone.trim() || null);
+      setRespondentId(respondent.id);
       const polls = trip.polls ?? [];
       for (const poll of polls) {
         const optionIds = responses[poll.id] ?? [];
@@ -643,6 +897,27 @@ export default function RespondScreen() {
         setResultCounts(counts);
       } catch {
         // non-fatal — confirmation screen will just show empty bars
+      }
+      // Fetch itinerary + existing RSVPs for this respondent if Phase 2 is active
+      if (trip.phase2_unlocked && trip.start_date && trip.end_date) {
+        try {
+          const [blocks, rsvpResult] = await Promise.all([
+            getBlocksForTrip(trip.id),
+            supabase
+              .from('day_rsvps')
+              .select('day_date, status')
+              .eq('trip_id', trip.id)
+              .eq('respondent_id', respondent.id),
+          ]);
+          setItineraryBlocks(blocks);
+          if (rsvpResult.data) {
+            const rsvpMap: Record<string, DayRsvpStatus> = {};
+            rsvpResult.data.forEach((r: { day_date: string; status: string }) => {
+              rsvpMap[r.day_date] = r.status as DayRsvpStatus;
+            });
+            setDayRsvps(rsvpMap);
+          }
+        } catch { /* non-fatal — itinerary section will just not show */ }
       }
       setStep('done');
     } catch (err: unknown) {
@@ -657,55 +932,77 @@ export default function RespondScreen() {
     }
   }
 
+  // ─── Handle RSVP change ────────────────────────────────────────────────────
+  async function handleRsvpChange(dayDate: string, status: DayRsvpStatus) {
+    if (!respondentId || !trip) return;
+    setRsvpSaving(dayDate);
+    try {
+      await upsertDayRsvp(trip.id, respondentId, dayDate, status);
+      setDayRsvps((prev) => ({ ...prev, [dayDate]: status }));
+    } catch {
+      Alert.alert('Error', 'Could not save your RSVP. Please try again.');
+    } finally {
+      setRsvpSaving(null);
+    }
+  }
+
   // ─── Render ────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
-      <View className="flex-1 items-center justify-center bg-neutral-50">
-        <ActivityIndicator size="large" color="#FF6B5B" />
-      </View>
+      <WebPageShell cardStyle={{ padding: 48 }}>
+        <View className={IS_WEB ? 'items-center justify-center' : 'flex-1 items-center justify-center bg-neutral-50'}>
+          <ActivityIndicator size="large" color="#FF6B5B" />
+        </View>
+      </WebPageShell>
     );
   }
 
   if (loadError === 'not_found') {
     return (
-      <View className="flex-1 items-center justify-center bg-neutral-50 px-8">
-        <Text className="text-5xl">🔗</Text>
-        <Text className="mt-4 text-center text-xl font-semibold text-neutral-800">
-          This rally no longer exists.
-        </Text>
-        <Text className="mt-2 text-center text-sm text-neutral-400">
-          The trip planner may have deleted it.
-        </Text>
-      </View>
+      <WebPageShell cardStyle={{ padding: 40 }}>
+        <View className={IS_WEB ? 'items-center' : 'flex-1 items-center justify-center bg-neutral-50 px-8'}>
+          <Text className="text-5xl">🔗</Text>
+          <Text className="mt-4 text-center text-xl font-semibold text-neutral-800">
+            This rally no longer exists.
+          </Text>
+          <Text className="mt-2 text-center text-sm text-neutral-400">
+            The trip planner may have deleted it.
+          </Text>
+        </View>
+      </WebPageShell>
     );
   }
 
   if (loadError === 'closed' || (trip && trip.status !== 'active')) {
     return (
-      <View className="flex-1 items-center justify-center bg-neutral-50 px-8">
-        <Text className="text-5xl">🔒</Text>
-        <Text className="mt-4 text-center text-xl font-semibold text-neutral-800">
-          This rally is no longer accepting responses.
-        </Text>
-        <Text className="mt-2 text-center text-sm text-neutral-400">
-          The planner has closed it.
-        </Text>
-      </View>
+      <WebPageShell cardStyle={{ padding: 40 }}>
+        <View className={IS_WEB ? 'items-center' : 'flex-1 items-center justify-center bg-neutral-50 px-8'}>
+          <Text className="text-5xl">🔒</Text>
+          <Text className="mt-4 text-center text-xl font-semibold text-neutral-800">
+            This rally is no longer accepting responses.
+          </Text>
+          <Text className="mt-2 text-center text-sm text-neutral-400">
+            The planner has closed it.
+          </Text>
+        </View>
+      </WebPageShell>
     );
   }
 
   if (loadError === 'error') {
     return (
-      <View className="flex-1 items-center justify-center bg-neutral-50 px-8">
-        <Text className="text-5xl">⚠️</Text>
-        <Text className="mt-4 text-center text-xl font-semibold text-neutral-800">
-          Something went wrong.
-        </Text>
-        <Text className="mt-2 text-center text-sm text-neutral-400">
-          Check your connection and try again.
-        </Text>
-      </View>
+      <WebPageShell cardStyle={{ padding: 40 }}>
+        <View className={IS_WEB ? 'items-center' : 'flex-1 items-center justify-center bg-neutral-50 px-8'}>
+          <Text className="text-5xl">⚠️</Text>
+          <Text className="mt-4 text-center text-xl font-semibold text-neutral-800">
+            Something went wrong.
+          </Text>
+          <Text className="mt-2 text-center text-sm text-neutral-400">
+            Check your connection and try again.
+          </Text>
+        </View>
+      </WebPageShell>
     );
   }
 
@@ -716,15 +1013,15 @@ export default function RespondScreen() {
 
   // ─── Name step ─────────────────────────────────────────────────────────────
   if (step === 'name') {
-    return (
-      <KeyboardAvoidingView
-        className="flex-1 bg-neutral-50"
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    const nameForm = (
+      <View
+        style={{
+          paddingTop: IS_WEB ? 36 : insets.top + 24,
+          paddingBottom: IS_WEB ? 36 : insets.bottom + 24,
+          paddingHorizontal: IS_WEB ? 36 : 24,
+          ...(IS_WEB ? {} : { flex: 1, justifyContent: 'center' as const }),
+        }}
       >
-        <View
-          className="flex-1 justify-center px-6"
-          style={{ paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }}
-        >
           {/* Rally wordmark */}
           <Text className="mb-1 text-3xl font-bold text-coral-500">rally</Text>
 
@@ -735,42 +1032,6 @@ export default function RespondScreen() {
           </Text>
 
           <View className="mt-8 gap-4">
-            {/* In-app join banner for authenticated users */}
-            {isAuthenticated ? (
-              <View className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
-                {isMember ? (
-                  <View className="flex-row items-center gap-2">
-                    <Ionicons name="checkmark-circle" size={18} color="#3B82F6" />
-                    <Text className="flex-1 text-sm font-medium text-blue-700">
-                      You've joined this trip in Rally
-                    </Text>
-                  </View>
-                ) : (
-                  <View className="gap-2">
-                    <View className="flex-row items-center gap-2">
-                      <Ionicons name="people-outline" size={16} color="#3B82F6" />
-                      <Text className="flex-1 text-sm text-blue-700">
-                        You're signed in to Rally — join this trip to track it in your app.
-                      </Text>
-                    </View>
-                    <Pressable
-                      onPress={handleJoinTrip}
-                      disabled={joiningTrip}
-                      className="items-center rounded-xl bg-blue-500 py-2"
-                      accessibilityRole="button"
-                      accessibilityLabel="Join this trip"
-                    >
-                      {joiningTrip ? (
-                        <ActivityIndicator size="small" color="white" />
-                      ) : (
-                        <Text className="text-sm font-semibold text-white">Join this trip</Text>
-                      )}
-                    </Pressable>
-                  </View>
-                )}
-              </View>
-            ) : null}
-
             {/* Returning user banner */}
             {existingRespondent && hasExistingResponses ? (
               <View className="flex-row items-center justify-between rounded-2xl bg-coral-50 px-4 py-3">
@@ -788,53 +1049,79 @@ export default function RespondScreen() {
               </View>
             ) : null}
 
-            <View className="gap-3">
-              <View className="gap-1">
-                <Text className="text-sm font-medium text-neutral-700">What's your first name?</Text>
-                <TextInput
-                  ref={nameInputRef}
-                  value={name}
-                  onChangeText={(t) => {
-                    setName(t.slice(0, 30));
-                    if (nameError) setNameError('');
-                  }}
-                  placeholder="First name"
-                  maxLength={30}
-                  autoFocus
-                  autoCapitalize="words"
-                  autoComplete="given-name"
-                  returnKeyType="next"
-                  className="min-h-[52px] rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-lg text-neutral-800"
-                  placeholderTextColor="#A8A8A8"
-                />
-                {nameError ? (
-                  <Text className="text-sm text-red-500">{nameError}</Text>
-                ) : null}
-              </View>
+            <View className="gap-1">
+              <Text className="text-sm font-medium text-neutral-700">What's your name?</Text>
+              <TextInput
+                ref={nameInputRef}
+                value={name}
+                onChangeText={(t) => {
+                  setName(t.slice(0, 30));
+                  if (nameError) setNameError('');
+                }}
+                placeholder="First name"
+                maxLength={30}
+                autoFocus
+                autoCapitalize="words"
+                autoComplete="given-name"
+                returnKeyType="next"
+                onSubmitEditing={handleNameContinue}
+                className={[
+                  'min-h-[52px] rounded-2xl border bg-white px-4 py-3 text-lg text-neutral-800',
+                  nameError ? 'border-red-400' : 'border-neutral-200',
+                ].join(' ')}
+                placeholderTextColor="#A8A8A8"
+              />
+              {nameError ? (
+                <Text className="text-sm text-red-500">{nameError}</Text>
+              ) : null}
+            </View>
 
+            <View className="gap-1">
+              <Text className="text-sm font-medium text-neutral-700">Email</Text>
               <TextInput
                 value={email}
-                onChangeText={setEmail}
-                placeholder="Email (optional)"
+                onChangeText={(t) => {
+                  setEmail(t);
+                  if (emailError) setEmailError('');
+                }}
+                placeholder="you@example.com"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoComplete="email"
                 returnKeyType="next"
-                className="min-h-[52px] rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-base text-neutral-800"
+                className={[
+                  'min-h-[52px] rounded-2xl border bg-white px-4 py-3 text-lg text-neutral-800',
+                  emailError ? 'border-red-400' : 'border-neutral-200',
+                ].join(' ')}
                 placeholderTextColor="#A8A8A8"
               />
+              {emailError ? (
+                <Text className="text-sm text-red-500">{emailError}</Text>
+              ) : null}
+            </View>
 
+            <View className="gap-1">
+              <Text className="text-sm font-medium text-neutral-700">Phone</Text>
               <TextInput
                 value={phone}
-                onChangeText={setPhone}
-                placeholder="Phone number (optional)"
+                onChangeText={(t) => {
+                  setPhone(t);
+                  if (phoneError) setPhoneError('');
+                }}
+                placeholder="+1 555 000 0000"
                 keyboardType="phone-pad"
                 autoComplete="tel"
                 returnKeyType="go"
                 onSubmitEditing={handleNameContinue}
-                className="min-h-[52px] rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-base text-neutral-800"
+                className={[
+                  'min-h-[52px] rounded-2xl border bg-white px-4 py-3 text-lg text-neutral-800',
+                  phoneError ? 'border-red-400' : 'border-neutral-200',
+                ].join(' ')}
                 placeholderTextColor="#A8A8A8"
               />
+              {phoneError ? (
+                <Text className="text-sm text-red-500">{phoneError}</Text>
+              ) : null}
             </View>
 
             <Button onPress={handleNameContinue} fullWidth size="lg">
@@ -846,6 +1133,29 @@ export default function RespondScreen() {
             </Text>
           </View>
         </View>
+    );
+
+    if (IS_WEB) {
+      return (
+        <WebPageShell>
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            // @ts-ignore — web-only
+            style={{ maxHeight: '95vh' }}
+          >
+            {nameForm}
+          </ScrollView>
+        </WebPageShell>
+      );
+    }
+
+    return (
+      <KeyboardAvoidingView
+        className="flex-1 bg-neutral-50"
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        {nameForm}
       </KeyboardAvoidingView>
     );
   }
@@ -853,13 +1163,15 @@ export default function RespondScreen() {
   // ─── Done step ─────────────────────────────────────────────────────────────
   if (step === 'done') {
     return (
+      <WebPageShell cardStyle={IS_WEB ? { maxHeight: '95vh' } : {}}>
       <ScrollView
-        className="flex-1 bg-neutral-50"
+        style={IS_WEB ? {} : { flex: 1, backgroundColor: '#F9F9F7' }}
         contentContainerStyle={{
-          paddingTop: insets.top + 24,
-          paddingHorizontal: 24,
-          paddingBottom: insets.bottom + 40,
+          paddingTop: IS_WEB ? 36 : insets.top + 24,
+          paddingHorizontal: IS_WEB ? 36 : 24,
+          paddingBottom: IS_WEB ? 36 : insets.bottom + 40,
         }}
+        showsVerticalScrollIndicator={false}
       >
         <Text className="text-3xl font-bold text-coral-500">rally</Text>
 
@@ -894,9 +1206,22 @@ export default function RespondScreen() {
           </View>
         ) : null}
 
+        {/* Itinerary RSVP section (Phase 2 only) */}
+        {trip.phase2_unlocked && trip.start_date && trip.end_date && respondentId && (
+          <ItineraryRsvpSection
+            trip={trip}
+            blocks={itineraryBlocks}
+            dayRsvps={dayRsvps}
+            respondentId={respondentId}
+            onRsvpChange={handleRsvpChange}
+            rsvpSaving={rsvpSaving}
+          />
+        )}
+
         {/* Download prompt */}
-        <DownloadPrompt tripName={trip.name} />
+        <DownloadPrompt tripName={trip.name} tripId={trip.id} />
       </ScrollView>
+      </WebPageShell>
     );
   }
 
@@ -905,14 +1230,22 @@ export default function RespondScreen() {
   const allAnswered = polls.length > 0 && answeredCount === polls.length;
 
   return (
+    <WebPageShell
+      cardStyle={IS_WEB ? {
+        // @ts-ignore — web-only
+        maxHeight: '95vh',
+        display: 'flex',
+        flexDirection: 'column',
+      } : {}}
+    >
     <KeyboardAvoidingView
-      className="flex-1 bg-neutral-50"
+      style={IS_WEB ? { flex: 1, display: 'flex', flexDirection: 'column' } : { flex: 1, backgroundColor: '#F9F9F7' }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       {/* Header */}
       <View
         className="border-b border-neutral-100 bg-white px-6 pb-4"
-        style={{ paddingTop: insets.top + 16 }}
+        style={{ paddingTop: IS_WEB ? 20 : insets.top + 16 }}
       >
         <Text className="text-sm font-medium text-coral-500">rally · {trip.name}</Text>
         <Text className="mt-0.5 text-lg font-bold text-neutral-800">
@@ -937,8 +1270,10 @@ export default function RespondScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 24, paddingBottom: insets.bottom + 100 }}
+        style={IS_WEB ? { flex: 1 } : {}}
+        contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 24, paddingBottom: IS_WEB ? 24 : insets.bottom + 100 }}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         {polls.length === 0 ? (
           <View className="items-center py-12">
@@ -969,7 +1304,7 @@ export default function RespondScreen() {
       {polls.length > 0 ? (
         <View
           className="border-t border-neutral-100 bg-white px-6 pt-3"
-          style={{ paddingBottom: insets.bottom + 12 }}
+          style={{ paddingBottom: IS_WEB ? 16 : insets.bottom + 12 }}
         >
           {!allAnswered ? (
             <Text className="mb-2 text-center text-xs text-neutral-400">
@@ -988,5 +1323,6 @@ export default function RespondScreen() {
         </View>
       ) : null}
     </KeyboardAvoidingView>
+    </WebPageShell>
   );
 }

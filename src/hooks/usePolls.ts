@@ -1,17 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createPoll,
-  decidePoll,
+  decidePollAndSync,
   deletePoll,
   duplicatePoll,
   getPollsForTrip,
   getPollWithResults,
-  undecidePoll,
+  undecidePollAndClear,
   updatePoll,
   updatePollOptions,
   updatePollStatus,
   type CreatePollInput,
 } from '../lib/api/polls';
+import { tripKeys } from './useTrips';
 import type { PollStatus } from '../types/database';
 
 export const pollKeys = {
@@ -61,9 +62,10 @@ export function useDecidePoll(tripId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ pollId, optionId }: { pollId: string; optionId: string }) =>
-      decidePoll(pollId, optionId),
+      decidePollAndSync(pollId, optionId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: pollKeys.forTrip(tripId) });
+      qc.invalidateQueries({ queryKey: tripKeys.detail(tripId) });
     },
   });
 }
@@ -71,9 +73,10 @@ export function useDecidePoll(tripId: string) {
 export function useUndecidePoll(tripId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (pollId: string) => undecidePoll(pollId),
+    mutationFn: (pollId: string) => undecidePollAndClear(pollId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: pollKeys.forTrip(tripId) });
+      qc.invalidateQueries({ queryKey: tripKeys.detail(tripId) });
     },
   });
 }

@@ -36,4 +36,5 @@ export const Events = {
   RESPONDENT_SUBMITTED: 'respondent_submitted',
   DOWNLOAD_PROMPT_TAPPED: 'download_prompt_tapped',
   NOTIFICATION_OPTED_IN: 'notification_opted_in',
+  TRIP_CLOSED: 'trip_closed',
 } as const;

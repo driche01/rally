@@ -1,7 +1,13 @@
 import { useEffect } from 'react';
+import * as WebBrowser from 'expo-web-browser';
+import { makeRedirectUri } from 'expo-auth-session';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
 import { identify, reset } from '../lib/analytics';
+import { registerPushToken, deregisterPushToken } from '../lib/notifications';
+
+// Required for expo-auth-session to close the browser on web after OAuth redirect
+WebBrowser.maybeCompleteAuthSession();
 
 export function useAuthListener() {
   const { setSession, setLoading } = useAuthStore();
@@ -13,20 +19,25 @@ export function useAuthListener() {
       setLoading(false);
       if (session?.user) {
         identify(session.user.id, { email: session.user.email });
+        registerPushToken();
       }
     });
 
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
       setLoading(false);
       if (session?.user) {
         identify(session.user.id, { email: session.user.email });
+        if (event === 'SIGNED_IN') {
+          registerPushToken();
+        }
       } else {
-        // User signed out — reset PostHog identity
+        // User signed out — reset PostHog identity and remove push token
         reset();
+        deregisterPushToken();
       }
     });
 
@@ -35,7 +46,13 @@ export function useAuthListener() {
 }
 
 export function useSignUp() {
-  return async (firstName: string, lastName: string, email: string, phone: string, password: string) => {
+  return async (
+    firstName: string,
+    lastName: string,
+    email: string,
+    phone: string,
+    password: string,
+  ) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -47,7 +64,7 @@ export function useSignUp() {
     if (data.user) {
       const { error: profileError } = await supabase
         .from('profiles')
-        .upsert({ id: data.user.id, name: firstName, last_name: lastName, email, phone });
+        .upsert({ id: data.user.id, name: firstName, last_name: lastName || null, email, phone: phone || null });
       if (profileError) throw profileError;
     }
 
@@ -82,5 +99,43 @@ export function useResetPassword() {
 export function useSignOut() {
   return async () => {
     await supabase.auth.signOut();
+  };
+}
+
+export function useGoogleSignIn() {
+  return async () => {
+    const redirectTo = makeRedirectUri({ scheme: 'rally', path: 'auth/callback' });
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo, skipBrowserRedirect: true },
+    });
+    if (error) throw error;
+    if (!data.url) throw new Error('No OAuth URL returned');
+
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    if (result.type !== 'success') return null; // user cancelled
+
+    const { data: sessionData, error: sessionError } = await supabase.auth.exchangeCodeForSession(
+      result.url,
+    );
+    if (sessionError) throw sessionError;
+
+    // Upsert profile for first-time Google sign-ins (ignored if profile already exists)
+    if (sessionData?.user) {
+      const meta = sessionData.user.user_metadata ?? {};
+      await supabase.from('profiles').upsert(
+        {
+          id: sessionData.user.id,
+          name: meta.given_name || meta.full_name?.split(' ')[0] || '',
+          last_name: meta.family_name || null,
+          email: sessionData.user.email ?? '',
+          phone: null,
+        },
+        { onConflict: 'id', ignoreDuplicates: true },
+      );
+    }
+
+    return sessionData;
   };
 }

@@ -1,66 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
-import { Pressable, Switch, Text, TextInput, View } from 'react-native';
-import { Divider, Input } from '@/components/ui';
-import { POPULAR_DESTINATIONS } from '@/lib/constants/destinations';
-
-// ── DestinationInput ──────────────────────────────────────────────────────────
-// TextInput with inline autocomplete dropdown from POPULAR_DESTINATIONS.
-
-function DestinationInput({
-  value,
-  onChangeText,
-  placeholder,
-  maxLength,
-}: {
-  value: string;
-  onChangeText: (v: string) => void;
-  placeholder: string;
-  maxLength?: number;
-}) {
-  const [focused, setFocused] = useState(false);
-
-  const trimmed = value.trim().toLowerCase();
-  const suggestions =
-    focused && trimmed.length >= 1
-      ? POPULAR_DESTINATIONS.filter((d) => d.toLowerCase().includes(trimmed)).slice(0, 5)
-      : [];
-
-  return (
-    <View>
-      <TextInput
-        value={value}
-        onChangeText={(v) => onChangeText(maxLength ? v.slice(0, maxLength) : v)}
-        placeholder={placeholder}
-        maxLength={maxLength}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setTimeout(() => setFocused(false), 150)}
-        className="min-h-[48px] rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-base text-neutral-800"
-        placeholderTextColor="#A8A8A8"
-      />
-      {suggestions.length > 0 ? (
-        <View className="mt-1 overflow-hidden rounded-xl border border-neutral-200 bg-white">
-          {suggestions.map((s, i) => (
-            <Pressable
-              key={s}
-              onPress={() => {
-                onChangeText(maxLength ? s.slice(0, maxLength) : s);
-                setFocused(false);
-              }}
-              className={[
-                'flex-row items-center gap-2 px-4 py-3',
-                i < suggestions.length - 1 ? 'border-b border-neutral-100' : '',
-              ].join(' ')}
-            >
-              <Ionicons name="location-outline" size={15} color="#A8A8A8" />
-              <Text className="text-sm text-neutral-700">{s}</Text>
-            </Pressable>
-          ))}
-        </View>
-      ) : null}
-    </View>
-  );
-}
+import { Pressable, Switch, Text, View } from 'react-native';
+import { Divider, Input, PlacesAutocompleteInput } from '@/components/ui';
 
 // ── DestinationSection ────────────────────────────────────────────────────────
 
@@ -107,7 +47,7 @@ export function DestinationSection({
         {options.map((opt, i) => (
           <View key={i} className="flex-row items-center gap-2">
             <View className="flex-1">
-              <DestinationInput
+              <PlacesAutocompleteInput
                 value={opt}
                 onChangeText={(v) => onOptionChange(i, v)}
                 placeholder={`Option ${i + 1}${i < 2 ? ' *' : ''}`}

@@ -13,6 +13,12 @@ export interface CreateTripInput {
   /** Exact head-count; null clears a previously-stored value. */
   group_size_precise?: number | null;
   travel_window?: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  trip_type?: string | null;
+  budget_per_person?: string | null;
+  destination?: string | null;
+  destination_address?: string | null;
 }
 
 export async function createTrip(input: CreateTripInput): Promise<Trip> {
