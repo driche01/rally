@@ -33,7 +33,9 @@ import {
   submitPollResponses,
   clearTripSession,
 } from '@/lib/api/respondents';
+import { joinTrip, getMembershipStatus } from '@/lib/api/members';
 import { getResponseCountsForTrip } from '@/lib/api/responses';
+import { supabase } from '@/lib/supabase';
 import { capture, Events } from '@/lib/analytics';
 import type { TripWithPolls, PollWithOptions, Respondent } from '@/types/database';
 
@@ -472,6 +474,9 @@ export default function RespondScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [hasExistingResponses, setHasExistingResponses] = useState(false);
   const [existingRespondent, setExistingRespondent] = useState<Respondent | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isMember, setIsMember] = useState(false);
+  const [joiningTrip, setJoiningTrip] = useState(false);
 
   // responses: { [pollId]: optionId[] }
   const [responses, setResponses] = useState<Record<string, string[]>>({});
@@ -512,6 +517,18 @@ export default function RespondScreen() {
         } catch {
           // No existing respondent — fine, fresh start
           if (stored) setName(stored);
+        }
+
+        // Check if this device is signed in and whether they've already joined
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            setIsAuthenticated(true);
+            const membership = await getMembershipStatus(data.id);
+            setIsMember(membership !== null);
+          }
+        } catch {
+          // Non-fatal — continue as anonymous user
         }
 
         setLoading(false);
@@ -586,6 +603,26 @@ export default function RespondScreen() {
     setNameError('');
     setEmail('');
     setPhone('');
+  }
+
+  // ─── Join trip as authenticated member ────────────────────────────────────
+  async function handleJoinTrip() {
+    if (!trip) return;
+    setJoiningTrip(true);
+    try {
+      await joinTrip(trip.id);
+      setIsMember(true);
+    } catch (err: unknown) {
+      // Ignore unique-constraint error (already a member) — treat as success
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('unique') || msg.includes('duplicate')) {
+        setIsMember(true);
+      } else {
+        Alert.alert('Could not join trip', 'Please check your connection and try again.');
+      }
+    } finally {
+      setJoiningTrip(false);
+    }
   }
 
   // ─── Submit all responses ──────────────────────────────────────────────────
@@ -698,6 +735,42 @@ export default function RespondScreen() {
           </Text>
 
           <View className="mt-8 gap-4">
+            {/* In-app join banner for authenticated users */}
+            {isAuthenticated ? (
+              <View className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
+                {isMember ? (
+                  <View className="flex-row items-center gap-2">
+                    <Ionicons name="checkmark-circle" size={18} color="#3B82F6" />
+                    <Text className="flex-1 text-sm font-medium text-blue-700">
+                      You've joined this trip in Rally
+                    </Text>
+                  </View>
+                ) : (
+                  <View className="gap-2">
+                    <View className="flex-row items-center gap-2">
+                      <Ionicons name="people-outline" size={16} color="#3B82F6" />
+                      <Text className="flex-1 text-sm text-blue-700">
+                        You're signed in to Rally — join this trip to track it in your app.
+                      </Text>
+                    </View>
+                    <Pressable
+                      onPress={handleJoinTrip}
+                      disabled={joiningTrip}
+                      className="items-center rounded-xl bg-blue-500 py-2"
+                      accessibilityRole="button"
+                      accessibilityLabel="Join this trip"
+                    >
+                      {joiningTrip ? (
+                        <ActivityIndicator size="small" color="white" />
+                      ) : (
+                        <Text className="text-sm font-semibold text-white">Join this trip</Text>
+                      )}
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+            ) : null}
+
             {/* Returning user banner */}
             {existingRespondent && hasExistingResponses ? (
               <View className="flex-row items-center justify-between rounded-2xl bg-coral-50 px-4 py-3">

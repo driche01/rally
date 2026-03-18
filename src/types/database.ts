@@ -66,6 +66,20 @@ export interface PollResponse {
   created_at: string;
 }
 
+export type TripMemberRole = 'planner' | 'member';
+
+export interface TripMember {
+  id: string;
+  trip_id: string;
+  user_id: string;
+  role: TripMemberRole;
+  joined_at: string;
+}
+
+export interface TripMemberWithProfile extends TripMember {
+  profiles: Pick<Profile, 'name' | 'email'>;
+}
+
 // ─── Rich / joined types ─────────────────────────────────────────────────────
 
 export interface PollWithOptions extends Poll {
