@@ -60,11 +60,7 @@ export function PlanConfirmedModal({
 
   function handleBuildTrip() {
     onClose();
-    if (phase2Unlocked) {
-      router.push(`/(app)/trips/${tripId}/hub`);
-    } else {
-      router.push(`/(app)/trips/${tripId}/paywall`);
-    }
+    router.push(`/(app)/trips/${tripId}/hub`);
   }
 
   const destination = decidedDestination || tripName;
@@ -187,15 +183,9 @@ export function PlanConfirmedModal({
               accessibilityRole="button"
             >
               <Text style={{ fontSize: 16, fontWeight: '700', color: 'white' }}>
-                {phase2Unlocked ? 'Open trip builder →' : 'Now let\'s build the trip →'}
+                Now let's build the trip →
               </Text>
             </Pressable>
-
-            {phase2Unlocked ? null : (
-              <Text style={{ fontSize: 12, color: '#A8A8A8', textAlign: 'center', marginTop: -12 }}>
-                Replaces your group chat, Google Sheet, and Splitwise tab — $1.99 for this trip.
-              </Text>
-            )}
 
           </Pressable>
         </Animated.View>

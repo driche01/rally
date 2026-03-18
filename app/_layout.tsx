@@ -26,6 +26,9 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
   const notificationResponseRef = useRef<Notifications.Subscription | null>(null);
 
   useEffect(() => {
+    // expo-notifications is not available on web
+    if (Platform.OS === 'web') return;
+
     // Handle notification tap when app is killed (cold start)
     Notifications.getLastNotificationResponseAsync().then((response) => {
       const url = getInitialNotificationUrl(response);

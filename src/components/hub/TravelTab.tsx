@@ -1,0 +1,997 @@
+/**
+ * TravelTab — coordinate flights, trains, cars, and other transport.
+ * Legs are persisted to Supabase. Planners can mark legs as "share with group"
+ * so they appear in the group section. Swipe left to delete a leg.
+ */
+import { useRef, useState } from 'react';
+import {
+  Alert,
+  Linking,
+  Platform,
+  Pressable,
+  ScrollView,
+  Share,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
+import { Ionicons } from '@expo/vector-icons';
+import { useTrip } from '@/hooks/useTrips';
+import { DateRangePicker } from '@/components/DateRangePicker';
+import {
+  useCreateTravelLeg,
+  useDeleteTravelLeg,
+  useSharedMemberLegs,
+  useTravelLegs,
+  useUpdateTravelLeg,
+} from '@/hooks/useTravelLegs';
+import type { TravelLeg, TransportMode } from '@/types/database';
+
+// ─── Config ───────────────────────────────────────────────────────────────────
+
+const MODE_CONFIG: Record<
+  TransportMode,
+  {
+    label: string;
+    icon: React.ComponentProps<typeof Ionicons>['name'];
+    searchUrl: (q: string) => string;
+  }
+> = {
+  flight: {
+    label: 'Flight',
+    icon: 'airplane-outline',
+    searchUrl: (q) => `https://www.google.com/travel/flights?q=${encodeURIComponent(q)}`,
+  },
+  train: {
+    label: 'Train',
+    icon: 'train-outline',
+    searchUrl: (q) => `https://www.google.com/search?q=train+${encodeURIComponent(q)}`,
+  },
+  car: {
+    label: 'Car',
+    icon: 'car-outline',
+    searchUrl: (q) => `https://www.google.com/maps/dir/${encodeURIComponent(q)}`,
+  },
+  ferry: {
+    label: 'Ferry',
+    icon: 'boat-outline',
+    searchUrl: (q) => `https://www.google.com/search?q=ferry+${encodeURIComponent(q)}`,
+  },
+  bus: {
+    label: 'Bus',
+    icon: 'bus-outline',
+    searchUrl: (q) => `https://www.google.com/search?q=bus+${encodeURIComponent(q)}`,
+  },
+  other: {
+    label: 'Other',
+    icon: 'navigate-outline',
+    searchUrl: (q) => `https://www.google.com/search?q=${encodeURIComponent(q)}`,
+  },
+};
+
+const MODES: TransportMode[] = ['flight', 'train', 'car', 'ferry', 'bus', 'other'];
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatLegDate(iso: string): string {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${months[parseInt(m, 10) - 1]} ${parseInt(d, 10)}, ${y}`;
+}
+
+function buildShareText(leg: TravelLeg): string {
+  const cfg = MODE_CONFIG[leg.mode as TransportMode];
+  const parts: string[] = [`${cfg.label}: ${leg.label}`];
+  if (leg.departure_date || leg.departure_time) {
+    parts.push(`Departs: ${[leg.departure_date ? formatLegDate(leg.departure_date) : '', leg.departure_time].filter(Boolean).join(' at ')}`);
+  }
+  if (leg.arrival_date || leg.arrival_time) {
+    parts.push(`Arrives: ${[leg.arrival_date ? formatLegDate(leg.arrival_date) : '', leg.arrival_time].filter(Boolean).join(' at ')}`);
+  }
+  if (leg.booking_ref) parts.push(`Booking ref: ${leg.booking_ref}`);
+  if (leg.notes) parts.push(leg.notes);
+  return parts.join('\n');
+}
+
+// ─── Form values ──────────────────────────────────────────────────────────────
+
+interface LegFormValues {
+  mode: TransportMode;
+  label: string;
+  departureDate: string;
+  departureTime: string;
+  arrivalDate: string;
+  arrivalTime: string;
+  bookingRef: string;
+  notes: string;
+  shareWithGroup: boolean;
+}
+
+// ─── LegForm ──────────────────────────────────────────────────────────────────
+
+function LegForm({
+  tripName,
+  tripStartDate,
+  tripEndDate,
+  initialValues,
+  saving,
+  onSave,
+  onCancel,
+}: {
+  tripName: string;
+  tripStartDate?: string | null;
+  tripEndDate?: string | null;
+  initialValues?: TravelLeg;
+  saving?: boolean;
+  onSave: (values: LegFormValues) => void;
+  onCancel: () => void;
+}) {
+  const isEditing = Boolean(initialValues);
+  const [mode, setMode] = useState<TransportMode>((initialValues?.mode as TransportMode) ?? 'flight');
+  const [label, setLabel] = useState(initialValues?.label ?? '');
+  const [departureDate, setDepartureDate] = useState(initialValues?.departure_date ?? tripStartDate ?? '');
+  const [departureTime, setDepartureTime] = useState(initialValues?.departure_time ?? '');
+  const [arrivalDate, setArrivalDate] = useState(
+    initialValues?.arrival_date ?? tripEndDate ?? tripStartDate ?? '',
+  );
+  const [arrivalTime, setArrivalTime] = useState(initialValues?.arrival_time ?? '');
+  const [bookingRef, setBookingRef] = useState(initialValues?.booking_ref ?? '');
+  const [notes, setNotes] = useState(initialValues?.notes ?? '');
+  const [shareWithGroup, setShareWithGroup] = useState(initialValues?.shared_with_group ?? false);
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
+
+  function handleSearch() {
+    const query = label.trim() || tripName;
+    Linking.openURL(MODE_CONFIG[mode].searchUrl(query));
+  }
+
+  function handleSave() {
+    if (!label.trim()) {
+      Alert.alert('Missing info', 'Please add a description (e.g. "JFK → LAX").');
+      return;
+    }
+    onSave({
+      mode,
+      label: label.trim(),
+      departureDate,
+      departureTime,
+      arrivalDate,
+      arrivalTime,
+      bookingRef: bookingRef.trim(),
+      notes: notes.trim(),
+      shareWithGroup,
+    });
+  }
+
+  return (
+    <View
+      style={{
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 16,
+        gap: 14,
+        borderWidth: 1,
+        borderColor: '#EBEBEB',
+      }}
+    >
+      {/* Mode selector */}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+        {MODES.map((m) => {
+          const sel = mode === m;
+          return (
+            <Pressable
+              key={m}
+              onPress={() => setMode(m)}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 5,
+                paddingHorizontal: 12,
+                paddingVertical: 7,
+                borderRadius: 999,
+                borderWidth: 1.5,
+                borderColor: sel ? '#FF6B5B' : '#E5E5E5',
+                backgroundColor: sel ? '#fff5f2' : '#fff',
+              }}
+            >
+              <Ionicons name={MODE_CONFIG[m].icon} size={14} color={sel ? '#FF6B5B' : '#888'} />
+              <Text style={{ fontSize: 13, fontWeight: '500', color: sel ? '#FF6B5B' : '#555' }}>
+                {MODE_CONFIG[m].label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {/* Description + search */}
+      <View style={{ gap: 6 }}>
+        <Text style={{ fontSize: 12, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          Description
+        </Text>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TextInput
+            style={{
+              flex: 1,
+              height: 44,
+              borderWidth: 1.5,
+              borderColor: '#E5E5E5',
+              borderRadius: 10,
+              paddingHorizontal: 12,
+              fontSize: 15,
+              color: '#1A1A1A',
+              backgroundColor: '#FAFAFA',
+            }}
+            placeholder={
+              mode === 'flight'
+                ? 'e.g. JFK → LAX'
+                : mode === 'car'
+                ? 'e.g. Drive to Yosemite'
+                : `e.g. ${MODE_CONFIG[mode].label} to destination`
+            }
+            placeholderTextColor="#A8A8A8"
+            value={label}
+            onChangeText={setLabel}
+          />
+          <Pressable
+            onPress={handleSearch}
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 10,
+              backgroundColor: '#F3F3F3',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            accessibilityLabel={`Search ${MODE_CONFIG[mode].label}`}
+          >
+            <Ionicons name="search-outline" size={20} color="#555" />
+          </Pressable>
+        </View>
+      </View>
+
+      {/* Dates — calendar picker */}
+      <View style={{ gap: 6 }}>
+        <Text style={{ fontSize: 12, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          Dates
+        </Text>
+        <Pressable
+          onPress={() => setDatePickerVisible(true)}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            height: 44,
+            borderWidth: 1.5,
+            borderColor: '#E5E5E5',
+            borderRadius: 10,
+            paddingHorizontal: 12,
+            backgroundColor: '#FAFAFA',
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Select departure and arrival dates"
+        >
+          <Ionicons name="calendar-outline" size={16} color="#888" />
+          {departureDate ? (
+            <Text style={{ flex: 1, fontSize: 14, color: '#1A1A1A' }}>
+              {formatLegDate(departureDate)}
+              {arrivalDate && arrivalDate !== departureDate ? ` → ${formatLegDate(arrivalDate)}` : ''}
+            </Text>
+          ) : (
+            <Text style={{ flex: 1, fontSize: 14, color: '#A8A8A8' }}>Select dates</Text>
+          )}
+          {departureDate ? (
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation();
+                setDepartureDate('');
+                setArrivalDate('');
+              }}
+              hitSlop={8}
+            >
+              <Ionicons name="close-circle" size={16} color="#CCC" />
+            </Pressable>
+          ) : null}
+        </Pressable>
+      </View>
+
+      {/* Times — departure and arrival */}
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <View style={{ flex: 1, gap: 6 }}>
+          <Text style={{ fontSize: 12, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            Departs
+          </Text>
+          <TextInput
+            style={{
+              height: 44,
+              borderWidth: 1.5,
+              borderColor: '#E5E5E5',
+              borderRadius: 10,
+              paddingHorizontal: 12,
+              fontSize: 15,
+              color: '#1A1A1A',
+              backgroundColor: '#FAFAFA',
+            }}
+            placeholder="HH:MM"
+            placeholderTextColor="#A8A8A8"
+            value={departureTime}
+            onChangeText={setDepartureTime}
+            keyboardType="numbers-and-punctuation"
+          />
+        </View>
+        <View style={{ flex: 1, gap: 6 }}>
+          <Text style={{ fontSize: 12, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            Arrives
+          </Text>
+          <TextInput
+            style={{
+              height: 44,
+              borderWidth: 1.5,
+              borderColor: '#E5E5E5',
+              borderRadius: 10,
+              paddingHorizontal: 12,
+              fontSize: 15,
+              color: '#1A1A1A',
+              backgroundColor: '#FAFAFA',
+            }}
+            placeholder="HH:MM"
+            placeholderTextColor="#A8A8A8"
+            value={arrivalTime}
+            onChangeText={setArrivalTime}
+            keyboardType="numbers-and-punctuation"
+          />
+        </View>
+      </View>
+
+      <DateRangePicker
+        visible={datePickerVisible}
+        startDate={departureDate || null}
+        endDate={arrivalDate || null}
+        title="Travel dates"
+        startLabel="Departure"
+        endLabel="Arrival"
+        confirmLabel="Set dates"
+        allowPastDates
+        onConfirm={(start, end) => {
+          setDepartureDate(start ?? '');
+          setArrivalDate(end ?? start ?? '');
+        }}
+        onClose={() => setDatePickerVisible(false)}
+      />
+
+      {/* Booking ref */}
+      <View style={{ gap: 6 }}>
+        <Text style={{ fontSize: 12, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          Confirmation / Booking ref{' '}
+          <Text style={{ fontWeight: '400', textTransform: 'none' }}>(optional)</Text>
+        </Text>
+        <TextInput
+          style={{
+            height: 44,
+            borderWidth: 1.5,
+            borderColor: '#E5E5E5',
+            borderRadius: 10,
+            paddingHorizontal: 12,
+            fontSize: 15,
+            color: '#1A1A1A',
+            backgroundColor: '#FAFAFA',
+          }}
+          placeholder="e.g. ABC123"
+          placeholderTextColor="#A8A8A8"
+          value={bookingRef}
+          onChangeText={setBookingRef}
+          autoCapitalize="characters"
+        />
+      </View>
+
+      {/* Notes */}
+      <View style={{ gap: 6 }}>
+        <Text style={{ fontSize: 12, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          Notes <Text style={{ fontWeight: '400', textTransform: 'none' }}>(optional)</Text>
+        </Text>
+        <TextInput
+          style={{
+            minHeight: 72,
+            borderWidth: 1.5,
+            borderColor: '#E5E5E5',
+            borderRadius: 10,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            fontSize: 15,
+            color: '#1A1A1A',
+            backgroundColor: '#FAFAFA',
+            textAlignVertical: 'top',
+          }}
+          placeholder="e.g. Meet at Terminal 4, baggage claim"
+          placeholderTextColor="#A8A8A8"
+          value={notes}
+          onChangeText={setNotes}
+          multiline
+        />
+      </View>
+
+      {/* Share with group toggle */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingVertical: 4,
+          borderTopWidth: 1,
+          borderTopColor: '#F3F3F3',
+          paddingTop: 14,
+        }}
+      >
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={{ fontSize: 14, fontWeight: '600', color: '#1A1A1A' }}>Share with group</Text>
+          <Text style={{ fontSize: 12, color: '#888', lineHeight: 16 }}>
+            Visible to all group members in their travel section
+          </Text>
+        </View>
+        <Switch
+          value={shareWithGroup}
+          onValueChange={setShareWithGroup}
+          trackColor={{ false: '#E5E5E5', true: '#C8ECD9' }}
+          thumbColor={shareWithGroup ? '#235C38' : '#fff'}
+          ios_backgroundColor="#E5E5E5"
+        />
+      </View>
+
+      {/* Actions */}
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        <Pressable
+          onPress={onCancel}
+          style={{
+            flex: 1,
+            height: 44,
+            borderRadius: 10,
+            borderWidth: 1.5,
+            borderColor: '#E5E5E5',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Text style={{ fontSize: 15, fontWeight: '500', color: '#888' }}>Cancel</Text>
+        </Pressable>
+        <Pressable
+          onPress={handleSave}
+          disabled={saving}
+          style={{
+            flex: 2,
+            height: 44,
+            borderRadius: 10,
+            backgroundColor: saving ? '#FFAA9F' : '#FF6B5B',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Text style={{ fontSize: 15, fontWeight: '600', color: '#fff' }}>
+            {saving ? 'Saving…' : isEditing ? 'Save changes' : 'Add leg'}
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+// ─── SwipeableDeleteAction ────────────────────────────────────────────────────
+
+function DeleteAction({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        width: 76,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#FF3B30',
+        borderRadius: 16,
+        marginLeft: 8,
+      }}
+      accessibilityLabel="Delete leg"
+    >
+      <Ionicons name="trash-outline" size={20} color="#fff" />
+      <Text style={{ fontSize: 11, color: '#fff', marginTop: 3, fontWeight: '600' }}>Delete</Text>
+    </Pressable>
+  );
+}
+
+// ─── LegCard ──────────────────────────────────────────────────────────────────
+
+function LegCard({
+  leg,
+  onEdit,
+  onDelete,
+}: {
+  leg: TravelLeg;
+  onEdit?: () => void;
+  onDelete?: () => void;
+}) {
+  const swipeRef = useRef<Swipeable>(null);
+  const cfg = MODE_CONFIG[leg.mode as TransportMode];
+
+  function handleDelete() {
+    if (!onDelete) return;
+    swipeRef.current?.close();
+    Alert.alert('Remove this leg?', leg.label, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: onDelete },
+    ]);
+  }
+
+  async function handleShare() {
+    try {
+      await Share.share({ message: buildShareText(leg) });
+    } catch {
+      // user cancelled or not supported
+    }
+  }
+
+  return (
+    <Swipeable
+      ref={swipeRef}
+      renderRightActions={onDelete ? () => <DeleteAction onPress={handleDelete} /> : undefined}
+      overshootRight={false}
+      friction={2}
+    >
+      <Pressable
+        onPress={onEdit}
+        accessibilityRole={onEdit ? 'button' : 'none'}
+        accessibilityLabel={onEdit ? `Edit ${leg.label}` : undefined}
+        style={({ pressed }) => ({
+          backgroundColor: pressed ? '#F9F9F9' : '#fff',
+          borderRadius: 16,
+          padding: 16,
+          borderWidth: 1,
+          borderColor: '#EBEBEB',
+          gap: 10,
+        })}
+      >
+        {/* Top row: icon + label + share button */}
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+          <View
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 12,
+              backgroundColor: '#F3F3F3',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Ionicons name={cfg.icon} size={20} color="#555" />
+          </View>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: '#1A1A1A' }}>{leg.label}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={{ fontSize: 12, fontWeight: '500', color: '#888', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                {cfg.label}
+              </Text>
+              {leg.shared_with_group ? (
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 3,
+                    backgroundColor: '#E8F4EE',
+                    borderRadius: 999,
+                    paddingHorizontal: 7,
+                    paddingVertical: 2,
+                  }}
+                >
+                  <Ionicons name="people-outline" size={10} color="#235C38" />
+                  <Text style={{ fontSize: 10, fontWeight: '600', color: '#235C38' }}>Shared</Text>
+                </View>
+              ) : null}
+            </View>
+          </View>
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation();
+              handleShare();
+            }}
+            hitSlop={8}
+            accessibilityLabel="Share leg details"
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              backgroundColor: '#F3F3F3',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Ionicons
+              name={Platform.OS === 'ios' ? 'share-outline' : 'share-social-outline'}
+              size={16}
+              color="#555"
+            />
+          </Pressable>
+        </View>
+
+        {/* Departure / arrival */}
+        {leg.departure_date || leg.departure_time || leg.arrival_date || leg.arrival_time ? (
+          <View style={{ flexDirection: 'row', gap: 20 }}>
+            {leg.departure_date || leg.departure_time ? (
+              <View style={{ gap: 2 }}>
+                <Text style={{ fontSize: 11, color: '#A8A8A8', fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                  Departs
+                </Text>
+                <Text style={{ fontSize: 14, fontWeight: '600', color: '#1A1A1A' }}>
+                  {[leg.departure_date ? formatLegDate(leg.departure_date) : '', leg.departure_time]
+                    .filter(Boolean)
+                    .join(' ')}
+                </Text>
+              </View>
+            ) : null}
+            {leg.arrival_date || leg.arrival_time ? (
+              <View style={{ gap: 2 }}>
+                <Text style={{ fontSize: 11, color: '#A8A8A8', fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                  Arrives
+                </Text>
+                <Text style={{ fontSize: 14, fontWeight: '600', color: '#1A1A1A' }}>
+                  {[leg.arrival_date ? formatLegDate(leg.arrival_date) : '', leg.arrival_time]
+                    .filter(Boolean)
+                    .join(' ')}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
+        {/* Booking ref */}
+        {leg.booking_ref ? (
+          <View
+            style={{
+              backgroundColor: '#F8F8F8',
+              borderRadius: 8,
+              paddingHorizontal: 10,
+              paddingVertical: 6,
+              alignSelf: 'flex-start',
+            }}
+          >
+            <Text style={{ fontSize: 13, fontWeight: '600', color: '#555', fontVariant: ['tabular-nums'] }}>
+              Ref: {leg.booking_ref}
+            </Text>
+          </View>
+        ) : null}
+
+        {/* Notes */}
+        {leg.notes ? (
+          <Text style={{ fontSize: 13, color: '#666', lineHeight: 18 }}>{leg.notes}</Text>
+        ) : null}
+      </Pressable>
+    </Swipeable>
+  );
+}
+
+// ─── MemberLegCard ────────────────────────────────────────────────────────────
+
+function MemberLegCard({
+  leg,
+  respondentName,
+}: {
+  leg: TravelLeg;
+  respondentName: string;
+}) {
+  const cfg = MODE_CONFIG[leg.mode as TransportMode];
+
+  async function handleShare() {
+    try {
+      await Share.share({ message: buildShareText(leg) });
+    } catch {}
+  }
+
+  return (
+    <View
+      style={{
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: '#EBEBEB',
+        gap: 10,
+      }}
+    >
+      {/* Member name */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <View
+          style={{
+            width: 26,
+            height: 26,
+            borderRadius: 13,
+            backgroundColor: '#E8F4EE',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Text style={{ fontSize: 12, fontWeight: '700', color: '#235C38' }}>
+            {respondentName.trim().charAt(0).toUpperCase()}
+          </Text>
+        </View>
+        <Text style={{ fontSize: 13, fontWeight: '600', color: '#555', flex: 1 }}>{respondentName}</Text>
+        <Pressable
+          onPress={handleShare}
+          hitSlop={8}
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 7,
+            backgroundColor: '#F3F3F3',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Ionicons
+            name={Platform.OS === 'ios' ? 'share-outline' : 'share-social-outline'}
+            size={14}
+            color="#555"
+          />
+        </Pressable>
+      </View>
+
+      {/* Leg info */}
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+        <View
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 10,
+            backgroundColor: '#F3F3F3',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Ionicons name={cfg.icon} size={18} color="#555" />
+        </View>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={{ fontSize: 14, fontWeight: '700', color: '#1A1A1A' }}>{leg.label}</Text>
+          <Text style={{ fontSize: 12, color: '#888', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+            {cfg.label}
+          </Text>
+        </View>
+      </View>
+
+      {leg.departure_date || leg.departure_time || leg.arrival_date || leg.arrival_time ? (
+        <View style={{ flexDirection: 'row', gap: 20 }}>
+          {leg.departure_date || leg.departure_time ? (
+            <View style={{ gap: 1 }}>
+              <Text style={{ fontSize: 11, color: '#A8A8A8', fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                Departs
+              </Text>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: '#1A1A1A' }}>
+                {[leg.departure_date ? formatLegDate(leg.departure_date) : '', leg.departure_time]
+                  .filter(Boolean)
+                  .join(' ')}
+              </Text>
+            </View>
+          ) : null}
+          {leg.arrival_date || leg.arrival_time ? (
+            <View style={{ gap: 1 }}>
+              <Text style={{ fontSize: 11, color: '#A8A8A8', fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                Arrives
+              </Text>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: '#1A1A1A' }}>
+                {[leg.arrival_date ? formatLegDate(leg.arrival_date) : '', leg.arrival_time]
+                  .filter(Boolean)
+                  .join(' ')}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
+      {leg.booking_ref ? (
+        <View
+          style={{
+            backgroundColor: '#F8F8F8',
+            borderRadius: 8,
+            paddingHorizontal: 10,
+            paddingVertical: 5,
+            alignSelf: 'flex-start',
+          }}
+        >
+          <Text style={{ fontSize: 12, fontWeight: '600', color: '#555' }}>Ref: {leg.booking_ref}</Text>
+        </View>
+      ) : null}
+
+      {leg.notes ? (
+        <Text style={{ fontSize: 12, color: '#666', lineHeight: 17 }}>{leg.notes}</Text>
+      ) : null}
+    </View>
+  );
+}
+
+// ─── Main Tab ─────────────────────────────────────────────────────────────────
+
+export function TravelTab({ tripId, isPlanner = true }: { tripId: string; isPlanner?: boolean }) {
+  const { data: trip } = useTrip(tripId);
+  const { data: legs = [], isLoading } = useTravelLegs(tripId);
+  const { data: memberLegs = [] } = useSharedMemberLegs(tripId);
+
+  const createMutation = useCreateTravelLeg(tripId);
+  const updateMutation = useUpdateTravelLeg(tripId);
+  const deleteMutation = useDeleteTravelLeg(tripId);
+
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editingLeg, setEditingLeg] = useState<TravelLeg | null>(null);
+
+  const formVisible = showAddForm || editingLeg !== null;
+  const isSaving = createMutation.isPending || updateMutation.isPending;
+
+  async function handleAdd(values: LegFormValues) {
+    try {
+      await createMutation.mutateAsync({
+        trip_id: tripId,
+        respondent_id: null,
+        mode: values.mode,
+        label: values.label,
+        departure_date: values.departureDate || null,
+        departure_time: values.departureTime || null,
+        arrival_date: values.arrivalDate || null,
+        arrival_time: values.arrivalTime || null,
+        booking_ref: values.bookingRef || null,
+        notes: values.notes || null,
+        shared_with_group: values.shareWithGroup,
+      });
+      setShowAddForm(false);
+    } catch {
+      Alert.alert('Error', 'Could not save travel leg. Please try again.');
+    }
+  }
+
+  async function handleUpdate(values: LegFormValues) {
+    if (!editingLeg) return;
+    try {
+      await updateMutation.mutateAsync({
+        id: editingLeg.id,
+        updates: {
+          mode: values.mode,
+          label: values.label,
+          departure_date: values.departureDate || null,
+          departure_time: values.departureTime || null,
+          arrival_date: values.arrivalDate || null,
+          arrival_time: values.arrivalTime || null,
+          booking_ref: values.bookingRef || null,
+          notes: values.notes || null,
+          shared_with_group: values.shareWithGroup,
+        },
+      });
+      setEditingLeg(null);
+    } catch {
+      Alert.alert('Error', 'Could not update travel leg. Please try again.');
+    }
+  }
+
+  function handleDelete(id: string) {
+    deleteMutation.mutate(id, {
+      onError: () => Alert.alert('Error', 'Could not delete travel leg. Please try again.'),
+    });
+  }
+
+  function handleCancel() {
+    setShowAddForm(false);
+    setEditingLeg(null);
+  }
+
+  return (
+    <ScrollView
+      contentContainerStyle={{ padding: 16, gap: 12 }}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Header */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 4,
+        }}
+      >
+        <Text style={{ fontSize: 20, fontWeight: '700', color: '#1A1A1A' }}>Travel</Text>
+        {isPlanner && !formVisible ? (
+          <Pressable
+            onPress={() => setShowAddForm(true)}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 5,
+              paddingHorizontal: 14,
+              paddingVertical: 8,
+              borderRadius: 999,
+              backgroundColor: '#FF6B5B',
+            }}
+            accessibilityRole="button"
+          >
+            <Ionicons name="add" size={16} color="#fff" />
+            <Text style={{ fontSize: 14, fontWeight: '600', color: '#fff' }}>Add leg</Text>
+          </Pressable>
+        ) : null}
+      </View>
+
+      {/* Add form */}
+      {showAddForm ? (
+        <LegForm
+          tripName={trip?.name ?? ''}
+          tripStartDate={trip?.start_date ?? null}
+          tripEndDate={trip?.end_date ?? null}
+          saving={isSaving}
+          onSave={handleAdd}
+          onCancel={handleCancel}
+        />
+      ) : null}
+
+      {/* Edit form */}
+      {editingLeg ? (
+        <LegForm
+          tripName={trip?.name ?? ''}
+          tripStartDate={trip?.start_date ?? null}
+          tripEndDate={trip?.end_date ?? null}
+          initialValues={editingLeg}
+          saving={isSaving}
+          onSave={handleUpdate}
+          onCancel={handleCancel}
+        />
+      ) : null}
+
+      {/* My legs — hidden for the leg currently being edited */}
+      {isLoading && legs.length === 0 ? (
+        <View style={{ alignItems: 'center', paddingVertical: 32 }}>
+          <Text style={{ fontSize: 14, color: '#AAA' }}>Loading…</Text>
+        </View>
+      ) : null}
+
+      {legs.map((leg) =>
+        editingLeg?.id === leg.id ? null : (
+          <LegCard
+            key={leg.id}
+            leg={leg}
+            onEdit={isPlanner ? () => { setShowAddForm(false); setEditingLeg(leg); } : undefined}
+            onDelete={isPlanner ? () => handleDelete(leg.id) : undefined}
+          />
+        ),
+      )}
+
+      {/* Empty state */}
+      {legs.length === 0 && !formVisible && !isLoading ? (
+        <View style={{ alignItems: 'center', paddingVertical: 60, gap: 12 }}>
+          <Ionicons name="airplane-outline" size={48} color="#D0D0D0" />
+          <Text style={{ fontSize: 17, fontWeight: '600', color: '#1A1A1A' }}>No travel legs yet</Text>
+          <Text style={{ fontSize: 14, color: '#888', textAlign: 'center', lineHeight: 20 }}>
+            Add flights, trains, car trips, or any other transport to coordinate how everyone gets
+            there.
+          </Text>
+        </View>
+      ) : null}
+
+      {/* Group members' shared legs */}
+      {memberLegs.length > 0 ? (
+        <View style={{ marginTop: 8, gap: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: '700',
+                color: '#AAA',
+                letterSpacing: 0.8,
+                textTransform: 'uppercase',
+              }}
+            >
+              Group members
+            </Text>
+            <View style={{ flex: 1, height: 1, backgroundColor: '#EBEBEB' }} />
+          </View>
+          <Text style={{ fontSize: 13, color: '#888', marginTop: -4, lineHeight: 18 }}>
+            Travel legs shared by your group members
+          </Text>
+          {memberLegs.map((leg) => (
+            <MemberLegCard key={leg.id} leg={leg} respondentName={leg.respondent_name} />
+          ))}
+        </View>
+      ) : null}
+    </ScrollView>
+  );
+}

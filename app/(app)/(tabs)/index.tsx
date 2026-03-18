@@ -5,17 +5,26 @@ import { Alert, FlatList, ImageBackground, Pressable, RefreshControl, StyleSheet
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ProgressBar, Badge } from '@/components/ui';
 import { PreciseGroupSizeModal } from '@/components/PreciseGroupSizeModal';
 import { useDeleteTrip, useTripsWithRespondentCounts, useUpdateTrip } from '@/hooks/useTrips';
-import { getParticipationRate } from '@/types/database';
 import type { TripWithRespondentCount } from '@/lib/api/trips';
+import { getTripStage, STAGES, STAGE_LABEL } from '@/lib/tripStage';
 
 const SEASON_ICON: Record<string, React.ComponentProps<typeof Ionicons>['name']> = {
   Winter: 'snow-outline',
   Spring: 'flower-outline',
   Summer: 'sunny-outline',
   Fall: 'leaf-outline',
+};
+
+// Stage accent colors — mirror the hero card palette on the dashboard
+const STAGE_COLOR: Record<string, { active: string; past: string; label: string }> = {
+  deciding:     { active: '#D85A30', past: '#FFBDAD', label: '#D85A30' },
+  confirmed:    { active: '#235C38', past: '#A8CCAA', label: '#235C38' },
+  planning:     { active: '#1A4060', past: '#9BB8CC', label: '#1A4060' },
+  experiencing: { active: '#085041', past: '#7EADA3', label: '#085041' },
+  reconciling:  { active: '#666666', past: '#CCCCCC', label: '#666666' },
+  done:         { active: '#2C2C2A', past: '#AAAAAA', label: '#2C2C2A' },
 };
 
 function TripCard({
@@ -30,11 +39,9 @@ function TripCard({
   const router = useRouter();
   const [preciseModalVisible, setPreciseModalVisible] = useState(false);
 
-  const { count, total, percent } = getParticipationRate(
-    trip.respondentCount,
-    trip.group_size_bucket,
-    trip.group_size_precise,
-  );
+  const stage = getTripStage(trip);
+  const stageIndex = STAGES.indexOf(stage);
+  const stageColor = STAGE_COLOR[stage] ?? STAGE_COLOR.deciding;
 
   // Label for the badge: prefer precise number, fall back to bucket range
   const sizeLabel = trip.group_size_precise != null
@@ -81,7 +88,7 @@ function TripCard({
           {/* TouchableOpacity from RNGH integrates with the swipe gesture,
               preventing onPress from firing during horizontal swipes */}
           <TouchableOpacity
-            onPress={() => router.push(`/(app)/trips/${trip.id}/edit`)}
+            onPress={() => router.push(`/(app)/trips/${trip.id}`)}
             activeOpacity={0.85}
             style={styles.cardLeft}
             accessibilityRole="button"
@@ -99,48 +106,32 @@ function TripCard({
               </View>
             ) : null}
 
-            {/* Tapping the badge opens the precise-number modal */}
+            {/* Tapping the size pill opens the precise-number modal */}
             <Pressable
               onPress={() => setPreciseModalVisible(true)}
               accessibilityRole="button"
               accessibilityLabel={`Group size: ${sizeLabel}. Tap to set exact number.`}
-              hitSlop={8}
+              style={styles.sizePill}
             >
-              <Badge variant="muted">{sizeLabel}</Badge>
+              <Text style={styles.sizePillText}>{sizeLabel}</Text>
             </Pressable>
 
-            <View style={{ marginTop: 2 }}>
-              <ProgressBar
-                value={percent}
-                max={100}
-                label={`${count} of ${total} responded`}
-                showPercent
-              />
+            {/* Stage progress bar */}
+            <View style={styles.stageBar}>
+              {STAGES.map((s, i) => (
+                <View
+                  key={s}
+                  style={[
+                    styles.stageSegment,
+                    i < stageIndex  && { backgroundColor: stageColor.past },
+                    i === stageIndex && { backgroundColor: stageColor.active },
+                  ]}
+                />
+              ))}
             </View>
+            <Text style={[styles.stageLabel, { color: stageColor.label }]}>{STAGE_LABEL[stage]}</Text>
           </TouchableOpacity>
 
-          {/* Right: Poll + Build pill CTAs */}
-          <View style={styles.cardRight}>
-            <Pressable
-              onPress={() => router.push(`/(app)/trips/${trip.id}`)}
-              style={styles.pollPill}
-              accessibilityRole="button"
-              accessibilityLabel="View polls"
-            >
-              <Ionicons name="stats-chart" size={13} color="white" />
-              <Text style={[styles.pillText, { color: 'white' }]}>Poll</Text>
-            </Pressable>
-
-            <Pressable
-              onPress={() => router.push(`/(app)/trips/${trip.id}/hub`)}
-              style={styles.buildPill}
-              accessibilityRole="button"
-              accessibilityLabel="Launch trip builder"
-            >
-              <Ionicons name="map-outline" size={13} color="#FF6B5B" />
-              <Text style={[styles.pillText, { color: '#FF6B5B' }]}>Build</Text>
-            </Pressable>
-          </View>
         </View>
       </Swipeable>
 
@@ -179,24 +170,13 @@ export default function HomeScreen() {
       resizeMode="cover"
     >
       {/* Header */}
-      <View className="flex-row items-center justify-between px-6 pb-5 pt-4">
+      <View className="flex-row items-center px-6 pb-5 pt-4">
         <Text
           className="text-3xl font-bold text-white"
           style={{ textShadowColor: 'rgba(0,0,0,0.45)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 }}
         >
           rally
         </Text>
-        {trips && trips.length > 0 ? (
-          <Pressable
-            onPress={() => router.push('/(app)/trips/new')}
-            className="flex-row items-center gap-1 rounded-xl bg-coral-500 px-4 py-2"
-            accessibilityRole="button"
-            accessibilityLabel="Add rally"
-          >
-            <Ionicons name="add" size={16} color="white" />
-            <Text className="text-sm font-semibold text-white">Add a rally</Text>
-          </Pressable>
-        ) : <View />}
       </View>
 
       {/* Trip list on frosted sheet */}
@@ -210,21 +190,10 @@ export default function HomeScreen() {
           }
           ListEmptyComponent={
             !isLoading ? (
-              <View className="items-center py-20 gap-4">
-                <Text className="text-xl font-semibold text-neutral-800">
-                  No trips yet
-                </Text>
-                <Pressable
-                  onPress={() => router.push('/(app)/trips/new')}
-                  className="items-center justify-center rounded-full bg-coral-500 px-8 py-3"
-                  style={{ elevation: 4, shadowColor: '#FF6B5B', shadowOpacity: 0.4, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } }}
-                  accessibilityRole="button"
-                  accessibilityLabel="Get started"
-                >
-                  <Text style={{ color: 'white', fontSize: 16, fontWeight: '600' }}>Get started</Text>
-                </Pressable>
-                <Text className="text-base text-neutral-400">
-                  Create your first rally to get started.
+              <View className="items-center py-20 gap-3">
+                <Text className="text-xl font-semibold text-neutral-800">No trips yet</Text>
+                <Text className="text-base text-neutral-400 text-center">
+                  Tap the + below to create your first rally.
                 </Text>
               </View>
             ) : null
@@ -242,7 +211,6 @@ const styles = StyleSheet.create({
   cardShell: {
     borderRadius: 16,
     overflow: 'hidden',
-    flexDirection: 'row',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
@@ -250,7 +218,6 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   cardLeft: {
-    flex: 1,
     padding: 14,
     gap: 7,
   },
@@ -275,40 +242,35 @@ const styles = StyleSheet.create({
     fontSize: 10.5,
     color: '#666',
   },
-  cardRight: {
-    width: 112,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: '#f2f2f2',
-    alignItems: 'stretch',
-    justifyContent: 'center',
-    gap: 8,
-    paddingLeft: 10,
-    paddingRight: 6,
-    paddingVertical: 12,
+  sizePill: {
+    borderWidth: 1,
+    borderColor: '#e8e8e8',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#fafafa',
+    alignSelf: 'flex-start',
   },
-  pollPill: {
+  sizePillText: {
+    fontSize: 11,
+    color: '#888',
+  },
+  stageBar: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
-    paddingVertical: 9,
-    borderRadius: 999,
-    backgroundColor: '#FF6B5B',
+    gap: 3,
+    marginTop: 2,
   },
-  buildPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
-    paddingVertical: 9,
-    borderRadius: 999,
-    backgroundColor: 'white',
-    borderWidth: 1.5,
-    borderColor: '#FF6B5B',
+  stageSegment: {
+    flex: 1,
+    height: 3,
+    borderRadius: 99,
+    backgroundColor: '#e8e8e8',
   },
-  pillText: {
-    fontSize: 13,
+  stageLabel: {
+    fontSize: 10,
     fontWeight: '600',
-    letterSpacing: 0.1,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+    marginTop: 2,
   },
 });

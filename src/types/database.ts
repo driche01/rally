@@ -20,7 +20,9 @@ export type ReactorType = 'planner' | 'respondent';
 export interface Profile {
   id: string;
   name: string;
+  last_name: string | null;
   email: string;
+  phone: string | null;
   created_at: string;
 }
 
@@ -40,6 +42,11 @@ export interface Trip {
   phase2_unlocked: boolean;
   phase2_unlocked_at: string | null;
   phase2_unlock_method: Phase2UnlockMethod | null;
+  // Phase 3 fields
+  trip_type: string | null;         // comma-separated trip type labels
+  budget_per_person: string | null; // human-readable label e.g. "$500–$1k"
+  destination: string | null;         // display name, e.g. "Dawn Ranch"
+  destination_address: string | null; // full address for map links, e.g. "Dawn Ranch, CA 116, Guerneville, CA, USA"
   created_at: string;
   updated_at: string;
 }
@@ -68,8 +75,25 @@ export interface Respondent {
   id: string;
   trip_id: string;
   name: string;
+  email: string | null;
+  phone: string | null;
   session_token: string;
+  is_planner: boolean;
   created_at: string;
+}
+
+export type TripMemberRole = 'planner' | 'member';
+
+export interface TripMember {
+  id: string;
+  trip_id: string;
+  user_id: string;
+  role: TripMemberRole;
+  joined_at: string;
+}
+
+export interface TripMemberWithProfile extends TripMember {
+  profiles: Pick<Profile, 'name' | 'email'>;
 }
 
 export interface PollResponse {
@@ -78,6 +102,30 @@ export interface PollResponse {
   respondent_id: string;
   option_id: string;
   created_at: string;
+}
+
+// ─── Travel Legs ─────────────────────────────────────────────────────────────
+
+export type TransportMode = 'flight' | 'train' | 'car' | 'ferry' | 'bus' | 'other';
+
+export interface TravelLeg {
+  id: string;
+  trip_id: string;
+  respondent_id: string | null;
+  mode: TransportMode;
+  label: string;
+  departure_date: string | null;
+  departure_time: string | null;
+  arrival_date: string | null;
+  arrival_time: string | null;
+  booking_ref: string | null;
+  notes: string | null;
+  shared_with_group: boolean;
+  created_at: string;
+}
+
+export interface TravelLegWithRespondent extends TravelLeg {
+  respondent_name: string;
 }
 
 // ─── Phase 2 interfaces ──────────────────────────────────────────────────────
@@ -257,6 +305,58 @@ export interface PollWithResults extends PollWithOptions {
 
 export interface TripWithPolls extends Trip {
   polls: PollWithOptions[];
+}
+
+// ─── Direct messaging (Phase 3) ───────────────────────────────────────────────
+
+export type ConversationType = 'dm' | 'group';
+
+export interface Conversation {
+  id: string;
+  type: ConversationType;
+  name: string | null;      // group display name; null for DMs
+  avatar_url: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;       // bumped on each new message — use for sort order
+}
+
+export interface ConversationMember {
+  conversation_id: string;
+  profile_id: string;
+  joined_at: string;
+  last_read_at: string;
+}
+
+export interface ConversationMessage {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  content: string;
+  reply_to_id: string | null;
+  created_at: string;
+  edited_at: string | null;
+}
+
+export interface ConversationReaction {
+  id: string;
+  message_id: string;
+  profile_id: string;
+  emoji: string;
+  created_at: string;
+}
+
+// Rich joined types
+export interface ConversationWithPreview extends Conversation {
+  members: (ConversationMember & { profile: Pick<Profile, 'id' | 'name'> })[];
+  lastMessage: ConversationMessage | null;
+  unreadCount: number;
+}
+
+export interface ConversationMessageWithMeta extends ConversationMessage {
+  senderProfile: Pick<Profile, 'id' | 'name'>;
+  reactions: (ConversationReaction & { senderName: string })[];
+  replyTo: Pick<ConversationMessage, 'id' | 'content' | 'sender_id'> | null;
 }
 
 // ─── Participation helpers ────────────────────────────────────────────────────

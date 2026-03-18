@@ -11,25 +11,25 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
-  Alert,
   Pressable,
   Text,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTrip, useCloseTrip } from '@/hooks/useTrips';
-import { capture } from '@/lib/analytics';
+import { useTrip } from '@/hooks/useTrips';
+import { usePermissions } from '@/hooks/usePermissions';
 
 // Tab content components
 import { PollsTab } from '@/components/hub/PollsTab';
 import { ItineraryTab } from '@/components/hub/ItineraryTab';
 import { LodgingTab } from '@/components/hub/LodgingTab';
+import { TravelTab } from '@/components/hub/TravelTab';
 import { ChatTab } from '@/components/hub/ChatTab';
 import { ExpensesTab } from '@/components/hub/ExpensesTab';
 
 // ─── Tab definitions ─────────────────────────────────────────────────────────
 
-type TabId = 'polls' | 'itinerary' | 'lodging' | 'expenses' | 'chat';
+type TabId = 'polls' | 'itinerary' | 'lodging' | 'travel' | 'expenses' | 'chat';
 
 const TABS: {
   id: TabId;
@@ -47,43 +47,30 @@ const TABS: {
 // ─── Hub screen ──────────────────────────────────────────────────────────────
 
 export default function TripHubScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, tab: initialTab } = useLocalSearchParams<{ id: string; tab?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { data: trip } = useTrip(id);
+  const {
+    isPlanner,
+    canManagePolls,
+    canManageItinerary,
+    canManageLodging,
+    canManageTravel,
+    canManageExpenses,
+  } = usePermissions(id);
 
-  const [activeTab, setActiveTab] = useState<TabId>('itinerary');
-  const closeTrip = useCloseTrip();
-
-  function handleCloseTrip() {
-    Alert.alert(
-      'Close this trip?',
-      'This marks the trip as complete. Your data stays intact.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Close trip',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await closeTrip.mutateAsync(id);
-              capture('trip_closed', { trip_id: id });
-              router.replace(`/(app)/trips/${id}/recap`);
-            } catch {
-              Alert.alert('Error', 'Could not close the trip. Please try again.');
-            }
-          },
-        },
-      ]
-    );
-  }
+  const [activeTab, setActiveTab] = useState<TabId>(
+    (initialTab as TabId | undefined) ?? 'itinerary'
+  );
 
   function renderTab() {
     switch (activeTab) {
-      case 'polls':     return <PollsTab tripId={id} />;
-      case 'itinerary': return <ItineraryTab tripId={id} />;
-      case 'lodging':   return <LodgingTab tripId={id} />;
-      case 'expenses':  return <ExpensesTab tripId={id} />;
+      case 'polls':     return <PollsTab tripId={id} isPlanner={canManagePolls} />;
+      case 'itinerary': return <ItineraryTab tripId={id} isPlanner={canManageItinerary} />;
+      case 'lodging':   return <LodgingTab tripId={id} isPlanner={canManageLodging} />;
+      case 'travel':    return <TravelTab tripId={id} isPlanner={canManageTravel} />;
+      case 'expenses':  return <ExpensesTab tripId={id} isPlanner={canManageExpenses} />;
       case 'chat':      return <ChatTab tripId={id} />;
     }
   }
@@ -94,7 +81,7 @@ export default function TripHubScreen() {
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <View className="flex-row items-center justify-between border-b border-neutral-200 bg-neutral-50 px-6 pb-3 pt-4">
         <Pressable onPress={() => router.back()} accessibilityRole="button">
-          <Text className="text-base text-coral-500">← Trips</Text>
+          <Text className="text-base text-coral-500">← Back</Text>
         </Pressable>
         <View className="flex-1 items-center px-4">
           <Text className="text-base font-bold text-neutral-800" numberOfLines={1}>
@@ -106,56 +93,14 @@ export default function TripHubScreen() {
             </Text>
           ) : null}
         </View>
-        {/* Close trip */}
-        <Pressable
-          onPress={handleCloseTrip}
-          style={{ width: 60, alignItems: 'flex-end' }}
-          accessibilityRole="button"
-          accessibilityLabel="Close trip"
-        >
-          <Ionicons name="checkmark-done-outline" size={22} color="#A8A8A8" />
-        </Pressable>
+        <View style={{ width: 60 }} />
       </View>
 
       {/* ── Active tab content ────────────────────────────────────────── */}
-      <View className="flex-1">
+      <View className="flex-1" style={{ paddingBottom: insets.bottom }}>
         {renderTab()}
       </View>
 
-      {/* ── Custom tab bar ───────────────────────────────────────────── */}
-      <View
-        style={{ paddingBottom: insets.bottom }}
-        className="border-t border-neutral-200 bg-white"
-      >
-        <View className="flex-row">
-          {TABS.map((tab) => {
-            const isActive = activeTab === tab.id;
-            return (
-              <Pressable
-                key={tab.id}
-                onPress={() => setActiveTab(tab.id)}
-                className="flex-1 items-center py-2"
-                accessibilityRole="tab"
-                accessibilityState={{ selected: isActive }}
-              >
-                <Ionicons
-                  name={isActive ? tab.iconActive : tab.icon}
-                  size={22}
-                  color={isActive ? '#FF6B5B' : '#A8A8A8'}
-                />
-                <Text
-                  className={[
-                    'mt-0.5 text-[10px]',
-                    isActive ? 'font-semibold text-coral-500' : 'text-neutral-400',
-                  ].join(' ')}
-                >
-                  {tab.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
 
     </View>
   );

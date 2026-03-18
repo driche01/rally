@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { TripWithRespondentCount } from '../lib/api/trips';
 import {
   createTrip,
   deleteTrip,
@@ -9,6 +10,10 @@ import {
   updateTripStatus,
   type CreateTripInput,
 } from '../lib/api/trips';
+import { syncTripFieldsToPolls } from '../lib/api/polls';
+
+// Inlined to avoid circular import (usePolls imports tripKeys from here)
+const pollsForTrip = (tripId: string) => ['polls', tripId] as const;
 
 export const tripKeys = {
   all: ['trips'] as const,
@@ -31,10 +36,15 @@ export function useTripsWithRespondentCounts() {
 }
 
 export function useTrip(id: string) {
+  const qc = useQueryClient();
   return useQuery({
     queryKey: tripKeys.detail(id),
     queryFn: () => getTripById(id),
     enabled: Boolean(id),
+    initialData: () => {
+      const trips = qc.getQueryData<TripWithRespondentCount[]>(tripKeys.allWithCounts);
+      return trips?.find((t) => t.id === id);
+    },
   });
 }
 
@@ -42,8 +52,16 @@ export function useCreateTrip() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateTripInput) => createTrip(input),
-    onSuccess: () => {
+    onSuccess: async (data) => {
+      // Auto-create decided polls for any fields set at creation time
+      await syncTripFieldsToPolls(data.id, {
+        destination: data.destination,
+        start_date: data.start_date,
+        end_date: data.end_date,
+        budget_per_person: data.budget_per_person,
+      }).catch(() => {}); // non-blocking — don't fail trip creation if this errors
       qc.invalidateQueries({ queryKey: tripKeys.all });
+      qc.invalidateQueries({ queryKey: pollsForTrip(data.id) });
     },
   });
 }
@@ -64,10 +82,18 @@ export function useUpdateTrip() {
   return useMutation({
     mutationFn: ({ id, ...input }: { id: string } & Partial<CreateTripInput>) =>
       updateTrip(id, input),
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
+      // Auto-create decided polls for any fields added/set during edit
+      await syncTripFieldsToPolls(data.id, {
+        destination: data.destination,
+        start_date: data.start_date,
+        end_date: data.end_date,
+        budget_per_person: data.budget_per_person,
+      }).catch(() => {}); // non-blocking — don't fail the save if this errors
       qc.invalidateQueries({ queryKey: tripKeys.all });
       qc.invalidateQueries({ queryKey: tripKeys.allWithCounts });
       qc.invalidateQueries({ queryKey: tripKeys.detail(data.id) });
+      qc.invalidateQueries({ queryKey: pollsForTrip(data.id) });
     },
   });
 }

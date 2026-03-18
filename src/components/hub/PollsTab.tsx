@@ -234,7 +234,7 @@ const PollCard = memo(function PollCard({
   );
 });
 
-export function PollsTab({ tripId }: { tripId: string }) {
+export function PollsTab({ tripId, isPlanner = true }: { tripId: string; isPlanner?: boolean }) {
   const router = useRouter();
   const { data: trip } = useTrip(tripId);
   const { data: polls = [], refetch: refetchPolls } = usePolls(tripId);
@@ -279,13 +279,15 @@ export function PollsTab({ tripId }: { tripId: string }) {
             <Ionicons name={sortNewest ? 'arrow-down' : 'arrow-up'} size={13} color="#A8A8A8" />
             <Text className="text-xs text-neutral-400">{sortNewest ? 'Newest' : 'Oldest'}</Text>
           </Pressable>
-          <Pressable
-            onPress={() => router.push(`/(app)/trips/${tripId}/polls/new`)}
-            className="flex-row items-center gap-1 rounded-xl bg-coral-500 px-3 py-1.5"
-          >
-            <Ionicons name="add" size={14} color="white" />
-            <Text className="text-xs font-semibold text-white">Add poll</Text>
-          </Pressable>
+          {isPlanner ? (
+            <Pressable
+              onPress={() => router.push(`/(app)/trips/${tripId}/polls/new`)}
+              className="flex-row items-center gap-1 rounded-xl bg-coral-500 px-3 py-1.5"
+            >
+              <Ionicons name="add" size={14} color="white" />
+              <Text className="text-xs font-semibold text-white">Add poll</Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
 
@@ -295,9 +297,11 @@ export function PollsTab({ tripId }: { tripId: string }) {
           <Text className="text-center text-sm text-neutral-400">
             Add a poll to ask your group about destinations, dates, or budget.
           </Text>
-          <Button onPress={() => router.push(`/(app)/trips/${tripId}/polls/new`)} className="mt-2">
-            Add first poll
-          </Button>
+          {isPlanner ? (
+            <Button onPress={() => router.push(`/(app)/trips/${tripId}/polls/new`)} className="mt-2">
+              Add first poll
+            </Button>
+          ) : null}
         </View>
       ) : null}
 

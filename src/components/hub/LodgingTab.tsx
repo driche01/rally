@@ -16,6 +16,7 @@ import {
   View,
   Platform,
 } from 'react-native';
+import { PlacesAutocompleteInput } from '@/components/ui';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTrip } from '@/hooks/useTrips';
@@ -533,7 +534,7 @@ function PropertyCard({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function LodgingTab({ tripId }: { tripId: string }) {
+export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPlanner?: boolean }) {
   const insets = useSafeAreaInsets();
 
   const { data: trip } = useTrip(tripId);
@@ -549,7 +550,8 @@ export function LodgingTab({ tripId }: { tripId: string }) {
     trip?.group_size_precise ??
     GROUP_SIZE_MIDPOINTS[trip?.group_size_bucket ?? '5-8'];
 
-  const [destination, setDestination] = useState('');
+  const [destination, setDestination] = useState(trip?.destination ?? '');
+  const [destinationAddress, setDestinationAddress] = useState(trip?.destination_address ?? '');
   const [checkIn, setCheckIn] = useState(trip?.start_date ?? '');
   const [checkOut, setCheckOut] = useState(trip?.end_date ?? '');
   const [guests, setGuests] = useState(guestDefault);
@@ -568,7 +570,7 @@ export function LodgingTab({ tripId }: { tripId: string }) {
 
   const atLimit = options.length >= MAX_PROPERTIES;
 
-  // Sync guest default when trip loads
+  // Sync defaults when trip loads
   useMemo(() => {
     const defaultGuests =
       trip?.group_size_precise ??
@@ -576,10 +578,12 @@ export function LodgingTab({ tripId }: { tripId: string }) {
     setGuests(defaultGuests);
     if (trip?.start_date) setCheckIn(trip.start_date);
     if (trip?.end_date) setCheckOut(trip.end_date);
+    if (trip?.destination) setDestination(trip.destination);
+    if (trip?.destination_address) setDestinationAddress(trip.destination_address);
   }, [trip?.id]);
 
   const searchParams: LodgingSearchParams = {
-    destination: destination || trip?.name || 'your destination',
+    destination: destinationAddress || destination || trip?.name || 'your destination',
     checkIn: checkIn || '2025-01-01',
     checkOut: checkOut || '2025-01-07',
     guests,
@@ -710,12 +714,18 @@ export function LodgingTab({ tripId }: { tripId: string }) {
               {/* Destination */}
               <View>
                 <Text className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-neutral-500">Destination</Text>
-                <TextInput
+                <PlacesAutocompleteInput
                   value={destination}
-                  onChangeText={setDestination}
+                  onChangeText={(text) => {
+                    setDestination(text);
+                    // Clear saved address if user manually edits
+                    setDestinationAddress('');
+                  }}
+                  onSelectPlace={(mainText, fullAddress) => {
+                    setDestination(mainText);
+                    setDestinationAddress(fullAddress);
+                  }}
                   placeholder={trip?.name ?? 'Where are you going?'}
-                  placeholderTextColor="#A3A3A3"
-                  className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-800"
                 />
               </View>
 

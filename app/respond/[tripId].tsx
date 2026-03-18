@@ -40,6 +40,52 @@ import { supabase } from '@/lib/supabase';
 import { getBlocksForTrip, upsertDayRsvp, formatDayLabel, formatTime } from '@/lib/api/itinerary';
 import type { ItineraryBlock, DayRsvpStatus } from '@/types/database';
 
+// ─── Web layout ───────────────────────────────────────────────────────────────
+
+const IS_WEB = Platform.OS === 'web';
+
+/**
+ * On web: renders a full-screen branded background with a centered white card.
+ * On native: transparent passthrough — no change to layout.
+ */
+function WebPageShell({
+  children,
+  cardStyle,
+}: {
+  children: React.ReactNode;
+  cardStyle?: object;
+}) {
+  if (!IS_WEB) return <>{children}</>;
+  return (
+    <View
+      style={{
+        flex: 1,
+        backgroundColor: '#F0EDE8',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16,
+      }}
+    >
+      <View
+        style={[
+          {
+            width: '100%',
+            maxWidth: 480,
+            backgroundColor: 'white',
+            borderRadius: 24,
+            overflow: 'hidden',
+            // @ts-ignore — web-only CSS property
+            boxShadow: '0 4px 40px rgba(0,0,0,0.10)',
+          },
+          cardStyle,
+        ]}
+      >
+        {children}
+      </View>
+    </View>
+  );
+}
+
 // ─── Name storage ─────────────────────────────────────────────────────────────
 
 const NAME_KEY = 'rally_respondent_name';
@@ -678,6 +724,10 @@ export default function RespondScreen() {
   const [step, setStep] = useState<Step>('name');
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState('');
+  const [email, setEmail] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [phone, setPhone] = useState('');
+  const [phoneError, setPhoneError] = useState('');
   const [trip, setTrip] = useState<TripWithPolls | null>(null);
   const [loadError, setLoadError] = useState<'not_found' | 'closed' | 'error' | null>(null);
   const [loading, setLoading] = useState(true);
@@ -714,6 +764,8 @@ export default function RespondScreen() {
           if (respondent) {
             setExistingRespondent(respondent);
             setName(respondent.name); // Pre-fill with their actual stored name
+            if (respondent.email) setEmail(respondent.email);
+            if (respondent.phone) setPhone(respondent.phone);
             const existing = await getExistingResponses(data.id, respondent.id);
             const anyExisting = Object.values(existing).some((arr) => arr.length > 0);
             if (anyExisting) {
@@ -769,12 +821,34 @@ export default function RespondScreen() {
   // ─── Name step → polls step ────────────────────────────────────────────────
   async function handleNameContinue() {
     const trimmed = name.trim();
+    const trimmedEmail = email.trim();
+    const trimmedPhone = phone.trim();
+
+    let hasError = false;
     if (!trimmed) {
-      setNameError('Please enter your first name');
-      return;
+      setNameError('Please enter your name');
+      hasError = true;
+    } else {
+      setNameError('');
     }
+    if (!trimmedEmail) {
+      setEmailError('Email is required');
+      hasError = true;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setEmailError('Please enter a valid email');
+      hasError = true;
+    } else {
+      setEmailError('');
+    }
+    if (!trimmedPhone) {
+      setPhoneError('Phone number is required');
+      hasError = true;
+    } else {
+      setPhoneError('');
+    }
+    if (hasError) return;
+
     await storeName(trimmed);
-    setNameError('');
 
     // If they entered a different name than the existing respondent, clear the
     // trip session so a new respondent gets created on submit. This allows a
@@ -798,6 +872,10 @@ export default function RespondScreen() {
     setResponses({});
     setName('');
     setNameError('');
+    setEmail('');
+    setEmailError('');
+    setPhone('');
+    setPhoneError('');
   }
 
   // ─── Submit all responses ──────────────────────────────────────────────────
@@ -805,7 +883,7 @@ export default function RespondScreen() {
     if (!trip) return;
     setSubmitting(true);
     try {
-      const respondent = await getOrCreateRespondent(trip.id, name.trim());
+      const respondent = await getOrCreateRespondent(trip.id, name.trim(), email.trim() || null, phone.trim() || null);
       setRespondentId(respondent.id);
       const polls = trip.polls ?? [];
       for (const poll of polls) {
@@ -872,51 +950,59 @@ export default function RespondScreen() {
 
   if (loading) {
     return (
-      <View className="flex-1 items-center justify-center bg-neutral-50">
-        <ActivityIndicator size="large" color="#FF6B5B" />
-      </View>
+      <WebPageShell cardStyle={{ padding: 48 }}>
+        <View className={IS_WEB ? 'items-center justify-center' : 'flex-1 items-center justify-center bg-neutral-50'}>
+          <ActivityIndicator size="large" color="#FF6B5B" />
+        </View>
+      </WebPageShell>
     );
   }
 
   if (loadError === 'not_found') {
     return (
-      <View className="flex-1 items-center justify-center bg-neutral-50 px-8">
-        <Text className="text-5xl">🔗</Text>
-        <Text className="mt-4 text-center text-xl font-semibold text-neutral-800">
-          This rally no longer exists.
-        </Text>
-        <Text className="mt-2 text-center text-sm text-neutral-400">
-          The trip planner may have deleted it.
-        </Text>
-      </View>
+      <WebPageShell cardStyle={{ padding: 40 }}>
+        <View className={IS_WEB ? 'items-center' : 'flex-1 items-center justify-center bg-neutral-50 px-8'}>
+          <Text className="text-5xl">🔗</Text>
+          <Text className="mt-4 text-center text-xl font-semibold text-neutral-800">
+            This rally no longer exists.
+          </Text>
+          <Text className="mt-2 text-center text-sm text-neutral-400">
+            The trip planner may have deleted it.
+          </Text>
+        </View>
+      </WebPageShell>
     );
   }
 
   if (loadError === 'closed' || (trip && trip.status !== 'active')) {
     return (
-      <View className="flex-1 items-center justify-center bg-neutral-50 px-8">
-        <Text className="text-5xl">🔒</Text>
-        <Text className="mt-4 text-center text-xl font-semibold text-neutral-800">
-          This rally is no longer accepting responses.
-        </Text>
-        <Text className="mt-2 text-center text-sm text-neutral-400">
-          The planner has closed it.
-        </Text>
-      </View>
+      <WebPageShell cardStyle={{ padding: 40 }}>
+        <View className={IS_WEB ? 'items-center' : 'flex-1 items-center justify-center bg-neutral-50 px-8'}>
+          <Text className="text-5xl">🔒</Text>
+          <Text className="mt-4 text-center text-xl font-semibold text-neutral-800">
+            This rally is no longer accepting responses.
+          </Text>
+          <Text className="mt-2 text-center text-sm text-neutral-400">
+            The planner has closed it.
+          </Text>
+        </View>
+      </WebPageShell>
     );
   }
 
   if (loadError === 'error') {
     return (
-      <View className="flex-1 items-center justify-center bg-neutral-50 px-8">
-        <Text className="text-5xl">⚠️</Text>
-        <Text className="mt-4 text-center text-xl font-semibold text-neutral-800">
-          Something went wrong.
-        </Text>
-        <Text className="mt-2 text-center text-sm text-neutral-400">
-          Check your connection and try again.
-        </Text>
-      </View>
+      <WebPageShell cardStyle={{ padding: 40 }}>
+        <View className={IS_WEB ? 'items-center' : 'flex-1 items-center justify-center bg-neutral-50 px-8'}>
+          <Text className="text-5xl">⚠️</Text>
+          <Text className="mt-4 text-center text-xl font-semibold text-neutral-800">
+            Something went wrong.
+          </Text>
+          <Text className="mt-2 text-center text-sm text-neutral-400">
+            Check your connection and try again.
+          </Text>
+        </View>
+      </WebPageShell>
     );
   }
 
@@ -927,15 +1013,15 @@ export default function RespondScreen() {
 
   // ─── Name step ─────────────────────────────────────────────────────────────
   if (step === 'name') {
-    return (
-      <KeyboardAvoidingView
-        className="flex-1 bg-neutral-50"
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    const nameForm = (
+      <View
+        style={{
+          paddingTop: IS_WEB ? 36 : insets.top + 24,
+          paddingBottom: IS_WEB ? 36 : insets.bottom + 24,
+          paddingHorizontal: IS_WEB ? 36 : 24,
+          ...(IS_WEB ? {} : { flex: 1, justifyContent: 'center' as const }),
+        }}
       >
-        <View
-          className="flex-1 justify-center px-6"
-          style={{ paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }}
-        >
           {/* Rally wordmark */}
           <Text className="mb-1 text-3xl font-bold text-coral-500">rally</Text>
 
@@ -964,7 +1050,7 @@ export default function RespondScreen() {
             ) : null}
 
             <View className="gap-1">
-              <Text className="text-sm font-medium text-neutral-700">What's your first name?</Text>
+              <Text className="text-sm font-medium text-neutral-700">What's your name?</Text>
               <TextInput
                 ref={nameInputRef}
                 value={name}
@@ -977,13 +1063,64 @@ export default function RespondScreen() {
                 autoFocus
                 autoCapitalize="words"
                 autoComplete="given-name"
-                returnKeyType="go"
+                returnKeyType="next"
                 onSubmitEditing={handleNameContinue}
-                className="min-h-[52px] rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-lg text-neutral-800"
+                className={[
+                  'min-h-[52px] rounded-2xl border bg-white px-4 py-3 text-lg text-neutral-800',
+                  nameError ? 'border-red-400' : 'border-neutral-200',
+                ].join(' ')}
                 placeholderTextColor="#A8A8A8"
               />
               {nameError ? (
                 <Text className="text-sm text-red-500">{nameError}</Text>
+              ) : null}
+            </View>
+
+            <View className="gap-1">
+              <Text className="text-sm font-medium text-neutral-700">Email</Text>
+              <TextInput
+                value={email}
+                onChangeText={(t) => {
+                  setEmail(t);
+                  if (emailError) setEmailError('');
+                }}
+                placeholder="you@example.com"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                returnKeyType="next"
+                className={[
+                  'min-h-[52px] rounded-2xl border bg-white px-4 py-3 text-lg text-neutral-800',
+                  emailError ? 'border-red-400' : 'border-neutral-200',
+                ].join(' ')}
+                placeholderTextColor="#A8A8A8"
+              />
+              {emailError ? (
+                <Text className="text-sm text-red-500">{emailError}</Text>
+              ) : null}
+            </View>
+
+            <View className="gap-1">
+              <Text className="text-sm font-medium text-neutral-700">Phone</Text>
+              <TextInput
+                value={phone}
+                onChangeText={(t) => {
+                  setPhone(t);
+                  if (phoneError) setPhoneError('');
+                }}
+                placeholder="+1 555 000 0000"
+                keyboardType="phone-pad"
+                autoComplete="tel"
+                returnKeyType="go"
+                onSubmitEditing={handleNameContinue}
+                className={[
+                  'min-h-[52px] rounded-2xl border bg-white px-4 py-3 text-lg text-neutral-800',
+                  phoneError ? 'border-red-400' : 'border-neutral-200',
+                ].join(' ')}
+                placeholderTextColor="#A8A8A8"
+              />
+              {phoneError ? (
+                <Text className="text-sm text-red-500">{phoneError}</Text>
               ) : null}
             </View>
 
@@ -992,10 +1129,33 @@ export default function RespondScreen() {
             </Button>
 
             <Text className="text-center text-xs text-neutral-400">
-              No account needed. Your name is only used to label your responses.
+              No account needed. Contact info is only shared with your trip planner.
             </Text>
           </View>
         </View>
+    );
+
+    if (IS_WEB) {
+      return (
+        <WebPageShell>
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            // @ts-ignore — web-only
+            style={{ maxHeight: '95vh' }}
+          >
+            {nameForm}
+          </ScrollView>
+        </WebPageShell>
+      );
+    }
+
+    return (
+      <KeyboardAvoidingView
+        className="flex-1 bg-neutral-50"
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        {nameForm}
       </KeyboardAvoidingView>
     );
   }
@@ -1003,13 +1163,15 @@ export default function RespondScreen() {
   // ─── Done step ─────────────────────────────────────────────────────────────
   if (step === 'done') {
     return (
+      <WebPageShell cardStyle={IS_WEB ? { maxHeight: '95vh' } : {}}>
       <ScrollView
-        className="flex-1 bg-neutral-50"
+        style={IS_WEB ? {} : { flex: 1, backgroundColor: '#F9F9F7' }}
         contentContainerStyle={{
-          paddingTop: insets.top + 24,
-          paddingHorizontal: 24,
-          paddingBottom: insets.bottom + 40,
+          paddingTop: IS_WEB ? 36 : insets.top + 24,
+          paddingHorizontal: IS_WEB ? 36 : 24,
+          paddingBottom: IS_WEB ? 36 : insets.bottom + 40,
         }}
+        showsVerticalScrollIndicator={false}
       >
         <Text className="text-3xl font-bold text-coral-500">rally</Text>
 
@@ -1059,6 +1221,7 @@ export default function RespondScreen() {
         {/* Download prompt */}
         <DownloadPrompt tripName={trip.name} tripId={trip.id} />
       </ScrollView>
+      </WebPageShell>
     );
   }
 
@@ -1067,14 +1230,22 @@ export default function RespondScreen() {
   const allAnswered = polls.length > 0 && answeredCount === polls.length;
 
   return (
+    <WebPageShell
+      cardStyle={IS_WEB ? {
+        // @ts-ignore — web-only
+        maxHeight: '95vh',
+        display: 'flex',
+        flexDirection: 'column',
+      } : {}}
+    >
     <KeyboardAvoidingView
-      className="flex-1 bg-neutral-50"
+      style={IS_WEB ? { flex: 1, display: 'flex', flexDirection: 'column' } : { flex: 1, backgroundColor: '#F9F9F7' }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       {/* Header */}
       <View
         className="border-b border-neutral-100 bg-white px-6 pb-4"
-        style={{ paddingTop: insets.top + 16 }}
+        style={{ paddingTop: IS_WEB ? 20 : insets.top + 16 }}
       >
         <Text className="text-sm font-medium text-coral-500">rally · {trip.name}</Text>
         <Text className="mt-0.5 text-lg font-bold text-neutral-800">
@@ -1099,8 +1270,10 @@ export default function RespondScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 24, paddingBottom: insets.bottom + 100 }}
+        style={IS_WEB ? { flex: 1 } : {}}
+        contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 24, paddingBottom: IS_WEB ? 24 : insets.bottom + 100 }}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         {polls.length === 0 ? (
           <View className="items-center py-12">
@@ -1131,7 +1304,7 @@ export default function RespondScreen() {
       {polls.length > 0 ? (
         <View
           className="border-t border-neutral-100 bg-white px-6 pt-3"
-          style={{ paddingBottom: insets.bottom + 12 }}
+          style={{ paddingBottom: IS_WEB ? 16 : insets.bottom + 12 }}
         >
           {!allAnswered ? (
             <Text className="mb-2 text-center text-xs text-neutral-400">
@@ -1150,5 +1323,6 @@ export default function RespondScreen() {
         </View>
       ) : null}
     </KeyboardAvoidingView>
+    </WebPageShell>
   );
 }

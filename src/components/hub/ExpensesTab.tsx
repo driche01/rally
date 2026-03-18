@@ -557,7 +557,7 @@ function AddExpenseSheet({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function ExpensesTab({ tripId }: { tripId: string }) {
+export function ExpensesTab({ tripId, isPlanner = true }: { tripId: string; isPlanner?: boolean }) {
   const insets = useSafeAreaInsets();
   const session = useAuthStore((s) => s.session);
 
@@ -699,7 +699,8 @@ export function ExpensesTab({ tripId }: { tripId: string }) {
         )}
       </ScrollView>
 
-      {/* ── Section C: FAB ── */}
+      {/* ── Section C: FAB — planners only ── */}
+      {isPlanner ? (
       <View
         style={{
           position: 'absolute',
@@ -721,6 +722,7 @@ export function ExpensesTab({ tripId }: { tripId: string }) {
           <Ionicons name="add" size={28} color="white" />
         </Pressable>
       </View>
+      ) : null}
 
       {/* Add Expense Sheet */}
       <AddExpenseSheet

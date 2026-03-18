@@ -37,6 +37,7 @@ import { getShareUrl } from '@/lib/api/trips';
 import { useAuthStore } from '@/stores/authStore';
 import type { BlockType, ItineraryBlock, ItineraryDay } from '@/types/database';
 import type { CreateBlockInput } from '@/lib/api/itinerary';
+import { DateRangePicker } from '@/components/DateRangePicker';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -178,10 +179,12 @@ function DaySection({
   day,
   onAddBlock,
   onEditBlock,
+  isPlanner = true,
 }: {
   day: ItineraryDay;
   onAddBlock: (dayDate: string) => void;
   onEditBlock: (block: ItineraryBlock) => void;
+  isPlanner?: boolean;
 }) {
   const { going, not_sure } = day.rsvpCounts;
   const hasRsvps = going > 0 || not_sure > 0;
@@ -206,24 +209,30 @@ function DaySection({
 
       {/* Blocks */}
       {day.blocks.length === 0 ? (
-        <Pressable
-          onPress={() => onAddBlock(day.date)}
-          className="mb-2 items-center justify-center rounded-2xl border-2 border-dashed border-neutral-200 py-4"
-        >
-          <Ionicons name="add" size={20} color="#D4D4D4" />
-        </Pressable>
+        isPlanner ? (
+          <Pressable
+            onPress={() => onAddBlock(day.date)}
+            className="mb-2 items-center justify-center rounded-2xl border-2 border-dashed border-neutral-200 py-4"
+          >
+            <Ionicons name="add" size={20} color="#D4D4D4" />
+          </Pressable>
+        ) : (
+          <View className="mb-2 items-center justify-center rounded-2xl border-2 border-dashed border-neutral-200 py-4">
+            <Text className="text-xs text-neutral-300">Nothing planned yet</Text>
+          </View>
+        )
       ) : (
         day.blocks.map((block) => (
           <BlockCard
             key={block.id}
             block={block}
-            onLongPress={() => onEditBlock(block)}
+            onLongPress={isPlanner ? () => onEditBlock(block) : undefined}
           />
         ))
       )}
 
-      {/* Add block button */}
-      {day.blocks.length > 0 ? (
+      {/* Add block button — planners only */}
+      {day.blocks.length > 0 && isPlanner ? (
         <Pressable
           onPress={() => onAddBlock(day.date)}
           className="flex-row items-center gap-1 self-start rounded-xl px-2 py-1.5 active:bg-neutral-100"
@@ -433,128 +442,10 @@ function BlockEditorModal({
   );
 }
 
-// ─── Date Range Picker Sheet ──────────────────────────────────────────────────
-
-function DateRangeSheet({
-  visible,
-  initialStart,
-  initialEnd,
-  onClose,
-  onSave,
-  saving,
-}: {
-  visible: boolean;
-  initialStart: string;
-  initialEnd: string;
-  onClose: () => void;
-  onSave: (start: string, end: string) => void;
-  saving: boolean;
-}) {
-  const [start, setStart] = useState(initialStart);
-  const [end, setEnd] = useState(initialEnd);
-
-  useMemo(() => {
-    setStart(initialStart);
-    setEnd(initialEnd);
-  }, [visible, initialStart, initialEnd]);
-
-  const startValid = isValidDate(start);
-  const endValid = isValidDate(end);
-  const rangeValid = startValid && endValid && new Date(start) <= new Date(end);
-  const canSave = startValid && endValid && rangeValid;
-
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-      statusBarTranslucent
-    >
-      <Pressable
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}
-        onPress={onClose}
-      >
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <Pressable
-            onPress={() => {}}
-            style={{ backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, gap: 16 }}
-          >
-            <View style={{ alignItems: 'center', marginBottom: 4 }}>
-              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#E5E5E5' }} />
-            </View>
-
-            <Text style={{ fontSize: 17, fontWeight: '700', color: '#1C1C1C' }}>Set trip dates</Text>
-            <Text style={{ fontSize: 13, color: '#737373', marginTop: -8 }}>
-              Enter dates in YYYY-MM-DD format, e.g. 2025-03-15
-            </Text>
-
-            <View>
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Start date</Text>
-              <TextInput
-                value={start}
-                onChangeText={setStart}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor="#A3A3A3"
-                style={{ borderWidth: 1.5, borderColor: (!start || startValid) ? '#E5E5E5' : '#EF4444', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1C1C1C' }}
-                autoCorrect={false}
-                autoCapitalize="none"
-                maxLength={10}
-              />
-              {start && !startValid ? (
-                <Text style={{ fontSize: 12, color: '#EF4444', marginTop: 4 }}>Enter a valid date (YYYY-MM-DD)</Text>
-              ) : null}
-            </View>
-
-            <View>
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>End date</Text>
-              <TextInput
-                value={end}
-                onChangeText={setEnd}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor="#A3A3A3"
-                style={{ borderWidth: 1.5, borderColor: (!end || endValid) ? '#E5E5E5' : '#EF4444', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1C1C1C' }}
-                autoCorrect={false}
-                autoCapitalize="none"
-                maxLength={10}
-              />
-              {end && !endValid ? (
-                <Text style={{ fontSize: 12, color: '#EF4444', marginTop: 4 }}>Enter a valid date (YYYY-MM-DD)</Text>
-              ) : null}
-              {startValid && endValid && !rangeValid ? (
-                <Text style={{ fontSize: 12, color: '#EF4444', marginTop: 4 }}>End date must be on or after start date</Text>
-              ) : null}
-            </View>
-
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <Pressable
-                onPress={onClose}
-                style={{ flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#E5E5E5', alignItems: 'center' }}
-              >
-                <Text style={{ fontSize: 15, fontWeight: '600', color: '#525252' }}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => canSave && onSave(start, end)}
-                disabled={!canSave || saving}
-                style={{ flex: 2, paddingVertical: 14, borderRadius: 14, backgroundColor: canSave ? '#FF6B5B' : '#FCA99F', alignItems: 'center', justifyContent: 'center' }}
-              >
-                {saving ? (
-                  <ActivityIndicator size="small" color="white" />
-                ) : (
-                  <Text style={{ fontSize: 15, fontWeight: '600', color: 'white' }}>Save dates</Text>
-                )}
-              </Pressable>
-            </View>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Pressable>
-    </Modal>
-  );
-}
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function ItineraryTab({ tripId }: { tripId: string }) {
+export function ItineraryTab({ tripId, isPlanner = true }: { tripId: string; isPlanner?: boolean }) {
   const insets = useSafeAreaInsets();
   const session = useAuthStore((s) => s.session);
 
@@ -660,7 +551,7 @@ export function ItineraryTab({ tripId }: { tripId: string }) {
 
   function handleSaveDates(start: string, end: string) {
     updateTrip.mutate(
-      { id: tripId, start_date: start, end_date: end } as Parameters<typeof updateTrip.mutate>[0],
+      { id: tripId, start_date: start, end_date: end },
       {
         onSuccess: () => setDateSheetVisible(false),
         onError: () => Alert.alert('Error', 'Could not save dates. Please try again.'),
@@ -738,6 +629,7 @@ export function ItineraryTab({ tripId }: { tripId: string }) {
               day={day}
               onAddBlock={openAddBlock}
               onEditBlock={openEditBlock}
+              isPlanner={isPlanner}
             />
           ))}
 
@@ -762,14 +654,18 @@ export function ItineraryTab({ tripId }: { tripId: string }) {
         deleting={deletingBlockId != null}
       />
 
-      {/* Date Range Sheet */}
-      <DateRangeSheet
+      {/* Date picker for setting trip start/end dates */}
+      <DateRangePicker
         visible={dateSheetVisible}
-        initialStart={trip?.start_date ?? ''}
-        initialEnd={trip?.end_date ?? ''}
+        startDate={trip?.start_date ?? null}
+        endDate={trip?.end_date ?? null}
+        title="Trip dates"
+        confirmLabel="Save dates"
+        allowPastDates
+        onConfirm={(start, end) => {
+          if (start) handleSaveDates(start, end ?? start);
+        }}
         onClose={() => setDateSheetVisible(false)}
-        onSave={handleSaveDates}
-        saving={updateTrip.isPending}
       />
     </View>
   );
