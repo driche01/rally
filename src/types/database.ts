@@ -8,7 +8,9 @@ export type PollStatus = 'draft' | 'live' | 'closed' | 'decided';
 export interface Profile {
   id: string;
   name: string;
+  last_name: string | null;
   email: string;
+  phone: string | null;
   created_at: string;
 }
 
@@ -50,6 +52,8 @@ export interface Respondent {
   id: string;
   trip_id: string;
   name: string;
+  email: string | null;
+  phone: string | null;
   session_token: string;
   created_at: string;
 }

@@ -464,6 +464,8 @@ export default function RespondScreen() {
   const [step, setStep] = useState<Step>('name');
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [trip, setTrip] = useState<TripWithPolls | null>(null);
   const [loadError, setLoadError] = useState<'not_found' | 'closed' | 'error' | null>(null);
   const [loading, setLoading] = useState(true);
@@ -496,6 +498,8 @@ export default function RespondScreen() {
           if (respondent) {
             setExistingRespondent(respondent);
             setName(respondent.name); // Pre-fill with their actual stored name
+            if (respondent.email) setEmail(respondent.email);
+            if (respondent.phone) setPhone(respondent.phone);
             const existing = await getExistingResponses(data.id, respondent.id);
             const anyExisting = Object.values(existing).some((arr) => arr.length > 0);
             if (anyExisting) {
@@ -580,6 +584,8 @@ export default function RespondScreen() {
     setResponses({});
     setName('');
     setNameError('');
+    setEmail('');
+    setPhone('');
   }
 
   // ─── Submit all responses ──────────────────────────────────────────────────
@@ -587,7 +593,7 @@ export default function RespondScreen() {
     if (!trip) return;
     setSubmitting(true);
     try {
-      const respondent = await getOrCreateRespondent(trip.id, name.trim());
+      const respondent = await getOrCreateRespondent(trip.id, name.trim(), email.trim() || null, phone.trim() || null);
       const polls = trip.polls ?? [];
       for (const poll of polls) {
         const optionIds = responses[poll.id] ?? [];
@@ -709,28 +715,53 @@ export default function RespondScreen() {
               </View>
             ) : null}
 
-            <View className="gap-1">
-              <Text className="text-sm font-medium text-neutral-700">What's your first name?</Text>
+            <View className="gap-3">
+              <View className="gap-1">
+                <Text className="text-sm font-medium text-neutral-700">What's your first name?</Text>
+                <TextInput
+                  ref={nameInputRef}
+                  value={name}
+                  onChangeText={(t) => {
+                    setName(t.slice(0, 30));
+                    if (nameError) setNameError('');
+                  }}
+                  placeholder="First name"
+                  maxLength={30}
+                  autoFocus
+                  autoCapitalize="words"
+                  autoComplete="given-name"
+                  returnKeyType="next"
+                  className="min-h-[52px] rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-lg text-neutral-800"
+                  placeholderTextColor="#A8A8A8"
+                />
+                {nameError ? (
+                  <Text className="text-sm text-red-500">{nameError}</Text>
+                ) : null}
+              </View>
+
               <TextInput
-                ref={nameInputRef}
-                value={name}
-                onChangeText={(t) => {
-                  setName(t.slice(0, 30));
-                  if (nameError) setNameError('');
-                }}
-                placeholder="First name"
-                maxLength={30}
-                autoFocus
-                autoCapitalize="words"
-                autoComplete="given-name"
-                returnKeyType="go"
-                onSubmitEditing={handleNameContinue}
-                className="min-h-[52px] rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-lg text-neutral-800"
+                value={email}
+                onChangeText={setEmail}
+                placeholder="Email (optional)"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                returnKeyType="next"
+                className="min-h-[52px] rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-base text-neutral-800"
                 placeholderTextColor="#A8A8A8"
               />
-              {nameError ? (
-                <Text className="text-sm text-red-500">{nameError}</Text>
-              ) : null}
+
+              <TextInput
+                value={phone}
+                onChangeText={setPhone}
+                placeholder="Phone number (optional)"
+                keyboardType="phone-pad"
+                autoComplete="tel"
+                returnKeyType="go"
+                onSubmitEditing={handleNameContinue}
+                className="min-h-[52px] rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-base text-neutral-800"
+                placeholderTextColor="#A8A8A8"
+              />
             </View>
 
             <Button onPress={handleNameContinue} fullWidth size="lg">
@@ -738,7 +769,7 @@ export default function RespondScreen() {
             </Button>
 
             <Text className="text-center text-xs text-neutral-400">
-              No account needed. Your name is only used to label your responses.
+              No account needed. Contact info is only shared with your trip planner.
             </Text>
           </View>
         </View>

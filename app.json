@@ -14,14 +14,17 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.rally.app"
+      "bundleIdentifier": "io.rallyapp.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#FF6B5B",
         "foregroundImage": "./assets/android-icon-foreground.png"
       },
-      "package": "com.rally.app"
+      "package": "io.rallyapp.app"
     },
     "web": {
       "bundler": "metro",

@@ -4,19 +4,31 @@ import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'r
 import { Button, Input } from '@/components/ui';
 import { useSignUp } from '@/hooks/useAuth';
 
+type FormErrors = {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  password?: string;
+};
+
 export default function SignupScreen() {
   const router = useRouter();
   const signUp = useSignUp();
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string }>({});
+  const [errors, setErrors] = useState<FormErrors>({});
 
   function validate(): boolean {
-    const errs: typeof errors = {};
-    if (!name.trim()) errs.name = 'Name is required';
+    const errs: FormErrors = {};
+    if (!firstName.trim()) errs.firstName = 'First name is required';
+    if (!lastName.trim()) errs.lastName = 'Last name is required';
     if (!email.trim()) errs.email = 'Email is required';
+    if (!phone.trim()) errs.phone = 'Phone number is required';
     if (!password || password.length < 8) errs.password = 'Password must be at least 8 characters';
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -26,16 +38,14 @@ export default function SignupScreen() {
     if (!validate()) return;
     setLoading(true);
     try {
-      await signUp(name.trim(), email.trim().toLowerCase(), password);
+      await signUp(firstName.trim(), lastName.trim(), email.trim().toLowerCase(), phone.trim(), password);
       router.replace('/(app)');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Signup failed.';
       const isDuplicate = message.toLowerCase().includes('already');
       Alert.alert(
         'Signup failed',
-        isDuplicate
-          ? 'An account with this email already exists.'
-          : message
+        isDuplicate ? 'An account with this email already exists.' : message
       );
     } finally {
       setLoading(false);
@@ -59,15 +69,31 @@ export default function SignupScreen() {
         </View>
 
         <View className="gap-4">
-          <Input
-            label="Your name"
-            placeholder="First name"
-            value={name}
-            onChangeText={setName}
-            autoComplete="given-name"
-            autoCapitalize="words"
-            error={errors.name}
-          />
+          <View className="flex-row gap-3">
+            <View className="flex-1">
+              <Input
+                label="First name"
+                placeholder="Jane"
+                value={firstName}
+                onChangeText={setFirstName}
+                autoComplete="given-name"
+                autoCapitalize="words"
+                error={errors.firstName}
+              />
+            </View>
+            <View className="flex-1">
+              <Input
+                label="Last name"
+                placeholder="Smith"
+                value={lastName}
+                onChangeText={setLastName}
+                autoComplete="family-name"
+                autoCapitalize="words"
+                error={errors.lastName}
+              />
+            </View>
+          </View>
+
           <Input
             label="Email"
             placeholder="you@example.com"
@@ -78,6 +104,17 @@ export default function SignupScreen() {
             autoComplete="email"
             error={errors.email}
           />
+
+          <Input
+            label="Phone number"
+            placeholder="+1 (555) 000-0000"
+            value={phone}
+            onChangeText={setPhone}
+            keyboardType="phone-pad"
+            autoComplete="tel"
+            error={errors.phone}
+          />
+
           <Input
             label="Password"
             placeholder="Min. 8 characters"

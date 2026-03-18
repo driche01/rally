@@ -35,11 +35,11 @@ export function useAuthListener() {
 }
 
 export function useSignUp() {
-  return async (name: string, email: string, password: string) => {
+  return async (firstName: string, lastName: string, email: string, phone: string, password: string) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { name } },
+      options: { data: { name: firstName } },
     });
     if (error) throw error;
 
@@ -47,7 +47,7 @@ export function useSignUp() {
     if (data.user) {
       const { error: profileError } = await supabase
         .from('profiles')
-        .upsert({ id: data.user.id, name, email });
+        .upsert({ id: data.user.id, name: firstName, last_name: lastName, email, phone });
       if (profileError) throw profileError;
     }
 

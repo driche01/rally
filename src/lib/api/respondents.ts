@@ -92,7 +92,9 @@ export async function getExistingRespondentForTrip(tripId: string): Promise<Resp
  */
 export async function getOrCreateRespondent(
   tripId: string,
-  name: string
+  name: string,
+  email?: string | null,
+  phone?: string | null,
 ): Promise<Respondent> {
   // 1. Check per-trip token first
   const tripToken = await getTripSessionToken(tripId);
@@ -105,10 +107,14 @@ export async function getOrCreateRespondent(
       .single();
 
     if (existing) {
-      if (existing.name !== name) {
-        await supabase.from('respondents').update({ name }).eq('id', existing.id);
+      const updates: Record<string, unknown> = {};
+      if (existing.name !== name) updates.name = name;
+      if (email != null && existing.email !== email) updates.email = email.trim() || null;
+      if (phone != null && existing.phone !== phone) updates.phone = phone.trim() || null;
+      if (Object.keys(updates).length > 0) {
+        await supabase.from('respondents').update(updates).eq('id', existing.id);
       }
-      return { ...existing, name };
+      return { ...existing, name, ...(email != null ? { email: email.trim() || null } : {}), ...(phone != null ? { phone: phone.trim() || null } : {}) };
     }
     // Trip token present but no matching row — fall through to create
   }
@@ -126,10 +132,14 @@ export async function getOrCreateRespondent(
     if (existing) {
       // Migrate to per-trip storage so future visits use it
       await setTripSessionToken(tripId, globalToken);
-      if (existing.name !== name) {
-        await supabase.from('respondents').update({ name }).eq('id', existing.id);
+      const updates: Record<string, unknown> = {};
+      if (existing.name !== name) updates.name = name;
+      if (email != null && existing.email !== email) updates.email = email.trim() || null;
+      if (phone != null && existing.phone !== phone) updates.phone = phone.trim() || null;
+      if (Object.keys(updates).length > 0) {
+        await supabase.from('respondents').update(updates).eq('id', existing.id);
       }
-      return { ...existing, name };
+      return { ...existing, name, ...(email != null ? { email: email.trim() || null } : {}), ...(phone != null ? { phone: phone.trim() || null } : {}) };
     }
   }
 
@@ -139,7 +149,13 @@ export async function getOrCreateRespondent(
 
   const { data, error } = await supabase
     .from('respondents')
-    .insert({ trip_id: tripId, name, session_token: newToken })
+    .insert({
+      trip_id: tripId,
+      name,
+      session_token: newToken,
+      ...(email ? { email: email.trim() || null } : {}),
+      ...(phone ? { phone: phone.trim() || null } : {}),
+    })
     .select()
     .single();
   if (error) throw error;
