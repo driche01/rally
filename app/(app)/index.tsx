@@ -19,6 +19,29 @@ const SEASON_ICON: Record<string, React.ComponentProps<typeof Ionicons>['name']>
   Fall: 'leaf-outline',
 };
 
+function MemberBar({ memberCount, total }: { memberCount: number; total: number }) {
+  const percent = Math.min(100, Math.round((memberCount / total) * 100));
+  return (
+    <View>
+      <View className="mb-1 flex-row items-center justify-between">
+        <View className="flex-row items-center gap-1">
+          <Ionicons name="people-outline" size={12} color="#3B82F6" />
+          <Text className="text-xs text-blue-500">
+            {memberCount} of {total} joined
+          </Text>
+        </View>
+        <Text className="text-xs text-blue-400">{percent}%</Text>
+      </View>
+      <View className="h-1.5 overflow-hidden rounded-full bg-blue-100">
+        <View
+          className="h-full rounded-full bg-blue-400"
+          style={{ width: `${percent}%` }}
+        />
+      </View>
+    </View>
+  );
+}
+
 function TripCard({
   trip,
   onDelete,
@@ -114,13 +137,14 @@ function TripCard({
             </Pressable>
           </View>
 
-          <View className="mt-3">
+          <View className="mt-3 gap-2">
             <ProgressBar
               value={percent}
               max={100}
               label={`${count} of ${total} responded`}
               showPercent
             />
+            <MemberBar memberCount={trip.memberCount} total={total} />
           </View>
         </TouchableOpacity>
       </Swipeable>

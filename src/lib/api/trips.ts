@@ -1,8 +1,10 @@
 import { supabase } from '../supabase';
 import type { GroupSizeBucket, Trip, TripWithPolls } from '../../types/database';
+import { addPlannerMember } from './members';
 
 export interface TripWithRespondentCount extends Trip {
   respondentCount: number;
+  memberCount: number;
 }
 
 export interface CreateTripInput {
@@ -23,6 +25,10 @@ export async function createTrip(input: CreateTripInput): Promise<Trip> {
     .select()
     .single();
   if (error) throw error;
+
+  // Auto-enroll the creator as the planner member
+  await addPlannerMember(data.id, user.id);
+
   return data;
 }
 
@@ -37,23 +43,26 @@ export async function getTrips(): Promise<Trip[]> {
 }
 
 export async function getTripsWithRespondentCounts(): Promise<TripWithRespondentCount[]> {
-  // Supabase PostgREST returns respondents as { count: number } when the only
-  // selected column is the aggregate alias.
+  // Supabase PostgREST returns embedded relations as { count: number } when only
+  // the aggregate alias is selected.
   const { data, error } = await supabase
     .from('trips')
-    .select('*, respondents(count)')
+    .select('*, respondents(count), trip_members(count)')
     .eq('status', 'active')
     .order('created_at', { ascending: false });
   if (error) throw error;
 
-  type TripRow = Trip & { respondents: { count: number } | { count: number }[] | null };
+  type CountShape = { count: number } | { count: number }[] | null;
+  function extractCount(raw: CountShape): number {
+    return Array.isArray(raw) ? (raw[0]?.count ?? 0) : (raw?.count ?? 0);
+  }
+
+  type TripRow = Trip & { respondents: CountShape; trip_members: CountShape };
   return (data ?? []).map((row: TripRow) => {
-    const raw = row.respondents;
-    const respondentCount = Array.isArray(raw)
-      ? (raw[0]?.count ?? 0)
-      : (raw?.count ?? 0);
-    const { respondents: _dropped, ...tripData } = row;
-    return { ...tripData, respondentCount } satisfies TripWithRespondentCount;
+    const respondentCount = extractCount(row.respondents);
+    const memberCount = extractCount(row.trip_members);
+    const { respondents: _r, trip_members: _m, ...tripData } = row;
+    return { ...tripData, respondentCount, memberCount } satisfies TripWithRespondentCount;
   });
 }
 
