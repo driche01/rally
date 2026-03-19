@@ -25,6 +25,7 @@ import { usePolls, useUpdatePollStatus, useDecidePoll, useUndecidePoll, useDelet
 import { useRespondents, respondentKeys } from '@/hooks/useRespondents';
 import { useResponseCounts, responseCountKeys } from '@/hooks/useResponseCounts';
 import { useTrip, useUpdateTrip } from '@/hooks/useTrips';
+import { usePermissions } from '@/hooks/usePermissions';
 import { supabase } from '@/lib/supabase';
 import { getShareUrl } from '@/lib/api/trips';
 import { capture, Events } from '@/lib/analytics';
@@ -94,6 +95,7 @@ const PollCard = memo(function PollCard({
   groupSizeBucket,
   groupSizePrecise,
   router,
+  canManagePolls,
 }: {
   poll: PollWithOptions;
   tripId: string;
@@ -101,6 +103,7 @@ const PollCard = memo(function PollCard({
   groupSizeBucket?: GroupSizeBucket;
   groupSizePrecise?: number | null;
   router: ReturnType<typeof useRouter>;
+  canManagePolls: boolean;
 }) {
   const updateStatus = useUpdatePollStatus(tripId);
   const decide = useDecidePoll(tripId);
@@ -219,56 +222,58 @@ const PollCard = memo(function PollCard({
             {statusLabel}
           </Badge>
         </View>
-        <View className="flex-row items-center gap-2">
-          {isEditable && (
-            <Pressable
-              onPress={() => router.push(`/(app)/trips/${tripId}/polls/${poll.id}/edit`)}
-              className="rounded-xl border border-neutral-200 bg-white px-3 py-1.5"
-              accessibilityRole="button"
-            >
-              <Text className="text-xs font-medium text-neutral-600">Edit</Text>
+        {canManagePolls ? (
+          <View className="flex-row items-center gap-2">
+            {isEditable && (
+              <Pressable
+                onPress={() => router.push(`/(app)/trips/${tripId}/polls/${poll.id}/edit`)}
+                className="rounded-xl border border-neutral-200 bg-white px-3 py-1.5"
+                accessibilityRole="button"
+              >
+                <Text className="text-xs font-medium text-neutral-600">Edit</Text>
+              </Pressable>
+            )}
+            {poll.status === 'draft' && (
+              <Pressable
+                onPress={handleGoLive}
+                className="rounded-xl bg-coral-500 px-3 py-1.5"
+                accessibilityRole="button"
+              >
+                <Text className="text-xs font-semibold text-white">Go live</Text>
+              </Pressable>
+            )}
+            {poll.status === 'live' && (
+              <Pressable
+                onPress={handleClose}
+                className="rounded-xl border border-neutral-200 bg-white px-3 py-1.5"
+                accessibilityRole="button"
+              >
+                <Text className="text-xs font-medium text-neutral-600">Close</Text>
+              </Pressable>
+            )}
+            {poll.status === 'decided' && (
+              <Pressable
+                onPress={() => undecide.mutate(poll.id, { onError: mutationError('undo decision') })}
+                className="rounded-xl border border-neutral-200 bg-white px-3 py-1.5"
+                accessibilityRole="button"
+              >
+                <Text className="text-xs font-medium text-neutral-600">Undo</Text>
+              </Pressable>
+            )}
+            {showCopy && (
+              <Pressable
+                onPress={handleCopy}
+                className="rounded-xl border border-neutral-200 bg-white px-3 py-1.5"
+                accessibilityRole="button"
+              >
+                <Text className="text-xs font-medium text-neutral-600">Clone</Text>
+              </Pressable>
+            )}
+            <Pressable onPress={handleDelete} className="p-1" accessibilityRole="button">
+              <Ionicons name="trash-outline" size={16} color="#A8A8A8" />
             </Pressable>
-          )}
-          {poll.status === 'draft' && (
-            <Pressable
-              onPress={handleGoLive}
-              className="rounded-xl bg-coral-500 px-3 py-1.5"
-              accessibilityRole="button"
-            >
-              <Text className="text-xs font-semibold text-white">Go live</Text>
-            </Pressable>
-          )}
-          {poll.status === 'live' && (
-            <Pressable
-              onPress={handleClose}
-              className="rounded-xl border border-neutral-200 bg-white px-3 py-1.5"
-              accessibilityRole="button"
-            >
-              <Text className="text-xs font-medium text-neutral-600">Close</Text>
-            </Pressable>
-          )}
-          {poll.status === 'decided' && (
-            <Pressable
-              onPress={() => undecide.mutate(poll.id, { onError: mutationError('undo decision') })}
-              className="rounded-xl border border-neutral-200 bg-white px-3 py-1.5"
-              accessibilityRole="button"
-            >
-              <Text className="text-xs font-medium text-neutral-600">Undo</Text>
-            </Pressable>
-          )}
-          {showCopy && (
-            <Pressable
-              onPress={handleCopy}
-              className="rounded-xl border border-neutral-200 bg-white px-3 py-1.5"
-              accessibilityRole="button"
-            >
-              <Text className="text-xs font-medium text-neutral-600">Clone</Text>
-            </Pressable>
-          )}
-          <Pressable onPress={handleDelete} className="p-1" accessibilityRole="button">
-            <Ionicons name="trash-outline" size={16} color="#A8A8A8" />
-          </Pressable>
-        </View>
+          </View>
+        ) : null}
       </View>
 
       {poll.status === 'decided' && decidedLabel ? (
@@ -281,9 +286,11 @@ const PollCard = memo(function PollCard({
         <View className="mt-4 gap-3">
           {poll.poll_options.map((opt) => {
             const canDecide =
-              poll.status === 'live' ||
-              poll.status === 'closed' ||
-              poll.status === 'decided';
+              canManagePolls && (
+                poll.status === 'live' ||
+                poll.status === 'closed' ||
+                poll.status === 'decided'
+              );
             return (
               <Pressable
                 key={opt.id}
@@ -318,9 +325,9 @@ const PollCard = memo(function PollCard({
                         </View>
                         <Text className="mt-1 text-xs text-neutral-400">
                           {participation.count} of {participation.total} responded
-                          {poll.status === 'live' || poll.status === 'closed'
+                          {canManagePolls && (poll.status === 'live' || poll.status === 'closed')
                             ? '  ·  Tap an option to decide.'
-                            : poll.status === 'decided'
+                            : canManagePolls && poll.status === 'decided'
                               ? '  ·  Tap an option to change.'
                               : ''}
                         </Text>
@@ -330,9 +337,9 @@ const PollCard = memo(function PollCard({
                         {totalVotes === 0
                           ? 'No responses yet.'
                           : `${totalVotes} response${totalVotes !== 1 ? 's' : ''}`}
-                        {poll.status === 'live' || poll.status === 'closed'
+                        {canManagePolls && (poll.status === 'live' || poll.status === 'closed')
                           ? '  ·  Tap an option to decide.'
-                          : poll.status === 'decided'
+                          : canManagePolls && poll.status === 'decided'
                             ? '  ·  Tap an option to change.'
                             : ''}
                       </Text>
@@ -370,6 +377,7 @@ export default function PollsScreen() {
   const [decidedCardYs, setDecidedCardYs] = useState<Record<string, number>>({});
 
   const { data: trip } = useTrip(id);
+  const { canManagePolls } = usePermissions(id);
   const { data: polls = [], refetch: refetchPolls } = usePolls(id);
   const updateTrip = useUpdateTrip();
   const undecidePollMutation = useUndecidePoll(id);
@@ -490,7 +498,7 @@ export default function PollsScreen() {
           <TouchableOpacity onPress={() => router.back()} accessibilityRole="button">
             <Text className="text-base text-coral-500">← Back</Text>
           </TouchableOpacity>
-          {sortedPolls.length > 0 ? (
+          {canManagePolls && sortedPolls.length > 0 ? (
             <Pressable
               onPress={() => router.push(`/(app)/trips/${id}/polls/new`)}
               className="flex-row items-center gap-1 rounded-xl bg-coral-500 px-4 py-2"
@@ -503,7 +511,7 @@ export default function PollsScreen() {
         </View>
 
         {/* Trip name */}
-        {editingName ? (
+        {canManagePolls && editingName ? (
           <TextInput
             ref={nameInputRef}
             value={nameValue}
@@ -525,11 +533,11 @@ export default function PollsScreen() {
           />
         ) : (
           <Pressable
-            onPress={() => {
+            onPress={canManagePolls ? () => {
               setNameValue(trip?.name ?? '');
               setEditingName(true);
               setTimeout(() => nameInputRef.current?.focus(), 50);
-            }}
+            } : undefined}
             hitSlop={4}
           >
             <Text className="mt-2 text-2xl font-bold text-neutral-800">{trip?.name ?? ''}</Text>
@@ -541,7 +549,7 @@ export default function PollsScreen() {
             ? trip.travel_window.split(', ').map((season) => (
                 <Pressable
                   key={season}
-                  onPress={() => setTravelWindowModalVisible(true)}
+                  onPress={canManagePolls ? () => setTravelWindowModalVisible(true) : undefined}
                   className="flex-row items-center gap-1 rounded-full border border-neutral-200 bg-white px-2.5 py-1"
                   hitSlop={6}
                 >
@@ -552,7 +560,7 @@ export default function PollsScreen() {
             : null}
           {trip ? (
             <Pressable
-              onPress={() => setPreciseModalVisible(true)}
+              onPress={canManagePolls ? () => setPreciseModalVisible(true) : undefined}
               className="flex-row items-center gap-1 rounded-full border border-neutral-200 bg-white px-2.5 py-1"
               accessibilityRole="button"
               hitSlop={6}
@@ -588,13 +596,15 @@ export default function PollsScreen() {
                       {label}
                     </Text>
                   </Pressable>
-                  <Pressable
-                    onPress={() => undecidePollMutation.mutate(poll.id)}
-                    hitSlop={6}
-                    accessibilityRole="button"
-                  >
-                    <Ionicons name="refresh-outline" size={12} color="#FF6B5B" style={{ transform: [{ scaleX: -1 }] }} />
-                  </Pressable>
+                  {canManagePolls ? (
+                    <Pressable
+                      onPress={() => undecidePollMutation.mutate(poll.id)}
+                      hitSlop={6}
+                      accessibilityRole="button"
+                    >
+                      <Ionicons name="refresh-outline" size={12} color="#FF6B5B" style={{ transform: [{ scaleX: -1 }] }} />
+                    </Pressable>
+                  ) : null}
                 </View>
               );
             })}
@@ -636,7 +646,7 @@ export default function PollsScreen() {
           </Pressable>
         </View>
 
-        {polls.length > 0 && !hasLivePolls ? (
+        {canManagePolls && polls.length > 0 && !hasLivePolls ? (
           <View className="mt-3 rounded-xl bg-amber-50 px-4 py-2 flex-row items-center">
             <Text className="text-sm text-amber-700" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
               No polls are live yet — tap "Go live" before sharing the link.
@@ -657,14 +667,18 @@ export default function PollsScreen() {
       >
         {polls.length === 0 ? (
           <View className="mt-12 items-center gap-4">
-            <Button onPress={() => router.push(`/(app)/trips/${id}/polls/new`)} className="self-center">
-              Add first poll
-            </Button>
+            {canManagePolls ? (
+              <Button onPress={() => router.push(`/(app)/trips/${id}/polls/new`)} className="self-center">
+                Add first poll
+              </Button>
+            ) : null}
             <Text className="text-lg font-semibold text-neutral-800">
-              Create a poll to rally your squad
+              {canManagePolls ? 'Create a poll to rally your squad' : 'No polls yet'}
             </Text>
             <Text className="text-center text-sm text-neutral-400">
-              Build polls for destination, dates, and budget — then share the link.
+              {canManagePolls
+                ? 'Build polls for destination, dates, and budget — then share the link.'
+                : 'The trip planner hasn\'t created any polls yet.'}
             </Text>
           </View>
         ) : null}
@@ -696,7 +710,7 @@ export default function PollsScreen() {
               <Ionicons name={liveCollapsed ? 'chevron-up' : 'chevron-down'} size={13} color="#A8A8A8" />
             </Pressable>
             {!liveCollapsed && livePolls.map((poll) => (
-              <PollCard key={poll.id} poll={poll} tripId={id} counts={responseCounts[poll.id] ?? {}} groupSizeBucket={trip?.group_size_bucket} groupSizePrecise={trip?.group_size_precise} router={router} />
+              <PollCard key={poll.id} poll={poll} tripId={id} counts={responseCounts[poll.id] ?? {}} groupSizeBucket={trip?.group_size_bucket} groupSizePrecise={trip?.group_size_precise} router={router} canManagePolls={canManagePolls} />
             ))}
           </View>
         ) : null}
@@ -712,7 +726,7 @@ export default function PollsScreen() {
               <Ionicons name={draftCollapsed ? 'chevron-up' : 'chevron-down'} size={13} color="#A8A8A8" />
             </Pressable>
             {!draftCollapsed && draftPolls.map((poll) => (
-              <PollCard key={poll.id} poll={poll} tripId={id} counts={responseCounts[poll.id] ?? {}} groupSizeBucket={trip?.group_size_bucket} groupSizePrecise={trip?.group_size_precise} router={router} />
+              <PollCard key={poll.id} poll={poll} tripId={id} counts={responseCounts[poll.id] ?? {}} groupSizeBucket={trip?.group_size_bucket} groupSizePrecise={trip?.group_size_precise} router={router} canManagePolls={canManagePolls} />
             ))}
           </View>
         ) : null}
@@ -728,7 +742,7 @@ export default function PollsScreen() {
               <Ionicons name={closedCollapsed ? 'chevron-up' : 'chevron-down'} size={13} color="#A8A8A8" />
             </Pressable>
             {!closedCollapsed && closedPolls.map((poll) => (
-              <PollCard key={poll.id} poll={poll} tripId={id} counts={responseCounts[poll.id] ?? {}} groupSizeBucket={trip?.group_size_bucket} groupSizePrecise={trip?.group_size_precise} router={router} />
+              <PollCard key={poll.id} poll={poll} tripId={id} counts={responseCounts[poll.id] ?? {}} groupSizeBucket={trip?.group_size_bucket} groupSizePrecise={trip?.group_size_precise} router={router} canManagePolls={canManagePolls} />
             ))}
           </View>
         ) : null}
@@ -742,7 +756,7 @@ export default function PollsScreen() {
             </View>
             {decidedPolls.map((poll) => (
               <View key={poll.id} onLayout={(e) => { const y = e.nativeEvent.layout.y; setDecidedCardYs((prev) => ({ ...prev, [poll.id]: y })); }}>
-                <PollCard poll={poll} tripId={id} counts={responseCounts[poll.id] ?? {}} groupSizeBucket={trip?.group_size_bucket} router={router} />
+                <PollCard poll={poll} tripId={id} counts={responseCounts[poll.id] ?? {}} groupSizeBucket={trip?.group_size_bucket} router={router} canManagePolls={canManagePolls} />
               </View>
             ))}
           </View>

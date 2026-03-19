@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -83,8 +84,10 @@ export default function NewTripScreen() {
       const n = parseInt(customInput, 10);
       if (!customInput || isNaN(n) || n < 1) errs.groupSize = 'Enter a valid number';
     }
-    // date validation handled by the picker itself
     setErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      Alert.alert('Missing info', Object.values(errs)[0] as string);
+    }
     return Object.keys(errs).length === 0;
   }
 
@@ -121,7 +124,7 @@ export default function NewTripScreen() {
         requestNotificationPermission().catch(() => {});
       }, 1500);
     } catch {
-      setErrors({ name: 'Could not create trip. Try again.' });
+      Alert.alert('Error', 'Could not create trip. Please try again.');
     }
   }
 

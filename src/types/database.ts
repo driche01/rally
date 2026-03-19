@@ -334,6 +334,8 @@ export interface ConversationMessage {
   sender_id: string;
   content: string;
   reply_to_id: string | null;
+  thread_parent_id: string | null;
+  thread_reply_count: number;
   created_at: string;
   edited_at: string | null;
 }

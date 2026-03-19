@@ -118,11 +118,6 @@ export default function LoginScreen() {
             Log in
           </Button>
 
-          <Link href="/(auth)/magic-link" asChild>
-            <Button variant="secondary" fullWidth>
-              Log in with magic link
-            </Button>
-          </Link>
         </View>
 
         <View className="mt-8 flex-row justify-center gap-1">

@@ -1,4 +1,4 @@
-import { supabase } from '../supabase';
+import { supabase, supabaseAnon } from '../supabase';
 import type { GroupSizeBucket, Trip, TripWithPolls } from '../../types/database';
 import { addPlannerMember } from './members';
 
@@ -83,7 +83,12 @@ export async function getTripById(id: string): Promise<Trip> {
 }
 
 export async function getTripByShareToken(token: string): Promise<TripWithPolls> {
-  const { data, error } = await supabase
+  // Use the session-free anon client so this always runs as the anon role.
+  // The normal client persists a browser session in localStorage; if the user
+  // is authenticated, the authenticated RLS policy applies and blocks them
+  // from reading trips they didn't create/join.  The share link is the
+  // application-layer access gate — any bearer of the token should see the trip.
+  const { data, error } = await supabaseAnon
     .from('trips')
     .select(`
       *,
@@ -94,13 +99,16 @@ export async function getTripByShareToken(token: string): Promise<TripWithPolls>
     `)
     .eq('share_token', token)
     .eq('status', 'active')
-    .in('polls.status', ['live'])
     .single();
   if (error) throw error;
-  // Sort polls and options by position
-  data.polls = (data.polls ?? []).sort((a: { position: number }, b: { position: number }) => a.position - b.position);
+  // Filter to live polls only (done client-side so the trip is always returned
+  // even when no polls are live yet — server-side .in() on a nested resource
+  // acts as an inner join and would 404 the whole request)
+  data.polls = (data.polls ?? [])
+    .filter((p: { status: string }) => p.status === 'live')
+    .sort((a: { position: number }, b: { position: number }) => a.position - b.position);
   data.polls.forEach((p: { poll_options: { position: number }[] }) => {
-    p.poll_options.sort((a, b) => a.position - b.position);
+    p.poll_options.sort((a: { position: number }, b: { position: number }) => a.position - b.position);
   });
   return data;
 }

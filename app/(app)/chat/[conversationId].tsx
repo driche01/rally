@@ -2,12 +2,14 @@
  * Chat thread — full-screen DM or group conversation.
  * Messages in bubbles (right = me, left = others), emoji reactions,
  * reply-to, long-press context menu, real-time updates.
+ * Threads: tap "N replies" below a message to open the thread panel.
  */
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  Animated,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -30,6 +32,9 @@ import {
   useMessagesRealtime,
   useRemoveReaction,
   useSendMessage,
+  useSendThreadReply,
+  useThreadReplies,
+  useThreadRepliesRealtime,
 } from '@/hooks/useConversations';
 import type { ConversationMessageWithMeta } from '@/types/database';
 
@@ -113,6 +118,7 @@ const MessageBubble = ({
   prevDate,
   onLongPress,
   onReactionPress,
+  onOpenThread,
   currentUserId,
 }: {
   msg: ConversationMessageWithMeta;
@@ -123,6 +129,7 @@ const MessageBubble = ({
   prevDate: string | null;
   onLongPress: (msg: ConversationMessageWithMeta) => void;
   onReactionPress: (messageId: string, emoji: string, alreadyReacted: boolean) => void;
+  onOpenThread: (msg: ConversationMessageWithMeta) => void;
   currentUserId: string;
 }) => {
   // Group reactions by emoji
@@ -141,6 +148,7 @@ const MessageBubble = ({
   }, [msg.reactions, currentUserId]);
 
   const dateLabel = showDateDivider ? formatDateDivider(msg.created_at) : null;
+  const replyCount = msg.thread_reply_count ?? 0;
 
   return (
     <>
@@ -153,15 +161,15 @@ const MessageBubble = ({
       <View style={[styles.messageRow, isMe && styles.messageRowMe]}>
         {/* Avatar — left side for group chats, other's messages */}
         {isGroup && !isMe ? (
-          <View style={{ width: 32, alignSelf: 'flex-end', marginBottom: grouped.length > 0 ? 18 : 0 }}>
+          <View style={{ width: 32, alignSelf: 'flex-end', marginBottom: grouped.length > 0 || replyCount > 0 ? 18 : 0 }}>
             {showAvatar ? <MiniAvatar name={msg.senderProfile.name} id={msg.sender_id} /> : null}
           </View>
         ) : null}
 
         <View style={[styles.bubbleCol, isMe && styles.bubbleColMe]}>
-          {/* Sender name — group only, others' messages, when avatar changes */}
-          {isGroup && !isMe && showAvatar ? (
-            <Text style={styles.senderName}>{msg.senderProfile.name}</Text>
+          {/* Sender name — group only, above every message */}
+          {isGroup ? (
+            <Text style={[styles.senderName, isMe && styles.senderNameMe]}>{msg.senderProfile.name}</Text>
           ) : null}
 
           {/* Reply-to snippet */}
@@ -204,6 +212,20 @@ const MessageBubble = ({
               ))}
             </View>
           ) : null}
+
+          {/* Thread reply count */}
+          {replyCount > 0 ? (
+            <Pressable
+              onPress={() => onOpenThread(msg)}
+              style={[styles.threadBadge, isMe && styles.threadBadgeMe]}
+            >
+              <Ionicons name="chatbubble-outline" size={12} color="#D85A30" />
+              <Text style={styles.threadBadgeText}>
+                {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
+              </Text>
+              <Ionicons name="chevron-forward" size={11} color="#D85A30" />
+            </Pressable>
+          ) : null}
         </View>
       </View>
     </>
@@ -218,6 +240,7 @@ function ContextMenu({
   message,
   onReact,
   onReply,
+  onReplyInThread,
   onDelete,
   onClose,
 }: {
@@ -226,6 +249,7 @@ function ContextMenu({
   message: ConversationMessageWithMeta | null;
   onReact: (emoji: string) => void;
   onReply: () => void;
+  onReplyInThread: () => void;
   onDelete: () => void;
   onClose: () => void;
 }) {
@@ -258,6 +282,10 @@ function ContextMenu({
               <Ionicons name="return-down-back-outline" size={18} color="#444" />
               <Text style={styles.menuActionText}>Reply</Text>
             </Pressable>
+            <Pressable onPress={() => { onReplyInThread(); onClose(); }} style={styles.menuAction}>
+              <Ionicons name="chatbubbles-outline" size={18} color="#444" />
+              <Text style={styles.menuActionText}>Reply in thread</Text>
+            </Pressable>
             {isMe ? (
               <Pressable
                 onPress={() => { onDelete(); onClose(); }}
@@ -271,6 +299,163 @@ function ContextMenu({
         </Pressable>
       </Pressable>
     </Modal>
+  );
+}
+
+// ─── Thread panel ─────────────────────────────────────────────────────────────
+
+function ThreadPanel({
+  parentMsg,
+  conversationId,
+  currentUserId,
+  isGroup,
+  onClose,
+}: {
+  parentMsg: ConversationMessageWithMeta;
+  conversationId: string;
+  currentUserId: string;
+  isGroup: boolean;
+  onClose: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const [draft, setDraft] = useState('');
+  const listRef = useRef<FlatList>(null);
+
+  const { data: replies = [] } = useThreadReplies(parentMsg.id);
+  useThreadRepliesRealtime(parentMsg.id, conversationId);
+  const sendReply = useSendThreadReply(conversationId, parentMsg.id);
+
+  useEffect(() => {
+    if (replies.length > 0) {
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50);
+    }
+  }, [replies.length]);
+
+  function handleSend() {
+    const content = draft.trim();
+    if (!content) return;
+    sendReply.mutate(content, { onSuccess: () => setDraft('') });
+  }
+
+  const isMe = parentMsg.sender_id === currentUserId;
+
+  return (
+    <View style={[styles.threadPanel, { paddingTop: insets.top }]}>
+      {/* Header */}
+      <View style={styles.threadHeader}>
+        <Text style={styles.threadHeaderTitle}>Thread</Text>
+        <Pressable onPress={onClose} hitSlop={8} style={styles.threadCloseBtn}>
+          <Ionicons name="close" size={22} color="#1a1a1a" />
+        </Pressable>
+      </View>
+
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
+      >
+        <FlatList
+          ref={listRef}
+          data={replies}
+          keyExtractor={(m) => m.id}
+          contentContainerStyle={styles.threadList}
+          showsVerticalScrollIndicator={false}
+          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+          ListHeaderComponent={
+            <>
+              {/* Parent message pinned at top */}
+              <View style={styles.threadParentWrapper}>
+                <View style={[styles.messageRow, isMe && styles.messageRowMe]}>
+                  {isGroup && !isMe ? (
+                    <View style={{ width: 32, alignSelf: 'flex-end' }}>
+                      <MiniAvatar name={parentMsg.senderProfile.name} id={parentMsg.sender_id} />
+                    </View>
+                  ) : null}
+                  <View style={[styles.bubbleCol, isMe && styles.bubbleColMe]}>
+                    {isGroup ? (
+                      <Text style={[styles.senderName, isMe && styles.senderNameMe]}>
+                        {parentMsg.senderProfile.name}
+                      </Text>
+                    ) : null}
+                    <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
+                      <Text style={[styles.bubbleText, isMe && styles.bubbleTextMe]}>
+                        {parentMsg.content}
+                      </Text>
+                    </View>
+                    <Text style={[styles.timestamp, isMe && styles.timestampMe]}>
+                      {formatTime(parentMsg.created_at)}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.threadDivider}>
+                <View style={styles.threadDividerLine} />
+                <Text style={styles.threadDividerLabel}>
+                  {replies.length} {replies.length === 1 ? 'reply' : 'replies'}
+                </Text>
+                <View style={styles.threadDividerLine} />
+              </View>
+            </>
+          }
+          ListEmptyComponent={
+            <View style={styles.threadEmptyReplies}>
+              <Text style={styles.threadEmptyText}>No replies yet. Start the thread!</Text>
+            </View>
+          }
+          renderItem={({ item }) => {
+            const replyIsMe = item.sender_id === currentUserId;
+            return (
+              <View style={[styles.messageRow, replyIsMe && styles.messageRowMe, { marginBottom: 4 }]}>
+                {isGroup && !replyIsMe ? (
+                  <View style={{ width: 32, alignSelf: 'flex-end' }}>
+                    <MiniAvatar name={item.senderProfile.name} id={item.sender_id} />
+                  </View>
+                ) : null}
+                <View style={[styles.bubbleCol, replyIsMe && styles.bubbleColMe]}>
+                  {isGroup ? (
+                    <Text style={[styles.senderName, replyIsMe && styles.senderNameMe]}>
+                      {item.senderProfile.name}
+                    </Text>
+                  ) : null}
+                  <View style={[styles.bubble, replyIsMe ? styles.bubbleMe : styles.bubbleThem]}>
+                    <Text style={[styles.bubbleText, replyIsMe && styles.bubbleTextMe]}>
+                      {item.content}
+                    </Text>
+                  </View>
+                  <Text style={[styles.timestamp, replyIsMe && styles.timestampMe]}>
+                    {formatTime(item.created_at)}
+                  </Text>
+                </View>
+              </View>
+            );
+          }}
+        />
+
+        {/* Composer */}
+        <View style={[styles.inputBar, { paddingBottom: insets.bottom + 8 }]}>
+          <TextInput
+            style={styles.input}
+            value={draft}
+            onChangeText={setDraft}
+            placeholder="Reply in thread…"
+            placeholderTextColor="#aaa"
+            multiline
+            maxLength={2000}
+            returnKeyType="default"
+          />
+          <Pressable
+            onPress={handleSend}
+            disabled={!draft.trim() || sendReply.isPending}
+            style={[styles.sendBtn, !draft.trim() && styles.sendBtnDisabled]}
+            accessibilityRole="button"
+            accessibilityLabel="Send reply"
+          >
+            <Ionicons name="arrow-up" size={18} color="#fff" />
+          </Pressable>
+        </View>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -297,6 +482,7 @@ export default function ConversationScreen() {
   const [draft, setDraft] = useState('');
   const [replyTo, setReplyTo] = useState<ConversationMessageWithMeta | null>(null);
   const [contextMsg, setContextMsg] = useState<ConversationMessageWithMeta | null>(null);
+  const [threadMsg, setThreadMsg] = useState<ConversationMessageWithMeta | null>(null);
   const listRef = useRef<FlatList>(null);
 
   // Mark read on mount and when new messages arrive
@@ -373,6 +559,7 @@ export default function ConversationScreen() {
           prevDate={prev?.created_at ?? null}
           onLongPress={handleLongPress}
           onReactionPress={handleReact}
+          onOpenThread={setThreadMsg}
           currentUserId={user?.id ?? ''}
         />
       );
@@ -470,9 +657,28 @@ export default function ConversationScreen() {
           handleReact(contextMsg.id, emoji, alreadyReacted);
         }}
         onReply={() => contextMsg && setReplyTo(contextMsg)}
+        onReplyInThread={() => contextMsg && setThreadMsg(contextMsg)}
         onDelete={handleDelete}
         onClose={() => setContextMsg(null)}
       />
+
+      {/* Thread panel — slides up as a modal */}
+      <Modal
+        visible={!!threadMsg}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setThreadMsg(null)}
+      >
+        {threadMsg ? (
+          <ThreadPanel
+            parentMsg={threadMsg}
+            conversationId={conversationId}
+            currentUserId={user?.id ?? ''}
+            isGroup={!!isGroup}
+            onClose={() => setThreadMsg(null)}
+          />
+        ) : null}
+      </Modal>
     </View>
   );
 }
@@ -519,6 +725,7 @@ const styles = StyleSheet.create({
   bubbleColMe: { alignItems: 'flex-end' },
 
   senderName: { fontSize: 12, fontWeight: '600', color: '#888', marginBottom: 3, marginLeft: 2 },
+  senderNameMe: { marginLeft: 0, marginRight: 2, textAlign: 'right' },
 
   replySnippet: {
     backgroundColor: '#f5f5f5',
@@ -547,7 +754,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#D85A30',
     borderBottomRightRadius: 4,
   },
-  bubbleText: { fontSize: 15, color: '#1a1a1a', lineHeight: 20 },
+  bubbleText: { fontSize: 15, color: '#1a1a1a', lineHeight: 20, fontFamily: undefined },
   bubbleTextMe: { color: '#fff' },
 
   timestamp: { fontSize: 11, color: '#bbb', marginTop: 3, marginLeft: 4 },
@@ -567,8 +774,25 @@ const styles = StyleSheet.create({
     borderColor: '#e8e8e8',
   },
   reactionPillMine: { borderColor: '#D85A30', backgroundColor: '#fff5f2' },
-  reactionEmoji: { fontSize: 14 },
+  reactionEmoji: { fontSize: 14, fontFamily: undefined },
   reactionCount: { fontSize: 12, fontWeight: '600', color: '#888' },
+
+  threadBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 5,
+    marginLeft: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: '#fff5f2',
+    borderWidth: 1,
+    borderColor: '#f5cfc5',
+    alignSelf: 'flex-start',
+  },
+  threadBadgeMe: { alignSelf: 'flex-end', marginLeft: 0, marginRight: 2 },
+  threadBadgeText: { fontSize: 12, fontWeight: '600', color: '#D85A30' },
 
   replyBanner: {
     flexDirection: 'row',
@@ -647,7 +871,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f0f0f0',
   },
   emojiBtn: { padding: 4 },
-  emojiText: { fontSize: 26 },
+  emojiText: { fontSize: 26, fontFamily: undefined },
   menuActions: { paddingVertical: 4 },
   menuAction: {
     flexDirection: 'row',
@@ -663,4 +887,36 @@ const styles = StyleSheet.create({
 
   emptyChat: { alignItems: 'center', paddingTop: 80, gap: 10 },
   emptyChatText: { fontSize: 14, color: '#bbb' },
+
+  // ─── Thread panel ───────────────────────────────────────────────────────────
+  threadPanel: { flex: 1, backgroundColor: '#fff' },
+  threadHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e8e8e8',
+  },
+  threadHeaderTitle: { fontSize: 16, fontWeight: '700', color: '#1a1a1a' },
+  threadCloseBtn: { position: 'absolute', right: 16 },
+
+  threadList: { paddingHorizontal: 12, paddingTop: 8, paddingBottom: 8 },
+
+  threadParentWrapper: {
+    paddingBottom: 12,
+  },
+
+  threadDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginVertical: 12,
+  },
+  threadDividerLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: '#e0e0e0' },
+  threadDividerLabel: { fontSize: 11, color: '#aaa', fontWeight: '500' },
+
+  threadEmptyReplies: { alignItems: 'center', paddingVertical: 24 },
+  threadEmptyText: { fontSize: 13, color: '#bbb' },
 });

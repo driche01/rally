@@ -24,6 +24,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRespondents, useSetRespondentPlanner } from '@/hooks/useRespondents';
 import { useTrip } from '@/hooks/useTrips';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useProfile } from '@/hooks/useProfile';
+import { useAuthStore } from '@/stores/authStore';
 import { getShareUrl } from '@/lib/api/trips';
 import { GROUP_SIZE_MIDPOINTS } from '@/types/database';
 import type { Respondent } from '@/types/database';
@@ -37,11 +39,30 @@ export default function MembersScreen() {
   const { data: respondents = [] } = useRespondents(id);
   const { canDesignatePlanners } = usePermissions(id);
   const setPlanner = useSetRespondentPlanner(id);
+  const currentUser = useAuthStore((s) => s.user);
+  // Fetch the planner's profile directly by trip.created_by so any trip member
+  // (not just the creator themselves) can see the planner row.
+  const { data: plannerProfile } = useProfile(trip?.created_by);
+
+  const isCreator = !!trip && !!currentUser && trip.created_by === currentUser.id;
+  // Fall back to auth user metadata for the creator viewing their own trip
+  // when the profiles row hasn't loaded yet.
+  const plannerName = plannerProfile
+    ? [plannerProfile.name, (plannerProfile as any).last_name].filter(Boolean).join(' ')
+    : isCreator
+      ? [currentUser?.user_metadata?.name, currentUser?.user_metadata?.last_name].filter(Boolean).join(' ')
+      : '';
+  const plannerEmail = (plannerProfile as any)?.email ?? (isCreator ? currentUser?.email : '') ?? '';
+  const plannerPhone = (plannerProfile as any)?.phone ?? null;
+  const showPlanner = !!(plannerName || plannerEmail);
 
   const total = trip
     ? (trip.group_size_precise ?? GROUP_SIZE_MIDPOINTS[trip.group_size_bucket])
     : 0;
   const joinUrl = trip ? getShareUrl(trip.share_token) : '';
+  // memberCount: everyone in the list (planner + poll respondents) — for the section label
+  const memberCount = (showPlanner ? 1 : 0) + respondents.length;
+  // joinPercent: only counts poll respondents (planner hasn't "responded" to their own polls)
   const joinPercent = total > 0 ? Math.min(100, Math.round((respondents.length / total) * 100)) : 0;
 
   async function handleCopyLink() {
@@ -216,13 +237,45 @@ export default function MembersScreen() {
         </View>
 
         {/* Member list */}
-        {respondents.length > 0 ? (
+        {(showPlanner || respondents.length > 0) ? (
           <>
             <Text style={styles.sectionLabel}>
-              {respondents.length} {respondents.length === 1 ? 'MEMBER' : 'MEMBERS'}
+              {memberCount} {memberCount === 1 ? 'MEMBER' : 'MEMBERS'}
             </Text>
             <View style={styles.listCard}>
-              {respondents.map((r, i) => {
+
+              {/* Trip creator / planner — always first */}
+              {showPlanner ? (
+                <View style={[styles.row, respondents.length > 0 && styles.rowBorder]}>
+                  <View style={styles.avatarWrap}>
+                    <Ionicons name="ribbon" size={13} color="#D97706" style={styles.crownIcon} />
+                    <View style={[styles.avatar, styles.avatarPlanner]}>
+                      <Text style={[styles.avatarText, styles.avatarTextPlanner]}>
+                        {(plannerName || plannerEmail).trim().charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={{ flex: 1, gap: 3 }}>
+                    <Text style={styles.name}>{plannerName || plannerEmail}</Text>
+                    {plannerEmail ? (
+                      <View style={styles.contactRow}>
+                        <Ionicons name="mail-outline" size={12} color="#888" />
+                        <Text style={styles.contactText}>{plannerEmail}</Text>
+                      </View>
+                    ) : null}
+                    {plannerPhone ? (
+                      <View style={styles.contactRow}>
+                        <Ionicons name="call-outline" size={12} color="#888" />
+                        <Text style={styles.contactText}>{plannerPhone}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+              ) : null}
+
+              {[...respondents]
+                .sort((a, b) => (b.is_planner ? 1 : 0) - (a.is_planner ? 1 : 0))
+                .map((r, i) => {
                 function copyContact(value: string, label: string) {
                   Clipboard.setStringAsync(value);
                   Alert.alert('Copied', `${label} copied to clipboard.`);
@@ -235,21 +288,21 @@ export default function MembersScreen() {
                     accessibilityRole={canDesignatePlanners ? 'button' : 'none'}
                     accessibilityLabel={canDesignatePlanners ? `Manage ${r.name}` : undefined}
                   >
-                    <View style={styles.avatar}>
-                      <Text style={styles.avatarText}>
-                        {r.name.trim().charAt(0).toUpperCase()}
-                      </Text>
+                    {/* Avatar — crown above circle for planners */}
+                    <View style={styles.avatarWrap}>
+                      {r.is_planner ? (
+                        <Ionicons name="ribbon" size={13} color="#D97706" style={styles.crownIcon} />
+                      ) : null}
+                      <View style={[styles.avatar, r.is_planner && styles.avatarPlanner]}>
+                        <Text style={[styles.avatarText, r.is_planner && styles.avatarTextPlanner]}>
+                          {r.name.trim().charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
                     </View>
                     <View style={{ flex: 1, gap: 3 }}>
-                      {/* Name + planner badge */}
+                      {/* Name */}
                       <View style={styles.nameRow}>
                         <Text style={styles.name}>{r.name}</Text>
-                        {r.is_planner ? (
-                          <View style={styles.plannerBadge}>
-                            <Ionicons name="shield-checkmark-outline" size={10} color="#235C38" />
-                            <Text style={styles.plannerBadgeText}>Planner</Text>
-                          </View>
-                        ) : null}
                       </View>
                       {r.email ? (
                         <Pressable
@@ -295,8 +348,8 @@ export default function MembersScreen() {
           </>
         ) : null}
 
-        {/* Empty state */}
-        {respondents.length === 0 ? (
+        {/* Empty state — only when planner not shown and no respondents */}
+        {!showPlanner && respondents.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyIcon}>👥</Text>
             <Text style={styles.emptyTitle}>No members yet</Text>
@@ -391,7 +444,7 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 12,
     paddingVertical: 14,
   },
@@ -399,16 +452,27 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#F0F0F0',
   },
+  avatarWrap: {
+    alignItems: 'center',
+    flexShrink: 0,
+    width: 36,
+  },
+  crownIcon: {
+    marginBottom: 2,
+  },
   avatar: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#E8F4EE',
+    backgroundColor: '#E0EEFA',
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 0,
   },
-  avatarText: { fontSize: 15, fontWeight: '700', color: '#235C38' },
+  avatarPlanner: {
+    backgroundColor: '#FFF3CD',
+  },
+  avatarText: { fontSize: 15, fontWeight: '700', color: '#3B6FA0' },
+  avatarTextPlanner: { color: '#92640A' },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   name: { fontSize: 14, fontWeight: '600', color: '#1A1A1A' },
 

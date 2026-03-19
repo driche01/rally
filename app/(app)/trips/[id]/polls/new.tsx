@@ -20,10 +20,10 @@ import { capture, Events } from '@/lib/analytics';
 import { DEFAULT_BUDGET_RANGES, generateRangeLabel, getMinForRange } from '@/lib/pollFormUtils';
 import type { PollType } from '@/types/database';
 import type { BudgetRange, CustomPoll, DateRange } from '@/types/polls';
-import { BudgetSection } from './_components/BudgetSection';
-import { CustomSection } from './_components/CustomSection';
-import { DatesSection } from './_components/DatesSection';
-import { DestinationSection } from './_components/DestinationSection';
+import { BudgetSection } from '@/components/polls/BudgetSection';
+import { CustomSection } from '@/components/polls/CustomSection';
+import { DatesSection } from '@/components/polls/DatesSection';
+import { DestinationSection } from '@/components/polls/DestinationSection';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 

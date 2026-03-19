@@ -165,6 +165,7 @@ export default function SignupScreen() {
             onChangeText={setPassword}
             secureTextEntry
             autoComplete="new-password"
+            textContentType="oneTimeCode"
             error={errors.password}
           />
 

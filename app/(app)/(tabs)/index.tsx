@@ -7,6 +7,7 @@ import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PreciseGroupSizeModal } from '@/components/PreciseGroupSizeModal';
 import { useDeleteTrip, useTripsWithRespondentCounts, useUpdateTrip } from '@/hooks/useTrips';
+import { useAuthStore } from '@/stores/authStore';
 import type { TripWithRespondentCount } from '@/lib/api/trips';
 import { getTripStage, STAGES, STAGE_LABEL } from '@/lib/tripStage';
 
@@ -31,13 +32,16 @@ function TripCard({
   trip,
   onDelete,
   onUpdatePrecise,
+  currentUserId,
 }: {
   trip: TripWithRespondentCount;
   onDelete: (id: string) => void;
   onUpdatePrecise: (tripId: string, precise: number | null) => void;
+  currentUserId: string | null;
 }) {
   const router = useRouter();
   const [preciseModalVisible, setPreciseModalVisible] = useState(false);
+  const isPlanner = !!currentUserId && trip.created_by === currentUserId;
 
   const stage = getTripStage(trip);
   const stageIndex = STAGES.indexOf(stage);
@@ -129,7 +133,19 @@ function TripCard({
                 />
               ))}
             </View>
-            <Text style={[styles.stageLabel, { color: stageColor.label }]}>{STAGE_LABEL[stage]}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
+              <Text style={[styles.stageLabel, { color: stageColor.label }]}>{STAGE_LABEL[stage]}</Text>
+              <View style={[styles.rolePill, isPlanner ? styles.rolePillPlanner : styles.rolePillMember]}>
+                <Ionicons
+                  name={isPlanner ? 'ribbon-outline' : 'person-outline'}
+                  size={10}
+                  color={isPlanner ? '#92640A' : '#3B6FA0'}
+                />
+                <Text style={[styles.rolePillText, isPlanner ? styles.rolePillTextPlanner : styles.rolePillTextMember]}>
+                  {isPlanner ? 'Planner' : 'Member'}
+                </Text>
+              </View>
+            </View>
           </TouchableOpacity>
 
         </View>
@@ -154,6 +170,7 @@ export default function HomeScreen() {
   const { data: trips, isLoading, refetch } = useTripsWithRespondentCounts();
   const deleteTrip = useDeleteTrip();
   const updateTrip = useUpdateTrip();
+  const currentUserId = useAuthStore((s) => s.user?.id ?? null);
 
   function handleDelete(id: string) {
     deleteTrip.mutate(id);
@@ -199,7 +216,7 @@ export default function HomeScreen() {
             ) : null
           }
           renderItem={({ item }) => (
-            <TripCard trip={item} onDelete={handleDelete} onUpdatePrecise={handleUpdatePrecise} />
+            <TripCard trip={item} onDelete={handleDelete} onUpdatePrecise={handleUpdatePrecise} currentUserId={currentUserId} />
           )}
         />
       </View>
@@ -271,6 +288,29 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.3,
     textTransform: 'uppercase',
-    marginTop: 2,
+  },
+  rolePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    borderRadius: 99,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  rolePillPlanner: {
+    backgroundColor: '#FFF3CD',
+  },
+  rolePillMember: {
+    backgroundColor: '#E0EEFA',
+  },
+  rolePillText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  rolePillTextPlanner: {
+    color: '#92640A',
+  },
+  rolePillTextMember: {
+    color: '#3B6FA0',
   },
 });

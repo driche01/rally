@@ -105,7 +105,7 @@ function GroupMembersCard({
         <Text style={styles.entryTitle}>Group members</Text>
         <Text style={styles.entrySubtitle}>
           {memberCount === 0
-            ? 'No one has joined yet'
+            ? 'No one else has joined yet'
             : `${memberCount} of ${total} joined`}
         </Text>
       </View>

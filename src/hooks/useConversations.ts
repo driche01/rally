@@ -8,10 +8,12 @@ import {
   getConversations,
   getMessages,
   getOrCreateDM,
+  getThreadReplies,
   markConversationRead,
   removeConversationReaction,
   searchProfiles,
   sendMessage,
+  sendThreadReply,
 } from '../lib/api/conversations';
 
 // ─── Query keys ───────────────────────────────────────────────────────────────
@@ -19,6 +21,7 @@ import {
 export const conversationKeys = {
   all: ['conversations'] as const,
   messages: (id: string) => ['conversations', id, 'messages'] as const,
+  thread: (parentId: string) => ['conversations', 'thread', parentId] as const,
 };
 
 // ─── Conversations list ───────────────────────────────────────────────────────
@@ -146,6 +149,52 @@ export function useRemoveReaction(conversationId: string) {
 export function useMarkRead(conversationId: string) {
   return useMutation({
     mutationFn: () => markConversationRead(conversationId),
+  });
+}
+
+// ─── Threads ──────────────────────────────────────────────────────────────────
+
+export function useThreadReplies(parentMessageId: string | null) {
+  return useQuery({
+    queryKey: conversationKeys.thread(parentMessageId ?? ''),
+    queryFn: () => getThreadReplies(parentMessageId!),
+    enabled: Boolean(parentMessageId),
+  });
+}
+
+export function useThreadRepliesRealtime(parentMessageId: string | null, conversationId: string) {
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (!parentMessageId) return;
+    const channel = supabase
+      .channel(`thread:${parentMessageId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'conversation_messages',
+          filter: `thread_parent_id=eq.${parentMessageId}`,
+        },
+        () => {
+          qc.invalidateQueries({ queryKey: conversationKeys.thread(parentMessageId) });
+          // Also refresh the main feed so the reply count badge updates
+          qc.invalidateQueries({ queryKey: conversationKeys.messages(conversationId) });
+        }
+      )
+      .subscribe();
+    return () => void supabase.removeChannel(channel);
+  }, [parentMessageId, conversationId, qc]);
+}
+
+export function useSendThreadReply(conversationId: string, parentMessageId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (content: string) => sendThreadReply(conversationId, parentMessageId, content),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: conversationKeys.thread(parentMessageId) });
+      qc.invalidateQueries({ queryKey: conversationKeys.messages(conversationId) });
+    },
   });
 }
 

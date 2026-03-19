@@ -26,6 +26,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '@/components/ui';
 import { getTripByShareToken } from '@/lib/api/trips';
+import { enrollRespondentAsMember } from '@/lib/api/members';
 import {
   getOrCreateRespondent,
   getExistingRespondentForTrip,
@@ -722,8 +723,10 @@ export default function RespondScreen() {
   const insets = useSafeAreaInsets();
 
   const [step, setStep] = useState<Step>('name');
-  const [name, setName] = useState('');
-  const [nameError, setNameError] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [firstNameError, setFirstNameError] = useState('');
+  const [lastNameError, setLastNameError] = useState('');
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState('');
   const [phone, setPhone] = useState('');
@@ -754,7 +757,14 @@ export default function RespondScreen() {
 
         // Pre-fill name from storage (convenience — user still sees the name step)
         const stored = await getStoredName();
-        if (stored) setName(stored);
+
+        function applyStoredName(fullName: string) {
+          const parts = fullName.trim().split(/\s+/);
+          setFirstName(parts[0] ?? '');
+          setLastName(parts.slice(1).join(' ') ?? '');
+        }
+
+        if (stored) applyStoredName(stored);
 
         // Load any existing responses for this device+trip without auto-skipping.
         // This lets a returning user update their picks, while still allowing a
@@ -763,7 +773,7 @@ export default function RespondScreen() {
           const respondent = await getExistingRespondentForTrip(data.id);
           if (respondent) {
             setExistingRespondent(respondent);
-            setName(respondent.name); // Pre-fill with their actual stored name
+            applyStoredName(respondent.name); // Pre-fill with their actual stored name
             if (respondent.email) setEmail(respondent.email);
             if (respondent.phone) setPhone(respondent.phone);
             const existing = await getExistingResponses(data.id, respondent.id);
@@ -773,11 +783,11 @@ export default function RespondScreen() {
               setHasExistingResponses(true);
             }
           } else if (stored) {
-            setName(stored);
+            applyStoredName(stored);
           }
         } catch {
           // No existing respondent — fine, fresh start
-          if (stored) setName(stored);
+          if (stored) applyStoredName(stored);
         }
 
         setLoading(false);
@@ -820,16 +830,24 @@ export default function RespondScreen() {
 
   // ─── Name step → polls step ────────────────────────────────────────────────
   async function handleNameContinue() {
-    const trimmed = name.trim();
+    const trimmedFirst = firstName.trim();
+    const trimmedLast = lastName.trim();
     const trimmedEmail = email.trim();
     const trimmedPhone = phone.trim();
+    const fullName = [trimmedFirst, trimmedLast].filter(Boolean).join(' ');
 
     let hasError = false;
-    if (!trimmed) {
-      setNameError('Please enter your name');
+    if (!trimmedFirst) {
+      setFirstNameError('First name is required');
       hasError = true;
     } else {
-      setNameError('');
+      setFirstNameError('');
+    }
+    if (!trimmedLast) {
+      setLastNameError('Last name is required');
+      hasError = true;
+    } else {
+      setLastNameError('');
     }
     if (!trimmedEmail) {
       setEmailError('Email is required');
@@ -843,17 +861,20 @@ export default function RespondScreen() {
     if (!trimmedPhone) {
       setPhoneError('Phone number is required');
       hasError = true;
+    } else if (!/^\+?[\d\s\-().]{7,20}$/.test(trimmedPhone)) {
+      setPhoneError('Enter a valid phone number');
+      hasError = true;
     } else {
       setPhoneError('');
     }
     if (hasError) return;
 
-    await storeName(trimmed);
+    await storeName(fullName);
 
     // If they entered a different name than the existing respondent, clear the
     // trip session so a new respondent gets created on submit. This allows a
     // different person on the same device to respond independently.
-    if (existingRespondent && existingRespondent.name !== trimmed) {
+    if (existingRespondent && existingRespondent.name !== fullName) {
       await clearTripSession(trip!.id);
       setExistingRespondent(null);
       setHasExistingResponses(false);
@@ -870,8 +891,10 @@ export default function RespondScreen() {
     setExistingRespondent(null);
     setHasExistingResponses(false);
     setResponses({});
-    setName('');
-    setNameError('');
+    setFirstName('');
+    setLastName('');
+    setFirstNameError('');
+    setLastNameError('');
     setEmail('');
     setEmailError('');
     setPhone('');
@@ -882,8 +905,9 @@ export default function RespondScreen() {
   async function handleSubmit() {
     if (!trip) return;
     setSubmitting(true);
+    const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(' ');
     try {
-      const respondent = await getOrCreateRespondent(trip.id, name.trim(), email.trim() || null, phone.trim() || null);
+      const respondent = await getOrCreateRespondent(trip.id, fullName, email.trim() || null, phone.trim() || null);
       setRespondentId(respondent.id);
       const polls = trip.polls ?? [];
       for (const poll of polls) {
@@ -891,6 +915,18 @@ export default function RespondScreen() {
         await submitPollResponses(poll.id, respondent.id, optionIds);
       }
       capture(Events.RESPONDENT_SUBMITTED, { trip_id: trip.id, poll_count: polls.length });
+
+      // On their first submission: create a Rally account and add them as a
+      // trip member so the trip shows up in their app once they log in.
+      if (!hasExistingResponses) {
+        enrollRespondentAsMember(
+          trip.id,
+          email.trim(),
+          firstName.trim(),
+          lastName.trim(),
+          phone.trim(),
+        ).catch(() => { /* non-fatal — account creation failure doesn't block UX */ });
+      }
       // Fetch live counts so the confirmation screen can show a results visual
       try {
         const counts = await getResponseCountsForTrip(trip.id);
@@ -1049,31 +1085,55 @@ export default function RespondScreen() {
               </View>
             ) : null}
 
-            <View className="gap-1">
-              <Text className="text-sm font-medium text-neutral-700">What's your name?</Text>
-              <TextInput
-                ref={nameInputRef}
-                value={name}
-                onChangeText={(t) => {
-                  setName(t.slice(0, 30));
-                  if (nameError) setNameError('');
-                }}
-                placeholder="First name"
-                maxLength={30}
-                autoFocus
-                autoCapitalize="words"
-                autoComplete="given-name"
-                returnKeyType="next"
-                onSubmitEditing={handleNameContinue}
-                className={[
-                  'min-h-[52px] rounded-2xl border bg-white px-4 py-3 text-lg text-neutral-800',
-                  nameError ? 'border-red-400' : 'border-neutral-200',
-                ].join(' ')}
-                placeholderTextColor="#A8A8A8"
-              />
-              {nameError ? (
-                <Text className="text-sm text-red-500">{nameError}</Text>
-              ) : null}
+            <View className="flex-row gap-3">
+              <View className="flex-1 gap-1">
+                <Text className="text-sm font-medium text-neutral-700">First name</Text>
+                <TextInput
+                  ref={nameInputRef}
+                  value={firstName}
+                  onChangeText={(t) => {
+                    setFirstName(t.slice(0, 30));
+                    if (firstNameError) setFirstNameError('');
+                  }}
+                  placeholder="Jane"
+                  maxLength={30}
+                  autoFocus
+                  autoCapitalize="words"
+                  autoComplete="given-name"
+                  returnKeyType="next"
+                  className={[
+                    'min-h-[52px] rounded-2xl border bg-white px-4 py-3 text-lg text-neutral-800',
+                    firstNameError ? 'border-red-400' : 'border-neutral-200',
+                  ].join(' ')}
+                  placeholderTextColor="#A8A8A8"
+                />
+                {firstNameError ? (
+                  <Text className="text-sm text-red-500">{firstNameError}</Text>
+                ) : null}
+              </View>
+              <View className="flex-1 gap-1">
+                <Text className="text-sm font-medium text-neutral-700">Last name</Text>
+                <TextInput
+                  value={lastName}
+                  onChangeText={(t) => {
+                    setLastName(t.slice(0, 30));
+                    if (lastNameError) setLastNameError('');
+                  }}
+                  placeholder="Smith"
+                  maxLength={30}
+                  autoCapitalize="words"
+                  autoComplete="family-name"
+                  returnKeyType="next"
+                  className={[
+                    'min-h-[52px] rounded-2xl border bg-white px-4 py-3 text-lg text-neutral-800',
+                    lastNameError ? 'border-red-400' : 'border-neutral-200',
+                  ].join(' ')}
+                  placeholderTextColor="#A8A8A8"
+                />
+                {lastNameError ? (
+                  <Text className="text-sm text-red-500">{lastNameError}</Text>
+                ) : null}
+              </View>
             </View>
 
             <View className="gap-1">
@@ -1249,7 +1309,7 @@ export default function RespondScreen() {
       >
         <Text className="text-sm font-medium text-coral-500">rally · {trip.name}</Text>
         <Text className="mt-0.5 text-lg font-bold text-neutral-800">
-          {hasExistingResponses ? `Hey ${name}, update your picks 👇` : `Hey ${name}, weigh in 👇`}
+          {hasExistingResponses ? `Hey ${firstName}, update your picks 👇` : `Hey ${firstName}, weigh in 👇`}
         </Text>
         {hasExistingResponses ? (
           <Text className="mt-0.5 text-xs text-neutral-400">

@@ -23,3 +23,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: Platform.OS === 'web',
   },
 });
+
+// Session-free client used for public share-link queries (respond page).
+// Always runs as the anon role regardless of any cached browser session,
+// so RLS policies for unauthenticated users apply correctly.
+export const supabaseAnon = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+  },
+});

@@ -138,28 +138,15 @@ export async function createGroupConversation(
 
 // ─── Messages ─────────────────────────────────────────────────────────────────
 
-export async function getMessages(conversationId: string): Promise<ConversationMessageWithMeta[]> {
-  const { data, error } = await supabase
-    .from('conversation_messages')
-    .select(`
-      *,
-      profiles:sender_id ( id, name ),
-      conversation_reactions ( id, message_id, profile_id, emoji, created_at,
-        profiles:profile_id ( name )
-      ),
-      reply_to:reply_to_id ( id, content, sender_id )
-    `)
-    .eq('conversation_id', conversationId)
-    .order('created_at', { ascending: true });
-
-  if (error) throw error;
-
-  return (data ?? []).map((row: any) => ({
+function mapMessageRow(row: any): ConversationMessageWithMeta {
+  return {
     id: row.id,
     conversation_id: row.conversation_id,
     sender_id: row.sender_id,
     content: row.content,
     reply_to_id: row.reply_to_id,
+    thread_parent_id: row.thread_parent_id ?? null,
+    thread_reply_count: row.thread_reply_count ?? 0,
     created_at: row.created_at,
     edited_at: row.edited_at,
     senderProfile: row.profiles ?? { id: row.sender_id, name: 'Unknown' },
@@ -168,7 +155,39 @@ export async function getMessages(conversationId: string): Promise<ConversationM
       senderName: r.profiles?.name ?? 'Unknown',
     })),
     replyTo: row.reply_to ?? null,
-  }));
+  };
+}
+
+const MESSAGE_SELECT = `
+  *,
+  profiles:sender_id ( id, name ),
+  conversation_reactions ( id, message_id, profile_id, emoji, created_at,
+    profiles:profile_id ( name )
+  ),
+  reply_to:reply_to_id ( id, content, sender_id )
+`;
+
+export async function getMessages(conversationId: string): Promise<ConversationMessageWithMeta[]> {
+  const { data, error } = await supabase
+    .from('conversation_messages')
+    .select(MESSAGE_SELECT)
+    .eq('conversation_id', conversationId)
+    .is('thread_parent_id', null)          // top-level only — thread replies excluded
+    .order('created_at', { ascending: true });
+
+  if (error) throw error;
+  return (data ?? []).map(mapMessageRow);
+}
+
+export async function getThreadReplies(parentMessageId: string): Promise<ConversationMessageWithMeta[]> {
+  const { data, error } = await supabase
+    .from('conversation_messages')
+    .select(MESSAGE_SELECT)
+    .eq('thread_parent_id', parentMessageId)
+    .order('created_at', { ascending: true });
+
+  if (error) throw error;
+  return (data ?? []).map(mapMessageRow);
 }
 
 export async function sendMessage(
@@ -186,6 +205,28 @@ export async function sendMessage(
       sender_id: user.id,
       content: content.trim(),
       reply_to_id: replyToId ?? null,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as ConversationMessage;
+}
+
+export async function sendThreadReply(
+  conversationId: string,
+  parentMessageId: string,
+  content: string
+): Promise<ConversationMessage> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+
+  const { data, error } = await supabase
+    .from('conversation_messages')
+    .insert({
+      conversation_id: conversationId,
+      sender_id: user.id,
+      content: content.trim(),
+      thread_parent_id: parentMessageId,
     })
     .select()
     .single();
