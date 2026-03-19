@@ -232,8 +232,7 @@ const PollCard = memo(function PollCard({
   const hasResponses = totalVotes > 0;
   const leadingOptionId =
     totalVotes > 0 ? Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] : null;
-  const showCalendarToggle = isPerDayPoll(poll);
-  const [calendarView, setCalendarView] = useState(false);
+  const showCalendar = isPerDayPoll(poll);
 
   const statusBadge: Record<string, 'muted' | 'success' | 'default' | 'coral'> = {
     draft: 'muted', live: 'success', closed: 'default', decided: 'coral',
@@ -274,20 +273,9 @@ const PollCard = memo(function PollCard({
       <View className="flex-row items-start justify-between gap-2">
         <View className="flex-1 gap-1.5">
           <Text className="text-base font-semibold text-neutral-800">{poll.title}</Text>
-          <View className="flex-row items-center gap-2">
-            <Badge variant={statusBadge[poll.status] ?? 'default'}>
-              {poll.status.charAt(0).toUpperCase() + poll.status.slice(1)}
-            </Badge>
-            {showCalendarToggle ? (
-              <Pressable
-                onPress={() => setCalendarView((v) => !v)}
-                className="flex-row items-center gap-1 rounded-lg border border-neutral-200 px-2 py-0.5"
-              >
-                <Ionicons name={calendarView ? 'list-outline' : 'calendar-outline'} size={12} color="#6B7280" />
-                <Text className="text-xs text-neutral-500">{calendarView ? 'List' : 'Calendar'}</Text>
-              </Pressable>
-            ) : null}
-          </View>
+          <Badge variant={statusBadge[poll.status] ?? 'default'}>
+            {poll.status.charAt(0).toUpperCase() + poll.status.slice(1)}
+          </Badge>
         </View>
         <View className="flex-row items-center gap-2">
           {isEditable && (
@@ -356,7 +344,7 @@ const PollCard = memo(function PollCard({
 
       {poll.poll_options.length > 0 ? (
         <View className="mt-4 gap-3">
-          {showCalendarToggle && calendarView ? (
+          {showCalendar ? (
             <PollCalendarView
               poll={poll}
               counts={counts}
