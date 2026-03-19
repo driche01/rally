@@ -26,6 +26,7 @@ import { getShareUrl } from '@/lib/api/trips';
 import { capture, Events } from '@/lib/analytics';
 import { queryClient } from '@/lib/queryClient';
 import { getTripStage, type TripStage } from '@/lib/tripStage';
+import { parseDateRangeLabel } from '@/lib/pollFormUtils';
 import { GROUP_SIZE_MIDPOINTS } from '@/types/database';
 import type { Respondent, Trip } from '@/types/database';
 
@@ -155,12 +156,24 @@ const stage = trip ? getTripStage(trip) : 'deciding';
 
   // Hero content
   const destPoll   = decidedPolls.find((p) => p.type === 'destination');
-  const datesPoll  = decidedPolls.find((p) => p.type === 'dates');
   const budgetPoll = decidedPolls.find((p) => p.type === 'budget');
 
-  const decidedDestination2 = destPoll?.poll_options.find((o) => o.id === destPoll.decided_option_id)?.label ?? null;
-  const decidedDatesLabel   = datesPoll?.poll_options.find((o) => o.id === datesPoll.decided_option_id)?.label ?? null;
-  const decidedBudgetLabel  = budgetPoll?.poll_options.find((o) => o.id === budgetPoll.decided_option_id)?.label ?? null;
+  // Both date-range and duration polls share type='dates'. Split them by whether
+  // the decided option label parses as a calendar date range.
+  const decidedDatesPolls = decidedPolls.filter((p) => p.type === 'dates');
+  const datesPoll = decidedDatesPolls.find((p) => {
+    const label = p.poll_options.find((o) => o.id === p.decided_option_id)?.label ?? '';
+    return parseDateRangeLabel(label) !== null;
+  });
+  const decidedDurationPoll = decidedDatesPolls.find((p) => {
+    const label = p.poll_options.find((o) => o.id === p.decided_option_id)?.label ?? '';
+    return parseDateRangeLabel(label) === null;
+  });
+
+  const decidedDestination2   = destPoll?.poll_options.find((o) => o.id === destPoll.decided_option_id)?.label ?? null;
+  const decidedDatesLabel     = datesPoll?.poll_options.find((o) => o.id === datesPoll.decided_option_id)?.label ?? null;
+  const decidedDurationLabel  = decidedDurationPoll?.poll_options.find((o) => o.id === decidedDurationPoll.decided_option_id)?.label ?? null;
+  const decidedBudgetLabel    = budgetPoll?.poll_options.find((o) => o.id === budgetPoll.decided_option_id)?.label ?? null;
 
   // Priority: planner-entered destination > decided poll > trip name
   const destination = trip?.destination ?? decidedDestination2 ?? trip?.name ?? '';
@@ -172,8 +185,9 @@ const stage = trip ? getTripStage(trip) : 'deciding';
   const dateDisplay = dateRange ?? decidedDatesLabel ?? null;
   const sizeLabel = trip?.group_size_precise != null ? `${trip.group_size_precise} people` : `${trip?.group_size_bucket ?? ''} people`;
 
-  // Budget: explicit trip field takes precedence, then decided poll
-  const budgetDisplay = trip?.budget_per_person ?? decidedBudgetLabel ?? null;
+  // Budget / duration: explicit trip field takes precedence, then decided poll
+  const budgetDisplay   = trip?.budget_per_person ?? decidedBudgetLabel ?? null;
+  const durationDisplay = trip?.trip_duration ?? decidedDurationLabel ?? null;
 
   // Poll badge
   const pollBadge = livePolls.length > 0 ? `${livePolls.length} live` : polls.length > 0 ? `${polls.length} polls` : null;
@@ -352,6 +366,10 @@ const stage = trip ? getTripStage(trip) : 'deciding';
             {nights ? (
               <View style={[styles.pill, { backgroundColor: hero.pillBg }]}>
                 <Text style={[styles.pillText, { color: hero.titleColor }]}>{nights} nights</Text>
+              </View>
+            ) : durationDisplay ? (
+              <View style={[styles.pill, { backgroundColor: hero.pillBg }]}>
+                <Text style={[styles.pillText, { color: hero.titleColor }]}>{durationDisplay}</Text>
               </View>
             ) : null}
             {budgetDisplay ? (

@@ -258,6 +258,7 @@ export default function EditPollScreen() {
   // Duration-mode state
   const [selectedDurations, setSelectedDurations] = useState<string[]>([]);
   const [customDurationInput, setCustomDurationInput] = useState('');
+  const [customDurationUnit, setCustomDurationUnit] = useState<'days' | 'weeks' | 'months'>('days');
 
   // ── Budget state ──
   const [budgetTitle, setBudgetTitle] = useState('');
@@ -336,8 +337,9 @@ export default function EditPollScreen() {
     setSelectedDurations((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]);
   }
   function addCustomDuration() {
-    const val = customDurationInput.trim();
-    if (!val) return;
+    const num = parseInt(customDurationInput, 10);
+    if (!customDurationInput || isNaN(num) || num < 1) return;
+    const val = `${num} ${customDurationUnit}`;
     if (!selectedDurations.includes(val)) setSelectedDurations((prev) => [...prev, val]);
     setCustomDurationInput('');
   }
@@ -572,13 +574,29 @@ export default function EditPollScreen() {
                   <View className="flex-row items-center gap-2">
                     <TextInput
                       value={customDurationInput}
-                      onChangeText={setCustomDurationInput}
-                      placeholder="Custom (e.g. long weekend)"
+                      onChangeText={(t) => setCustomDurationInput(t.replace(/[^0-9]/g, ''))}
                       onSubmitEditing={addCustomDuration}
                       returnKeyType="done"
-                      className="flex-1 min-h-[44px] rounded-2xl border border-neutral-200 bg-white px-4 py-2 text-sm text-neutral-800"
+                      keyboardType="number-pad"
+                      placeholder="e.g. 5"
+                      maxLength={3}
+                      className="w-20 min-h-[44px] rounded-2xl border border-neutral-200 bg-white px-4 py-2 text-sm text-neutral-800 text-center"
                       placeholderTextColor="#A8A8A8"
                     />
+                    {(['days', 'weeks', 'months'] as const).map((u) => {
+                      const sel = customDurationUnit === u;
+                      return (
+                        <Pressable
+                          key={u}
+                          onPress={() => setCustomDurationUnit(u)}
+                          className={['flex-1 items-center justify-center rounded-2xl border min-h-[44px] px-1', sel ? 'border-coral-500 bg-coral-500' : 'border-neutral-200 bg-white'].join(' ')}
+                          accessibilityRole="radio"
+                          accessibilityState={{ selected: sel }}
+                        >
+                          <Text className={['text-xs font-medium', sel ? 'text-white' : 'text-neutral-600'].join(' ')}>{u}</Text>
+                        </Pressable>
+                      );
+                    })}
                     <Pressable
                       onPress={addCustomDuration}
                       disabled={!customDurationInput.trim()}

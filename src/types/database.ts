@@ -47,6 +47,7 @@ export interface Trip {
   budget_per_person: string | null; // human-readable label e.g. "$500–$1k"
   destination: string | null;         // display name, e.g. "Dawn Ranch"
   destination_address: string | null; // full address for map links, e.g. "Dawn Ranch, CA 116, Guerneville, CA, USA"
+  trip_duration: string | null;       // planner's target length, e.g. "3 days"
   created_at: string;
   updated_at: string;
 }

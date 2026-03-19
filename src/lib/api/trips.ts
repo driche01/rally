@@ -19,6 +19,7 @@ export interface CreateTripInput {
   budget_per_person?: string | null;
   destination?: string | null;
   destination_address?: string | null;
+  trip_duration?: string | null;
 }
 
 export async function createTrip(input: CreateTripInput): Promise<Trip> {

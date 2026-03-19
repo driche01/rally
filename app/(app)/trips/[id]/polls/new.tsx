@@ -117,6 +117,7 @@ export default function NewPollScreen() {
   const [durationTitle, setDurationTitle] = useState('How long should the trip be?');
   const [selectedDurations, setSelectedDurations] = useState<string[]>([]);
   const [customDurationInput, setCustomDurationInput] = useState('');
+  const [customDurationUnit, setCustomDurationUnit] = useState<'days' | 'weeks' | 'months'>('days');
 
   // ── Budget state ──
   const [budgetTitle, setBudgetTitle] = useState("What's your budget?");
@@ -178,8 +179,9 @@ export default function NewPollScreen() {
     );
   }
   function addCustomDuration() {
-    const val = customDurationInput.trim();
-    if (!val) return;
+    const num = parseInt(customDurationInput, 10);
+    if (!customDurationInput || isNaN(num) || num < 1) return;
+    const val = `${num} ${customDurationUnit}`;
     if (!selectedDurations.includes(val)) setSelectedDurations((prev) => [...prev, val]);
     setCustomDurationInput('');
   }
@@ -573,6 +575,8 @@ export default function NewPollScreen() {
               onDurationToggle={toggleDuration}
               customDurationInput={customDurationInput}
               onCustomDurationInputChange={setCustomDurationInput}
+              customDurationUnit={customDurationUnit}
+              onCustomDurationUnitChange={setCustomDurationUnit}
               onCustomDurationAdd={addCustomDuration}
             />
           )}

@@ -170,6 +170,9 @@ function CalendarPicker({
 
 // ── DatesSection ──────────────────────────────────────────────────────────────
 
+const DURATION_UNITS = ['days', 'weeks', 'months'] as const;
+type DurationUnit = (typeof DURATION_UNITS)[number];
+
 export interface DatesSectionProps {
   datesTitle: string;
   onDatesTitleChange: (v: string) => void;
@@ -181,6 +184,8 @@ export interface DatesSectionProps {
   onDurationToggle: (d: string) => void;
   customDurationInput: string;
   onCustomDurationInputChange: (v: string) => void;
+  customDurationUnit: DurationUnit;
+  onCustomDurationUnitChange: (u: DurationUnit) => void;
   onCustomDurationAdd: () => void;
 }
 
@@ -195,6 +200,8 @@ export function DatesSection({
   onDurationToggle,
   customDurationInput,
   onCustomDurationInputChange,
+  customDurationUnit,
+  onCustomDurationUnitChange,
   onCustomDurationAdd,
 }: DatesSectionProps) {
   return (
@@ -248,17 +255,39 @@ export function DatesSection({
             ))}
         </View>
 
-        {/* Custom duration free-text input */}
+        {/* Custom duration: number + unit picker */}
         <View className="flex-row items-center gap-2">
           <TextInput
             value={customDurationInput}
-            onChangeText={onCustomDurationInputChange}
-            placeholder="Custom (e.g. long weekend)"
+            onChangeText={(t) => onCustomDurationInputChange(t.replace(/[^0-9]/g, ''))}
             onSubmitEditing={onCustomDurationAdd}
             returnKeyType="done"
-            className="flex-1 min-h-[44px] rounded-2xl border border-neutral-200 bg-white px-4 py-2 text-sm text-neutral-800"
+            keyboardType="number-pad"
+            placeholder="e.g. 5"
+            maxLength={3}
+            className="w-20 min-h-[44px] rounded-2xl border border-neutral-200 bg-white px-4 py-2 text-sm text-neutral-800 text-center"
             placeholderTextColor="#A8A8A8"
           />
+          {DURATION_UNITS.map((u) => {
+            const sel = customDurationUnit === u;
+            return (
+              <Pressable
+                key={u}
+                onPress={() => onCustomDurationUnitChange(u)}
+                className={[
+                  'flex-1 items-center justify-center rounded-2xl border min-h-[44px] px-1',
+                  sel ? 'border-coral-500 bg-coral-500' : 'border-neutral-200 bg-white',
+                ].join(' ')}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: sel }}
+                accessibilityLabel={u}
+              >
+                <Text className={['text-xs font-medium', sel ? 'text-white' : 'text-neutral-600'].join(' ')}>
+                  {u}
+                </Text>
+              </Pressable>
+            );
+          })}
           <Pressable
             onPress={onCustomDurationAdd}
             disabled={!customDurationInput.trim()}
@@ -267,13 +296,9 @@ export function DatesSection({
               customDurationInput.trim() ? 'bg-coral-500' : 'bg-neutral-200',
             ].join(' ')}
             accessibilityRole="button"
-            accessibilityLabel="add custom duration"
+            accessibilityLabel="Add custom duration"
           >
-            <Ionicons
-              name="add"
-              size={22}
-              color={customDurationInput.trim() ? 'white' : '#A8A8A8'}
-            />
+            <Ionicons name="add" size={22} color={customDurationInput.trim() ? 'white' : '#A8A8A8'} />
           </Pressable>
         </View>
       </View>

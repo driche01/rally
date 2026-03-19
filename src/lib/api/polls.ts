@@ -122,6 +122,12 @@ export async function decidePollAndSync(pollId: string, optionId: string): Promi
         .from('trips')
         .update({ start_date: toISODate(range.start), end_date: toISODate(range.end) })
         .eq('id', poll.trip_id);
+    } else {
+      // Duration poll (options like "3 days", "1 week") — sync to trip_duration
+      await supabase
+        .from('trips')
+        .update({ trip_duration: winningLabel })
+        .eq('id', poll.trip_id);
     }
   } else if (poll.type === 'budget') {
     await supabase
@@ -150,10 +156,11 @@ export async function decidePollAndSync(pollId: string, optionId: string): Promi
  * when it was decided.
  */
 export async function undecidePollAndClear(pollId: string): Promise<void> {
-  // Fetch type + trip_id before undeciding
+  // Fetch type, trip_id, and the decided option label before undeciding so we
+  // know which trip field to clear (date range → start/end, duration → trip_duration).
   const { data: poll, error } = await supabase
     .from('polls')
-    .select('type, trip_id')
+    .select('type, trip_id, decided_option_id, poll_options!poll_options_poll_id_fkey(id, label)')
     .eq('id', pollId)
     .single();
   if (error) throw error;
@@ -163,10 +170,20 @@ export async function undecidePollAndClear(pollId: string): Promise<void> {
 
   // Clear the corresponding trip fields
   if (poll.type === 'dates') {
-    await supabase
-      .from('trips')
-      .update({ start_date: null, end_date: null })
-      .eq('id', poll.trip_id);
+    const decidedLabel = (poll.poll_options as { id: string; label: string }[])
+      .find((o) => o.id === poll.decided_option_id)?.label ?? '';
+    const isDateRange = parseDateRangeLabel(decidedLabel) !== null;
+    if (isDateRange) {
+      await supabase
+        .from('trips')
+        .update({ start_date: null, end_date: null })
+        .eq('id', poll.trip_id);
+    } else {
+      await supabase
+        .from('trips')
+        .update({ trip_duration: null })
+        .eq('id', poll.trip_id);
+    }
   } else if (poll.type === 'budget') {
     await supabase
       .from('trips')
