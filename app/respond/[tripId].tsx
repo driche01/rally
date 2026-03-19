@@ -130,11 +130,20 @@ function parseDateRangeLabel(label: string): { start: Date; end: Date } | null {
     return d;
   }
 
-  // "Mar 15 – Apr 2" (cross-month) or "Mar 15 – Mar 20" (same month)
+  // "Mar 15 – Apr 2" (cross-month) or "Mar 15 – Mar 20" (same month, full)
   const rangeMatch = label.match(/^([A-Z][a-z]+)\s+(\d+)\s*[–\-]\s*([A-Z][a-z]+)\s+(\d+)$/);
   if (rangeMatch) {
     const start = dateFor(rangeMatch[1], parseInt(rangeMatch[2], 10));
     const end = dateFor(rangeMatch[3], parseInt(rangeMatch[4], 10));
+    if (isNaN(start.getTime())) return null;
+    return { start, end };
+  }
+
+  // "Apr 1–30" (same month, compact — no second month name)
+  const compactMatch = label.match(/^([A-Z][a-z]+)\s+(\d+)[–\-](\d+)$/);
+  if (compactMatch) {
+    const start = dateFor(compactMatch[1], parseInt(compactMatch[2], 10));
+    const end = dateFor(compactMatch[1], parseInt(compactMatch[3], 10));
     if (isNaN(start.getTime())) return null;
     return { start, end };
   }
@@ -240,6 +249,14 @@ function DatesPollCard({
     );
   }
 
+  // Per-day poll: every option is a single day (start === end)
+  const isPerDayPoll = parsedOptions.every((o) => {
+    const { start, end } = o.range;
+    return start.getFullYear() === end.getFullYear() &&
+      start.getMonth() === end.getMonth() &&
+      start.getDate() === end.getDate();
+  });
+
   const allDates = parsedOptions.flatMap((o) => [o.range.start, o.range.end]);
   const minDate = new Date(Math.min(...allDates.map((d) => d.getTime())));
   const maxDate = new Date(Math.max(...allDates.map((d) => d.getTime())));
@@ -281,7 +298,9 @@ function DatesPollCard({
     <View className="mb-5">
       <Text className="mb-3 text-lg font-semibold text-neutral-800">{poll.title}</Text>
       {poll.allow_multi_select ? (
-        <Text className="mb-2 text-xs text-neutral-400">Tap all dates you're available</Text>
+        <Text className="mb-2 text-xs text-neutral-400">
+          {isPerDayPoll ? "Tap each day you're available" : "Tap all dates you're available"}
+        </Text>
       ) : null}
 
       <View className="rounded-2xl border border-neutral-200 bg-white p-4">
@@ -370,18 +389,27 @@ function DatesPollCard({
         </View>
       </View>
 
-      {/* Selected range chips */}
+      {/* Selection summary */}
       {selectedOptions.length > 0 ? (
-        <View className="mt-3 flex-row flex-wrap gap-2">
-          {poll.poll_options
-            .filter((o) => selectedOptions.includes(o.id))
-            .map((o) => (
-              <View key={o.id} className="flex-row items-center gap-1 rounded-full bg-coral-50 px-3 py-1">
-                <Ionicons name="checkmark-circle" size={13} color="#FF6B5B" />
-                <Text className="text-xs font-medium text-coral-600">{o.label}</Text>
-              </View>
-            ))}
-        </View>
+        isPerDayPoll ? (
+          <View className="mt-3 flex-row items-center gap-1.5">
+            <Ionicons name="checkmark-circle" size={14} color="#FF6B5B" />
+            <Text className="text-xs font-medium text-coral-600">
+              {selectedOptions.length} day{selectedOptions.length !== 1 ? 's' : ''} selected
+            </Text>
+          </View>
+        ) : (
+          <View className="mt-3 flex-row flex-wrap gap-2">
+            {poll.poll_options
+              .filter((o) => selectedOptions.includes(o.id))
+              .map((o) => (
+                <View key={o.id} className="flex-row items-center gap-1 rounded-full bg-coral-50 px-3 py-1">
+                  <Ionicons name="checkmark-circle" size={13} color="#FF6B5B" />
+                  <Text className="text-xs font-medium text-coral-600">{o.label}</Text>
+                </View>
+              ))}
+          </View>
+        )
       ) : null}
     </View>
   );
@@ -403,6 +431,31 @@ function PollResultsCard({
     totalVotes > 0
       ? Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0]
       : null;
+
+  // Detect per-day poll: all options are single-day labels
+  const parsedResultOptions = poll.poll_options
+    .map((opt) => ({ ...opt, range: parseDateRangeLabel(opt.label) }))
+    .filter((opt): opt is typeof opt & { range: { start: Date; end: Date } } => opt.range !== null);
+
+  const isPerDayResults =
+    parsedResultOptions.length > 0 &&
+    parsedResultOptions.every((o) => {
+      const { start, end } = o.range;
+      return start.getFullYear() === end.getFullYear() &&
+        start.getMonth() === end.getMonth() &&
+        start.getDate() === end.getDate();
+    });
+
+  if (isPerDayResults) {
+    return (
+      <DateResultsCalendar
+        poll={poll}
+        parsedOptions={parsedResultOptions}
+        counts={counts}
+        myOptionIds={myOptionIds}
+      />
+    );
+  }
 
   return (
     <View className="mb-5">
@@ -452,6 +505,177 @@ function PollResultsCard({
           ? "You're the first — results will appear as others respond."
           : `${totalVotes} vote${totalVotes !== 1 ? 's' : ''} so far`}
       </Text>
+    </View>
+  );
+}
+
+// ─── Calendar heatmap for per-day date poll results ───────────────────────────
+
+function DateResultsCalendar({
+  poll,
+  parsedOptions,
+  counts,
+  myOptionIds,
+}: {
+  poll: PollWithOptions;
+  parsedOptions: Array<{ id: string; label: string; range: { start: Date; end: Date } }>;
+  counts: Record<string, number>;
+  myOptionIds: string[];
+}) {
+  const maxVotes = Math.max(...parsedOptions.map((o) => counts[o.id] ?? 0), 1);
+  const allDates = parsedOptions.map((o) => o.range.start);
+  const minDate = new Date(Math.min(...allDates.map((d) => d.getTime())));
+  const maxDate = new Date(Math.max(...allDates.map((d) => d.getTime())));
+
+  const [viewYear, setViewYear] = useState(minDate.getFullYear());
+  const [viewMonth, setViewMonth] = useState(minDate.getMonth());
+
+  const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const trailingNulls = (7 - ((firstDayOfWeek + daysInMonth) % 7)) % 7;
+  const cells: (Date | null)[] = [
+    ...Array(firstDayOfWeek).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => new Date(viewYear, viewMonth, i + 1)),
+    ...Array(trailingNulls).fill(null),
+  ];
+
+  function getOptionForDate(date: Date) {
+    const t = date.getTime();
+    return parsedOptions.find((o) => {
+      const s = new Date(o.range.start.getFullYear(), o.range.start.getMonth(), o.range.start.getDate()).getTime();
+      return t === s;
+    });
+  }
+
+  const canGoPrev =
+    viewYear > minDate.getFullYear() ||
+    (viewYear === minDate.getFullYear() && viewMonth > minDate.getMonth());
+  const canGoNext =
+    viewYear < maxDate.getFullYear() ||
+    (viewYear === maxDate.getFullYear() && viewMonth < maxDate.getMonth());
+
+  const monthLabel = new Date(viewYear, viewMonth, 1).toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric',
+  });
+
+  const totalResponders = Math.max(...Object.values(counts), 0);
+
+  return (
+    <View className="mb-5">
+      <Text className="mb-1 text-sm font-semibold text-neutral-700">{poll.title}</Text>
+      <Text className="mb-3 text-xs text-neutral-400">
+        {totalResponders === 0
+          ? "You're the first — results will appear as others respond."
+          : 'Darker = more people available'}
+      </Text>
+
+      <View className="rounded-2xl border border-neutral-200 bg-white p-4">
+        {/* Month navigation */}
+        <View className="mb-3 flex-row items-center justify-between">
+          <Pressable
+            onPress={() => {
+              const d = new Date(viewYear, viewMonth - 1, 1);
+              setViewYear(d.getFullYear());
+              setViewMonth(d.getMonth());
+            }}
+            disabled={!canGoPrev}
+            className="rounded-lg p-1.5"
+          >
+            <Ionicons name="chevron-back" size={18} color={canGoPrev ? '#6B7280' : '#D1D5DB'} />
+          </Pressable>
+          <Text className="text-sm font-semibold text-neutral-700">{monthLabel}</Text>
+          <Pressable
+            onPress={() => {
+              const d = new Date(viewYear, viewMonth + 1, 1);
+              setViewYear(d.getFullYear());
+              setViewMonth(d.getMonth());
+            }}
+            disabled={!canGoNext}
+            className="rounded-lg p-1.5"
+          >
+            <Ionicons name="chevron-forward" size={18} color={canGoNext ? '#6B7280' : '#D1D5DB'} />
+          </Pressable>
+        </View>
+
+        {/* Day headers */}
+        <View className="mb-1 flex-row">
+          {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => (
+            <Text key={d} className="flex-1 text-center text-xs font-medium text-neutral-400">
+              {d}
+            </Text>
+          ))}
+        </View>
+
+        {/* Calendar grid */}
+        <View className="flex-row flex-wrap">
+          {cells.map((date, i) => {
+            if (!date) {
+              return <View key={`e-${i}`} style={{ width: `${100 / 7}%`, aspectRatio: 1 }} />;
+            }
+            const opt = getOptionForDate(date);
+            const isInRange = opt !== undefined;
+            const votes = opt ? (counts[opt.id] ?? 0) : 0;
+            const isMyPick = opt ? myOptionIds.includes(opt.id) : false;
+            // Intensity 0–1 based on votes vs max
+            const intensity = isInRange && maxVotes > 0 ? votes / maxVotes : 0;
+            // Coral color: interpolate from #FFF0EE (0 votes) to #D85A30 (max votes)
+            const r = Math.round(255 - intensity * (255 - 216));
+            const g = Math.round(240 - intensity * (240 - 90));
+            const b = Math.round(238 - intensity * (238 - 48));
+            const bgColor = isInRange
+              ? votes > 0
+                ? `rgb(${r},${g},${b})`
+                : '#F5F5F4'
+              : 'transparent';
+            const textColor = isInRange
+              ? intensity > 0.5 ? '#FFFFFF' : '#6B7280'
+              : '#D1D5DB';
+
+            return (
+              <View
+                key={date.toISOString()}
+                style={{ width: `${100 / 7}%`, aspectRatio: 1, alignItems: 'center', justifyContent: 'center' }}
+              >
+                <View
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 16,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: bgColor,
+                    borderWidth: isMyPick ? 2 : 0,
+                    borderColor: '#FF6B5B',
+                  }}
+                >
+                  <Text style={{ fontSize: 12, fontWeight: isInRange ? '600' : '400', color: textColor }}>
+                    {date.getDate()}
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* Legend */}
+      <View className="mt-2 flex-row items-center gap-2">
+        <View className="flex-row items-center gap-1">
+          <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#F5F5F4' }} />
+          <Text className="text-xs text-neutral-400">No votes</Text>
+        </View>
+        <View className="flex-row items-center gap-1">
+          <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#FF6B5B' }} />
+          <Text className="text-xs text-neutral-400">Popular</Text>
+        </View>
+        {myOptionIds.length > 0 ? (
+          <View className="flex-row items-center gap-1">
+            <View style={{ width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: '#FF6B5B' }} />
+            <Text className="text-xs text-neutral-400">Your picks</Text>
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 }
