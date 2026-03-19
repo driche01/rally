@@ -130,11 +130,20 @@ function parseDateRangeLabel(label: string): { start: Date; end: Date } | null {
     return d;
   }
 
-  // "Mar 15 – Apr 2" (cross-month) or "Mar 15 – Mar 20" (same month)
+  // "Mar 15 – Apr 2" (cross-month) or "Mar 15 – Mar 20" (same month, full)
   const rangeMatch = label.match(/^([A-Z][a-z]+)\s+(\d+)\s*[–\-]\s*([A-Z][a-z]+)\s+(\d+)$/);
   if (rangeMatch) {
     const start = dateFor(rangeMatch[1], parseInt(rangeMatch[2], 10));
     const end = dateFor(rangeMatch[3], parseInt(rangeMatch[4], 10));
+    if (isNaN(start.getTime())) return null;
+    return { start, end };
+  }
+
+  // "Apr 1–30" (same month, compact — no second month name)
+  const compactMatch = label.match(/^([A-Z][a-z]+)\s+(\d+)[–\-](\d+)$/);
+  if (compactMatch) {
+    const start = dateFor(compactMatch[1], parseInt(compactMatch[2], 10));
+    const end = dateFor(compactMatch[1], parseInt(compactMatch[3], 10));
     if (isNaN(start.getTime())) return null;
     return { start, end };
   }
