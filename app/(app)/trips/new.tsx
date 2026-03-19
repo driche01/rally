@@ -7,7 +7,6 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
@@ -138,23 +137,26 @@ export default function NewTripScreen() {
       onClose={() => setDatePickerVisible(false)}
     />
     <KeyboardAvoidingView
-      style={styles.flex}
+      className="flex-1 bg-neutral-50"
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+      <View
+        className="flex-row items-center justify-between px-6 pb-4"
+        style={{ paddingTop: insets.top + 16 }}
+      >
         <TouchableOpacity onPress={() => router.back()} accessibilityRole="button">
-          <Text style={styles.cancelText}>Cancel</Text>
+          <Text className="text-base text-coral-500">Cancel</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>New rally</Text>
+        <Text className="text-lg font-semibold text-[#262626]">New rally</Text>
         <View style={{ width: 60 }} />
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]}
+        contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: insets.bottom + 32 }}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.form}>
+        <View className="gap-6 pt-4">
           {/* Trip name */}
           <Input
             label="Trip name"
@@ -168,38 +170,38 @@ export default function NewTripScreen() {
           />
 
           {/* Group size — exact pills */}
-          <View style={styles.section}>
-            <Text style={styles.label}>How many people?</Text>
-            <View style={styles.sizeGrid}>
+          <View className="gap-2">
+            <Text className="text-sm font-medium text-[#404040]">How many people?</Text>
+            <View className="flex-row flex-wrap gap-2">
               {EXACT_SIZES.map((n) => {
                 const sel = exactSize === n && !isCustom;
                 return (
                   <Pressable
                     key={n}
                     onPress={() => { setExactSize(n); setIsCustom(false); setErrors((e) => ({ ...e, groupSize: undefined })); }}
-                    style={[styles.sizeBox, sel && styles.sizeBoxSel]}
+                    className={`w-[52px] h-[52px] items-center justify-center rounded-xl border-[1.5px] ${sel ? 'border-coral-500 bg-coral-50' : 'border-neutral-200 bg-white'}`}
                     accessibilityRole="radio"
                     accessibilityState={{ selected: sel }}
                     accessibilityLabel={`${n} people`}
                   >
-                    <Text style={[styles.sizeNum, sel && styles.sizeNumSel]}>{n}</Text>
+                    <Text className={`text-base font-semibold ${sel ? 'text-coral-500' : 'text-[#404040]'}`}>{n}</Text>
                   </Pressable>
                 );
               })}
               <Pressable
                 onPress={() => { setIsCustom(true); setExactSize(null); setErrors((e) => ({ ...e, groupSize: undefined })); }}
-                style={[styles.sizeBox, styles.sizeBoxCustom, isCustom && styles.sizeBoxSel]}
+                className={`h-[52px] px-3.5 items-center justify-center rounded-xl border-[1.5px] ${isCustom ? 'border-coral-500 bg-coral-50' : 'border-neutral-200 bg-white'}`}
                 accessibilityRole="radio"
                 accessibilityState={{ selected: isCustom }}
                 accessibilityLabel="Custom number"
               >
-                <Text style={[styles.sizeNum, isCustom && styles.sizeNumSel]}>Custom</Text>
+                <Text className={`text-base font-semibold ${isCustom ? 'text-coral-500' : 'text-[#404040]'}`}>Custom</Text>
               </Pressable>
             </View>
             {isCustom && (
-              <View style={styles.customRow}>
+              <View className="flex-row items-center gap-2 mt-1">
                 <TextInput
-                  style={styles.customInput}
+                  className="h-11 w-[100px] border-[1.5px] border-neutral-200 rounded-[10px] px-3 text-base text-[#262626] bg-white"
                   placeholder="e.g. 25"
                   keyboardType="number-pad"
                   value={customInput}
@@ -207,31 +209,31 @@ export default function NewTripScreen() {
                   maxLength={3}
                   placeholderTextColor="#a3a3a3"
                 />
-                <Text style={styles.customSuffix}>people</Text>
+                <Text className="text-sm text-[#737373]">people</Text>
               </View>
             )}
-            {errors.groupSize ? <Text style={styles.errorText}>{errors.groupSize}</Text> : null}
+            {errors.groupSize ? <Text className="text-[13px] text-red-500">{errors.groupSize}</Text> : null}
           </View>
 
           {/* Trip type (optional, multi-select) */}
-          <View style={styles.section}>
-            <Text style={styles.label}>
+          <View className="gap-2">
+            <Text className="text-sm font-medium text-[#404040]">
               Trip type{' '}
-              <Text style={styles.optional}>(optional, pick all that apply)</Text>
+              <Text className="font-normal text-[#a3a3a3]">(optional, pick all that apply)</Text>
             </Text>
-            <View style={styles.pillWrap}>
+            <View className="flex-row flex-wrap gap-2">
               {TRIP_TYPES.map((type) => {
                 const sel = tripTypes.includes(type);
                 return (
                   <Pressable
                     key={type}
                     onPress={() => toggleTripType(type)}
-                    style={[styles.pill, sel && styles.pillSel]}
+                    className={`px-3.5 py-2 rounded-full border-[1.5px] ${sel ? 'border-coral-500 bg-coral-50' : 'border-neutral-200 bg-white'}`}
                     accessibilityRole="checkbox"
                     accessibilityState={{ checked: sel }}
                     accessibilityLabel={type}
                   >
-                    <Text style={[styles.pillText, sel && styles.pillTextSel]}>{type}</Text>
+                    <Text className={`text-sm font-medium ${sel ? 'text-coral-500' : 'text-[#525252]'}`}>{type}</Text>
                   </Pressable>
                 );
               })}
@@ -239,20 +241,20 @@ export default function NewTripScreen() {
           </View>
 
           {/* Travel window (optional) */}
-          <View style={styles.section}>
-            <Text style={styles.label}>
+          <View className="gap-2">
+            <Text className="text-sm font-medium text-[#404040]">
               Travel window{' '}
-              <Text style={styles.optional}>(optional)</Text>
+              <Text className="font-normal text-[#a3a3a3]">(optional)</Text>
             </Text>
-            <Text style={styles.hint}>Helps give context to date polls</Text>
-            <View style={styles.seasonRow}>
+            <Text className="text-xs text-[#a3a3a3] -mt-1">Helps give context to date polls</Text>
+            <View className="flex-row gap-2">
               {['Winter', 'Spring', 'Summer', 'Fall'].map((season) => {
                 const sel = selectedSeasons.includes(season);
                 return (
                   <Pressable
                     key={season}
                     onPress={() => toggleSeason(season)}
-                    style={[styles.seasonPill, sel && styles.seasonPillSel]}
+                    className={`flex-1 flex-row items-center justify-center gap-1.5 rounded-full border-[1.5px] py-2.5 ${sel ? 'border-coral-500 bg-coral-500' : 'border-neutral-200 bg-white'}`}
                     accessibilityRole="checkbox"
                     accessibilityState={{ checked: sel }}
                     accessibilityLabel={season}
@@ -262,7 +264,7 @@ export default function NewTripScreen() {
                       size={14}
                       color={sel ? 'white' : '#525252'}
                     />
-                    <Text style={[styles.seasonText, sel && styles.seasonTextSel]}>{season}</Text>
+                    <Text className={`text-[13px] font-medium ${sel ? 'text-white' : 'text-[#525252]'}`}>{season}</Text>
                   </Pressable>
                 );
               })}
@@ -270,9 +272,9 @@ export default function NewTripScreen() {
           </View>
 
           {/* Destination (optional) */}
-          <View style={styles.section}>
-            <Text style={styles.label}>
-              Destination <Text style={styles.optional}>(optional)</Text>
+          <View className="gap-2">
+            <Text className="text-sm font-medium text-[#404040]">
+              Destination <Text className="font-normal text-[#a3a3a3]">(optional)</Text>
             </Text>
             <PlacesAutocompleteInput
               value={destination}
@@ -284,25 +286,25 @@ export default function NewTripScreen() {
           </View>
 
           {/* Trip dates (optional) */}
-          <View style={styles.section}>
-            <Text style={styles.label}>
+          <View className="gap-2">
+            <Text className="text-sm font-medium text-[#404040]">
               Trip dates{' '}
-              <Text style={styles.optional}>(optional)</Text>
+              <Text className="font-normal text-[#a3a3a3]">(optional)</Text>
             </Text>
             <TouchableOpacity
-              style={styles.dateTrigger}
+              className="flex-row items-center gap-2.5 border-[1.5px] border-neutral-200 rounded-xl bg-white px-3.5 py-[13px]"
               onPress={() => setDatePickerVisible(true)}
               activeOpacity={0.7}
             >
               <Ionicons name="calendar-outline" size={18} color="#737373" />
               {startDate ? (
-                <View style={styles.dateTriggerInner}>
-                  <Text style={styles.dateTriggerValue}>{startDate}</Text>
-                  <Text style={styles.dateTriggerSep}>→</Text>
-                  <Text style={styles.dateTriggerValue}>{endDate ?? 'No end date'}</Text>
+                <View className="flex-1 flex-row items-center gap-1.5">
+                  <Text className="text-sm font-medium text-[#262626]">{startDate}</Text>
+                  <Text className="text-[13px] text-[#a3a3a3]">→</Text>
+                  <Text className="text-sm font-medium text-[#262626]">{endDate ?? 'No end date'}</Text>
                 </View>
               ) : (
-                <Text style={styles.dateTriggerPlaceholder}>Add trip dates</Text>
+                <Text className="flex-1 text-sm text-[#a3a3a3]">Add trip dates</Text>
               )}
               {startDate && (
                 <TouchableOpacity
@@ -316,24 +318,24 @@ export default function NewTripScreen() {
           </View>
 
           {/* Budget per person (optional) */}
-          <View style={styles.section}>
-            <Text style={styles.label}>
+          <View className="gap-2">
+            <Text className="text-sm font-medium text-[#404040]">
               Budget per person{' '}
-              <Text style={styles.optional}>(optional)</Text>
+              <Text className="font-normal text-[#a3a3a3]">(optional)</Text>
             </Text>
-            <View style={styles.pillWrap}>
+            <View className="flex-row flex-wrap gap-2">
               {BUDGET_OPTIONS.map((opt) => {
                 const sel = budget === opt;
                 return (
                   <Pressable
                     key={opt}
                     onPress={() => setBudget(sel ? null : opt)}
-                    style={[styles.pill, sel && styles.pillSel]}
+                    className={`px-3.5 py-2 rounded-full border-[1.5px] ${sel ? 'border-coral-500 bg-coral-50' : 'border-neutral-200 bg-white'}`}
                     accessibilityRole="radio"
                     accessibilityState={{ selected: sel }}
                     accessibilityLabel={opt}
                   >
-                    <Text style={[styles.pillText, sel && styles.pillTextSel]}>{opt}</Text>
+                    <Text className={`text-sm font-medium ${sel ? 'text-coral-500' : 'text-[#525252]'}`}>{opt}</Text>
                   </Pressable>
                 );
               })}
@@ -349,90 +351,3 @@ export default function NewTripScreen() {
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: '#fafafa' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingBottom: 16,
-  },
-  cancelText: { fontSize: 16, color: '#D85A30' },
-  headerTitle: { fontSize: 18, fontWeight: '600', color: '#262626' },
-  scroll: { paddingHorizontal: 24 },
-  form: { gap: 24, paddingTop: 16 },
-  section: { gap: 8 },
-  label: { fontSize: 14, fontWeight: '500', color: '#404040' },
-  optional: { fontWeight: '400', color: '#a3a3a3' },
-  hint: { fontSize: 12, color: '#a3a3a3', marginTop: -4 },
-  errorText: { fontSize: 13, color: '#ef4444' },
-
-  // Size grid
-  sizeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  sizeBox: {
-    width: 52, height: 52,
-    alignItems: 'center', justifyContent: 'center',
-    borderRadius: 12, borderWidth: 1.5,
-    borderColor: '#e5e5e5', backgroundColor: '#fff',
-  },
-  sizeBoxSel: { borderColor: '#D85A30', backgroundColor: '#fff5f2' },
-  sizeBoxCustom: { width: 'auto', paddingHorizontal: 14, height: 52 },
-  sizeNum: { fontSize: 16, fontWeight: '600', color: '#404040' },
-  sizeNumSel: { color: '#D85A30' },
-  customRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
-  customInput: {
-    height: 44, width: 100, borderWidth: 1.5,
-    borderColor: '#e5e5e5', borderRadius: 10,
-    paddingHorizontal: 12, fontSize: 16, color: '#262626',
-    backgroundColor: '#fff',
-  },
-  customSuffix: { fontSize: 14, color: '#737373' },
-
-  // Generic pills
-  pillWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  pill: {
-    paddingHorizontal: 14, paddingVertical: 8,
-    borderRadius: 999, borderWidth: 1.5,
-    borderColor: '#e5e5e5', backgroundColor: '#fff',
-  },
-  pillSel: { borderColor: '#D85A30', backgroundColor: '#fff5f2' },
-  pillText: { fontSize: 14, fontWeight: '500', color: '#525252' },
-  pillTextSel: { color: '#D85A30' },
-
-  // Season pills
-  seasonRow: { flexDirection: 'row', gap: 8 },
-  seasonPill: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 6, borderRadius: 999, borderWidth: 1.5,
-    borderColor: '#e5e5e5', backgroundColor: '#fff',
-    paddingVertical: 10,
-  },
-  seasonPillSel: { borderColor: '#D85A30', backgroundColor: '#D85A30' },
-  seasonText: { fontSize: 13, fontWeight: '500', color: '#525252' },
-  seasonTextSel: { color: '#fff' },
-
-  // Date fields
-  dateRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  dateField: { flex: 1, gap: 4 },
-  dateFieldLabel: { fontSize: 12, color: '#737373', fontWeight: '500' },
-  dateInput: {
-    height: 44, borderWidth: 1.5,
-    borderColor: '#e5e5e5', borderRadius: 10,
-    paddingHorizontal: 12, fontSize: 15, color: '#262626',
-    backgroundColor: '#fff',
-  },
-  dateSep: { fontSize: 16, color: '#a3a3a3', marginTop: 18 },
-
-  // Date trigger
-  dateTrigger: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    borderWidth: 1.5, borderColor: '#e5e5e5', borderRadius: 12,
-    backgroundColor: '#fff', paddingHorizontal: 14, paddingVertical: 13,
-  },
-  dateTriggerInner: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
-  dateTriggerValue: { fontSize: 14, fontWeight: '500', color: '#262626' },
-  dateTriggerSep: { fontSize: 13, color: '#a3a3a3' },
-  dateTriggerPlaceholder: { flex: 1, fontSize: 14, color: '#a3a3a3' },
-});
