@@ -22,6 +22,148 @@ import { useTrip } from '@/hooks/useTrips';
 import { getParticipationRate, type PollWithOptions, type GroupSizeBucket } from '@/types/database';
 import { useState, useMemo, useCallback } from 'react';
 import { capture, Events } from '@/lib/analytics';
+import { parseDateRangeLabel } from '@/lib/pollFormUtils';
+
+// ─── Per-day poll detection ───────────────────────────────────────────────────
+
+function isPerDayPoll(poll: PollWithOptions): boolean {
+  if (poll.poll_options.length === 0) return false;
+  return poll.poll_options.every((opt) => {
+    const r = parseDateRangeLabel(opt.label);
+    if (!r) return false;
+    return r.start.getFullYear() === r.end.getFullYear() &&
+      r.start.getMonth() === r.end.getMonth() &&
+      r.start.getDate() === r.end.getDate();
+  });
+}
+
+// ─── Calendar heatmap for per-day polls (planner view) ───────────────────────
+
+function PollCalendarView({
+  poll,
+  counts,
+  onDecide,
+}: {
+  poll: PollWithOptions;
+  counts: Record<string, number>;
+  onDecide: (optionId: string, label: string) => void;
+}) {
+  const parsedOptions = poll.poll_options
+    .map((opt) => ({ ...opt, range: parseDateRangeLabel(opt.label)! }))
+    .filter((opt) => opt.range != null);
+
+  const allDates = parsedOptions.map((o) => o.range.start);
+  const minDate = new Date(Math.min(...allDates.map((d) => d.getTime())));
+  const maxDate = new Date(Math.max(...allDates.map((d) => d.getTime())));
+  const maxVotes = Math.max(...parsedOptions.map((o) => counts[o.id] ?? 0), 1);
+
+  const [viewYear, setViewYear] = useState(minDate.getFullYear());
+  const [viewMonth, setViewMonth] = useState(minDate.getMonth());
+
+  const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const trailingNulls = (7 - ((firstDayOfWeek + daysInMonth) % 7)) % 7;
+  const cells: (Date | null)[] = [
+    ...Array(firstDayOfWeek).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => new Date(viewYear, viewMonth, i + 1)),
+    ...Array(trailingNulls).fill(null),
+  ];
+
+  function getOptionForDate(date: Date) {
+    const t = date.getTime();
+    return parsedOptions.find((o) => {
+      const s = new Date(o.range.start.getFullYear(), o.range.start.getMonth(), o.range.start.getDate()).getTime();
+      return t === s;
+    });
+  }
+
+  const canGoPrev = viewYear > minDate.getFullYear() || (viewYear === minDate.getFullYear() && viewMonth > minDate.getMonth());
+  const canGoNext = viewYear < maxDate.getFullYear() || (viewYear === maxDate.getFullYear() && viewMonth < maxDate.getMonth());
+  const monthLabel = new Date(viewYear, viewMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const canDecide = ['live', 'closed', 'decided'].includes(poll.status);
+
+  return (
+    <View>
+      {/* Month navigation */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <Pressable
+          onPress={() => { const d = new Date(viewYear, viewMonth - 1, 1); setViewYear(d.getFullYear()); setViewMonth(d.getMonth()); }}
+          disabled={!canGoPrev}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="chevron-back" size={18} color={canGoPrev ? '#6B7280' : '#D1D5DB'} />
+        </Pressable>
+        <Text style={{ fontSize: 13, fontWeight: '600', color: '#374151' }}>{monthLabel}</Text>
+        <Pressable
+          onPress={() => { const d = new Date(viewYear, viewMonth + 1, 1); setViewYear(d.getFullYear()); setViewMonth(d.getMonth()); }}
+          disabled={!canGoNext}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="chevron-forward" size={18} color={canGoNext ? '#6B7280' : '#D1D5DB'} />
+        </Pressable>
+      </View>
+
+      {/* Day headers */}
+      <View style={{ flexDirection: 'row', marginBottom: 4 }}>
+        {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => (
+          <Text key={d} style={{ flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '500', color: '#9CA3AF' }}>{d}</Text>
+        ))}
+      </View>
+
+      {/* Calendar grid */}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+        {cells.map((date, i) => {
+          if (!date) return <View key={`e-${i}`} style={{ width: `${100 / 7}%` as any, aspectRatio: 1 }} />;
+          const opt = getOptionForDate(date);
+          const isInRange = opt !== undefined;
+          const votes = opt ? (counts[opt.id] ?? 0) : 0;
+          const isDecided = opt ? poll.decided_option_id === opt.id : false;
+          const intensity = isInRange && maxVotes > 0 ? votes / maxVotes : 0;
+          const r = Math.round(255 - intensity * (255 - 216));
+          const g = Math.round(240 - intensity * (240 - 90));
+          const b = Math.round(238 - intensity * (238 - 48));
+          const bgColor = isDecided ? '#D85A30' : isInRange ? (votes > 0 ? `rgb(${r},${g},${b})` : '#F5F5F4') : 'transparent';
+          const textColor = isDecided ? '#FFFFFF' : isInRange ? (intensity > 0.5 ? '#FFFFFF' : '#6B7280') : '#D1D5DB';
+
+          return (
+            <Pressable
+              key={date.toISOString()}
+              onPress={isInRange && canDecide && opt ? () => onDecide(opt.id, opt.label) : undefined}
+              disabled={!isInRange || !canDecide}
+              style={{ width: `${100 / 7}%` as any, aspectRatio: 1, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <View style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: bgColor }}>
+                {isDecided ? (
+                  <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+                ) : (
+                  <Text style={{ fontSize: 12, fontWeight: isInRange ? '600' : '400', color: textColor }}>
+                    {date.getDate()}
+                  </Text>
+                )}
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {/* Legend */}
+      <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#F5F5F4' }} />
+          <Text style={{ fontSize: 11, color: '#9CA3AF' }}>No votes</Text>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#FF6B5B' }} />
+          <Text style={{ fontSize: 11, color: '#9CA3AF' }}>Popular</Text>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#D85A30' }} />
+          <Text style={{ fontSize: 11, color: '#9CA3AF' }}>Decided</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
 
 // ─── Re-use PollResultBar from the existing screen ───────────────────────────
 
@@ -90,6 +232,8 @@ const PollCard = memo(function PollCard({
   const hasResponses = totalVotes > 0;
   const leadingOptionId =
     totalVotes > 0 ? Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] : null;
+  const showCalendarToggle = isPerDayPoll(poll);
+  const [calendarView, setCalendarView] = useState(false);
 
   const statusBadge: Record<string, 'muted' | 'success' | 'default' | 'coral'> = {
     draft: 'muted', live: 'success', closed: 'default', decided: 'coral',
@@ -130,9 +274,20 @@ const PollCard = memo(function PollCard({
       <View className="flex-row items-start justify-between gap-2">
         <View className="flex-1 gap-1.5">
           <Text className="text-base font-semibold text-neutral-800">{poll.title}</Text>
-          <Badge variant={statusBadge[poll.status] ?? 'default'}>
-            {poll.status.charAt(0).toUpperCase() + poll.status.slice(1)}
-          </Badge>
+          <View className="flex-row items-center gap-2">
+            <Badge variant={statusBadge[poll.status] ?? 'default'}>
+              {poll.status.charAt(0).toUpperCase() + poll.status.slice(1)}
+            </Badge>
+            {showCalendarToggle ? (
+              <Pressable
+                onPress={() => setCalendarView((v) => !v)}
+                className="flex-row items-center gap-1 rounded-lg border border-neutral-200 px-2 py-0.5"
+              >
+                <Ionicons name={calendarView ? 'list-outline' : 'calendar-outline'} size={12} color="#6B7280" />
+                <Text className="text-xs text-neutral-500">{calendarView ? 'List' : 'Calendar'}</Text>
+              </Pressable>
+            ) : null}
+          </View>
         </View>
         <View className="flex-row items-center gap-2">
           {isEditable && (
@@ -201,24 +356,32 @@ const PollCard = memo(function PollCard({
 
       {poll.poll_options.length > 0 ? (
         <View className="mt-4 gap-3">
-          {poll.poll_options.map((opt) => {
-            const canDecide = ['live', 'closed', 'decided'].includes(poll.status);
-            return (
-              <Pressable
-                key={opt.id}
-                onPress={canDecide ? () => handleDecide(opt.id, opt.label) : undefined}
-                disabled={!canDecide}
-              >
-                <PollResultBar
-                  label={opt.label}
-                  votes={counts[opt.id] ?? 0}
-                  total={totalVotes}
-                  isLeading={leadingOptionId === opt.id}
-                  isDecided={poll.decided_option_id === opt.id}
-                />
-              </Pressable>
-            );
-          })}
+          {showCalendarToggle && calendarView ? (
+            <PollCalendarView
+              poll={poll}
+              counts={counts}
+              onDecide={handleDecide}
+            />
+          ) : (
+            poll.poll_options.map((opt) => {
+              const canDecide = ['live', 'closed', 'decided'].includes(poll.status);
+              return (
+                <Pressable
+                  key={opt.id}
+                  onPress={canDecide ? () => handleDecide(opt.id, opt.label) : undefined}
+                  disabled={!canDecide}
+                >
+                  <PollResultBar
+                    label={opt.label}
+                    votes={counts[opt.id] ?? 0}
+                    total={totalVotes}
+                    isLeading={leadingOptionId === opt.id}
+                    isDecided={poll.decided_option_id === opt.id}
+                  />
+                </Pressable>
+              );
+            })
+          )}
           {poll.status !== 'draft' ? (
             <Text className="mt-1 text-xs text-neutral-400">
               {(() => {
