@@ -48,12 +48,22 @@ const tabStyles = StyleSheet.create({
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function fmtRange(r: DateRange): string {
-  const pad = (d: Date) => `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]} ${d.getDate()}`;
-  const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-  if (sameDay(r.start, r.end)) return pad(r.start);
-  if (r.start.getMonth() === r.end.getMonth()) return `${pad(r.start)}–${r.end.getDate()}`;
-  return `${pad(r.start)} – ${pad(r.end)}`;
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function fmtShort(d: Date): string {
+  return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
+}
+
+/** Expand a date range into individual day option labels (one per day). */
+function expandRangeToDayLabels(r: DateRange): string[] {
+  const labels: string[] = [];
+  const cur = new Date(r.start.getFullYear(), r.start.getMonth(), r.start.getDate());
+  const end = new Date(r.end.getFullYear(), r.end.getMonth(), r.end.getDate());
+  while (cur <= end) {
+    labels.push(fmtShort(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return labels;
 }
 
 // ── Main Screen ────────────────────────────────────────────────────────────────
@@ -334,11 +344,15 @@ export default function NewPollScreen() {
     }
 
     if (!takenTypes.has('dates') && dateRanges.length >= 1) {
+      // Expand each date range into individual day options for per-day availability selection
+      const dayLabels = dateRanges.flatMap(expandRangeToDayLabels);
+      // Deduplicate in case ranges overlap
+      const uniqueLabels = [...new Set(dayLabels)];
       mutations.push(
         createPoll.mutateAsync({
           trip_id: tripId, type: 'dates', title: datesTitle.trim(),
           status, allow_multi_select: true, position: 1,
-          options: dateRanges.map((r, i) => ({ label: fmtRange(r), position: i })),
+          options: uniqueLabels.map((label, i) => ({ label, position: i })),
         })
       );
     }
