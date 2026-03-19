@@ -27,6 +27,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useProfile } from '@/hooks/useProfile';
 import { useAuthStore } from '@/stores/authStore';
 import { getShareUrl } from '@/lib/api/trips';
+import { getTripStage, STAGE_ACCENT } from '@/lib/tripStage';
 import { GROUP_SIZE_MIDPOINTS } from '@/types/database';
 import type { Respondent } from '@/types/database';
 
@@ -36,6 +37,7 @@ export default function MembersScreen() {
   const insets = useSafeAreaInsets();
 
   const { data: trip } = useTrip(id);
+  const accentColor = STAGE_ACCENT[trip ? getTripStage(trip) : 'deciding'];
   const { data: respondents = [] } = useRespondents(id);
   const { canDesignatePlanners } = usePermissions(id);
   const setPlanner = useSetRespondentPlanner(id);
@@ -181,7 +183,7 @@ export default function MembersScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} accessibilityRole="button">
-          <Text style={styles.backBtn}>← Back</Text>
+          <Text style={[styles.backBtn, { color: accentColor }]}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Group members</Text>
         <View style={{ width: 60 }} />
@@ -200,7 +202,7 @@ export default function MembersScreen() {
             <Text style={styles.progressPct}>{joinPercent}%</Text>
           </View>
           <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${joinPercent}%` }]} />
+            <View style={[styles.progressFill, { width: `${joinPercent}%`, backgroundColor: accentColor }]} />
           </View>
 
           {/* Invite link */}
@@ -217,16 +219,16 @@ export default function MembersScreen() {
             </Pressable>
           </View>
 
-          <Pressable onPress={handleShare} style={styles.shareBtn} accessibilityRole="button">
-            <Ionicons name="share-outline" size={15} color="#235C38" />
-            <Text style={styles.shareBtnText}>Share invite link</Text>
+          <Pressable onPress={handleShare} style={[styles.shareBtn, { borderColor: accentColor }]} accessibilityRole="button">
+            <Ionicons name="share-outline" size={15} color={accentColor} />
+            <Text style={[styles.shareBtnText, { color: accentColor }]}>Share invite link</Text>
           </Pressable>
 
           {/* Text thread CTA — shown once everyone has responded */}
           {allResponded && (
             <Pressable
               onPress={handleStartTextThread}
-              style={styles.textThreadBtn}
+              style={[styles.textThreadBtn, { backgroundColor: accentColor }]}
               accessibilityRole="button"
               accessibilityLabel="Start a group text thread"
             >
@@ -372,7 +374,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
   },
-  backBtn: { fontSize: 15, color: '#888', width: 60 },
+  backBtn: { fontSize: 15, width: 60 },
   headerTitle: { fontSize: 16, fontWeight: '700', color: '#1A1A1A' },
   scroll: { paddingHorizontal: 16, paddingTop: 8 },
 
@@ -390,7 +392,7 @@ const styles = StyleSheet.create({
   progressTitle: { fontSize: 15, fontWeight: '700', color: '#1A1A1A' },
   progressPct: { fontSize: 13, color: '#888' },
   progressTrack: { height: 6, borderRadius: 3, backgroundColor: '#EBEBEB', overflow: 'hidden' },
-  progressFill: { height: '100%', borderRadius: 3, backgroundColor: '#235C38' },
+  progressFill: { height: '100%', borderRadius: 3 },
   linkRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -408,17 +410,15 @@ const styles = StyleSheet.create({
     gap: 6,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#235C38',
     paddingVertical: 10,
   },
-  shareBtnText: { fontSize: 13, fontWeight: '600', color: '#235C38' },
+  shareBtnText: { fontSize: 13, fontWeight: '600' },
   textThreadBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
     borderRadius: 10,
-    backgroundColor: '#235C38',
     paddingVertical: 12,
   },
   textThreadBtnText: { fontSize: 14, fontWeight: '600', color: '#fff' },

@@ -53,3 +53,13 @@ export function getTripStage(trip: Pick<Trip, 'status' | 'start_date' | 'end_dat
 export function getStageIndex(stage: TripStage): number {
   return STAGES.indexOf(stage);
 }
+
+/** Primary accent color for each stage — use for nav elements, CTAs, progress fills. */
+export const STAGE_ACCENT: Record<TripStage, string> = {
+  deciding:     '#D85A30',
+  confirmed:    '#235C38',
+  planning:     '#1A4060',
+  experiencing: '#085041',
+  reconciling:  '#666666',
+  done:         '#2C2C2A',
+};

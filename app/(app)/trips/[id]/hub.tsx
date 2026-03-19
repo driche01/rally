@@ -18,6 +18,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTrip } from '@/hooks/useTrips';
 import { usePermissions } from '@/hooks/usePermissions';
+import { getTripStage, STAGE_ACCENT } from '@/lib/tripStage';
 
 // Tab content components
 import { PollsTab } from '@/components/hub/PollsTab';
@@ -51,6 +52,7 @@ export default function TripHubScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { data: trip } = useTrip(id);
+  const accentColor = STAGE_ACCENT[trip ? getTripStage(trip) : 'deciding'];
   const {
     isPlanner,
     canManagePolls,
@@ -81,7 +83,7 @@ export default function TripHubScreen() {
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <View className="flex-row items-center justify-between border-b border-neutral-200 bg-neutral-50 px-6 pb-3 pt-4">
         <Pressable onPress={() => router.back()} accessibilityRole="button">
-          <Text className="text-base text-coral-500">← Back</Text>
+          <Text className="text-base" style={{ color: accentColor }}>← Back</Text>
         </Pressable>
         <View className="flex-1 items-center px-4">
           <Text className="text-base font-bold text-neutral-800" numberOfLines={1}>

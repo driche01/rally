@@ -30,6 +30,7 @@ import { supabase } from '@/lib/supabase';
 import { getShareUrl } from '@/lib/api/trips';
 import { capture, Events } from '@/lib/analytics';
 import { queryClient } from '@/lib/queryClient';
+import { getTripStage, STAGE_ACCENT } from '@/lib/tripStage';
 import { getParticipationRate, type GroupSizeBucket } from '@/types/database';
 import type { PollWithOptions } from '@/types/database';
 
@@ -48,12 +49,14 @@ function PollResultBar({
   total,
   isLeading,
   isDecided,
+  barColor,
 }: {
   label: string;
   votes: number;
   total: number;
   isLeading: boolean;
   isDecided: boolean;
+  barColor: string;
 }) {
   const pct = total > 0 ? Math.round((votes / total) * 100) : 0;
   return (
@@ -75,11 +78,8 @@ function PollResultBar({
       </View>
       <View className="h-2 overflow-hidden rounded-full bg-neutral-100">
         <View
-          className={[
-            'h-full rounded-full',
-            isLeading || isDecided ? 'bg-coral-500' : 'bg-neutral-300',
-          ].join(' ')}
-          style={{ width: `${pct}%` }}
+          className="h-full rounded-full bg-neutral-300"
+          style={{ width: `${pct}%`, ...(isLeading || isDecided ? { backgroundColor: barColor } : {}) }}
         />
       </View>
     </View>
@@ -96,6 +96,7 @@ const PollCard = memo(function PollCard({
   groupSizePrecise,
   router,
   canManagePolls,
+  accentColor,
 }: {
   poll: PollWithOptions;
   tripId: string;
@@ -104,6 +105,7 @@ const PollCard = memo(function PollCard({
   groupSizePrecise?: number | null;
   router: ReturnType<typeof useRouter>;
   canManagePolls: boolean;
+  accentColor: string;
 }) {
   const updateStatus = useUpdatePollStatus(tripId);
   const decide = useDecidePoll(tripId);
@@ -236,7 +238,8 @@ const PollCard = memo(function PollCard({
             {poll.status === 'draft' && (
               <Pressable
                 onPress={handleGoLive}
-                className="rounded-xl bg-coral-500 px-3 py-1.5"
+                className="rounded-xl px-3 py-1.5"
+                style={{ backgroundColor: accentColor }}
                 accessibilityRole="button"
               >
                 <Text className="text-xs font-semibold text-white">Go live</Text>
@@ -277,8 +280,8 @@ const PollCard = memo(function PollCard({
       </View>
 
       {poll.status === 'decided' && decidedLabel ? (
-        <View className="mt-3 rounded-xl bg-coral-50 px-3 py-2.5">
-          <Text className="text-sm font-semibold text-coral-700">✓ Decided: {decidedLabel}</Text>
+        <View className="mt-3 rounded-xl px-3 py-2.5" style={{ backgroundColor: accentColor + '18' }}>
+          <Text className="text-sm font-semibold" style={{ color: accentColor }}>✓ Decided: {decidedLabel}</Text>
         </View>
       ) : null}
 
@@ -303,6 +306,7 @@ const PollCard = memo(function PollCard({
                   total={totalVotes}
                   isLeading={leadingOptionId === opt.id}
                   isDecided={poll.decided_option_id === opt.id}
+                  barColor={accentColor}
                 />
               </Pressable>
             );
@@ -319,8 +323,8 @@ const PollCard = memo(function PollCard({
                       <>
                         <View className="h-1.5 overflow-hidden rounded-full bg-neutral-100">
                           <View
-                            className="h-full rounded-full bg-coral-400"
-                            style={{ width: `${participation.percent}%` }}
+                            className="h-full rounded-full"
+                            style={{ width: `${participation.percent}%`, backgroundColor: accentColor + 'AA' }}
                           />
                         </View>
                         <Text className="mt-1 text-xs text-neutral-400">
@@ -377,6 +381,7 @@ export default function PollsScreen() {
   const [decidedCardYs, setDecidedCardYs] = useState<Record<string, number>>({});
 
   const { data: trip } = useTrip(id);
+  const accentColor = STAGE_ACCENT[trip ? getTripStage(trip) : 'deciding'];
   const { canManagePolls } = usePermissions(id);
   const { data: polls = [], refetch: refetchPolls } = usePolls(id);
   const updateTrip = useUpdateTrip();
@@ -496,12 +501,13 @@ export default function PollsScreen() {
       <View className="px-6 pb-3 pt-4 border-b border-neutral-200 bg-neutral-50">
         <View className="flex-row items-center justify-between">
           <TouchableOpacity onPress={() => router.back()} accessibilityRole="button">
-            <Text className="text-base text-coral-500">← Back</Text>
+            <Text className="text-base" style={{ color: accentColor }}>← Back</Text>
           </TouchableOpacity>
           {canManagePolls && sortedPolls.length > 0 ? (
             <Pressable
               onPress={() => router.push(`/(app)/trips/${id}/polls/new`)}
-              className="flex-row items-center gap-1 rounded-xl bg-coral-500 px-4 py-2"
+              className="flex-row items-center gap-1 rounded-xl px-4 py-2"
+              style={{ backgroundColor: accentColor }}
               accessibilityRole="button"
             >
               <Ionicons name="add" size={16} color="white" />
@@ -582,7 +588,7 @@ export default function PollsScreen() {
               const label = poll.poll_options.find((o) => o.id === poll.decided_option_id)?.label;
               if (!label) return null;
               return (
-                <View key={poll.id} className="flex-row items-center gap-1 rounded-full border border-coral-200 bg-coral-50 px-2.5 py-1">
+                <View key={poll.id} className="flex-row items-center gap-1 rounded-full border px-2.5 py-1" style={{ borderColor: accentColor + '50', backgroundColor: accentColor + '15' }}>
                   <Pressable
                     onPress={() => {
                       const y = decidedSectionY + (decidedCardYs[poll.id] ?? 0) - 8;
@@ -591,8 +597,8 @@ export default function PollsScreen() {
                     className="flex-row items-center gap-1"
                     accessibilityRole="button"
                   >
-                    <Ionicons name="checkmark-circle" size={12} color="#FF6B5B" />
-                    <Text className="text-xs font-medium text-coral-600" numberOfLines={1}>
+                    <Ionicons name="checkmark-circle" size={12} color={accentColor} />
+                    <Text className="text-xs font-medium" style={{ color: accentColor }} numberOfLines={1}>
                       {label}
                     </Text>
                   </Pressable>
@@ -602,7 +608,7 @@ export default function PollsScreen() {
                       hitSlop={6}
                       accessibilityRole="button"
                     >
-                      <Ionicons name="refresh-outline" size={12} color="#FF6B5B" style={{ transform: [{ scaleX: -1 }] }} />
+                      <Ionicons name="refresh-outline" size={12} color={accentColor} style={{ transform: [{ scaleX: -1 }] }} />
                     </Pressable>
                   ) : null}
                 </View>
@@ -662,7 +668,7 @@ export default function PollsScreen() {
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#FF6B5B" />
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={accentColor} />
         }
       >
         {polls.length === 0 ? (
@@ -710,7 +716,7 @@ export default function PollsScreen() {
               <Ionicons name={liveCollapsed ? 'chevron-up' : 'chevron-down'} size={13} color="#A8A8A8" />
             </Pressable>
             {!liveCollapsed && livePolls.map((poll) => (
-              <PollCard key={poll.id} poll={poll} tripId={id} counts={responseCounts[poll.id] ?? {}} groupSizeBucket={trip?.group_size_bucket} groupSizePrecise={trip?.group_size_precise} router={router} canManagePolls={canManagePolls} />
+              <PollCard key={poll.id} poll={poll} tripId={id} counts={responseCounts[poll.id] ?? {}} groupSizeBucket={trip?.group_size_bucket} groupSizePrecise={trip?.group_size_precise} router={router} canManagePolls={canManagePolls} accentColor={accentColor} />
             ))}
           </View>
         ) : null}
@@ -726,7 +732,7 @@ export default function PollsScreen() {
               <Ionicons name={draftCollapsed ? 'chevron-up' : 'chevron-down'} size={13} color="#A8A8A8" />
             </Pressable>
             {!draftCollapsed && draftPolls.map((poll) => (
-              <PollCard key={poll.id} poll={poll} tripId={id} counts={responseCounts[poll.id] ?? {}} groupSizeBucket={trip?.group_size_bucket} groupSizePrecise={trip?.group_size_precise} router={router} canManagePolls={canManagePolls} />
+              <PollCard key={poll.id} poll={poll} tripId={id} counts={responseCounts[poll.id] ?? {}} groupSizeBucket={trip?.group_size_bucket} groupSizePrecise={trip?.group_size_precise} router={router} canManagePolls={canManagePolls} accentColor={accentColor} />
             ))}
           </View>
         ) : null}
@@ -742,7 +748,7 @@ export default function PollsScreen() {
               <Ionicons name={closedCollapsed ? 'chevron-up' : 'chevron-down'} size={13} color="#A8A8A8" />
             </Pressable>
             {!closedCollapsed && closedPolls.map((poll) => (
-              <PollCard key={poll.id} poll={poll} tripId={id} counts={responseCounts[poll.id] ?? {}} groupSizeBucket={trip?.group_size_bucket} groupSizePrecise={trip?.group_size_precise} router={router} canManagePolls={canManagePolls} />
+              <PollCard key={poll.id} poll={poll} tripId={id} counts={responseCounts[poll.id] ?? {}} groupSizeBucket={trip?.group_size_bucket} groupSizePrecise={trip?.group_size_precise} router={router} canManagePolls={canManagePolls} accentColor={accentColor} />
             ))}
           </View>
         ) : null}
@@ -751,12 +757,12 @@ export default function PollsScreen() {
           <View className="mt-2" onLayout={(e) => setDecidedSectionY(e.nativeEvent.layout.y)}>
             <View className="mb-2 flex-row items-center gap-2">
               <View className="h-px flex-1 bg-neutral-200" />
-              <Text className="text-xs font-semibold uppercase tracking-wider text-coral-500">Decided</Text>
+              <Text className="text-xs font-semibold uppercase tracking-wider" style={{ color: accentColor }}>Decided</Text>
               <View className="h-px flex-1 bg-neutral-200" />
             </View>
             {decidedPolls.map((poll) => (
               <View key={poll.id} onLayout={(e) => { const y = e.nativeEvent.layout.y; setDecidedCardYs((prev) => ({ ...prev, [poll.id]: y })); }}>
-                <PollCard poll={poll} tripId={id} counts={responseCounts[poll.id] ?? {}} groupSizeBucket={trip?.group_size_bucket} router={router} canManagePolls={canManagePolls} />
+                <PollCard poll={poll} tripId={id} counts={responseCounts[poll.id] ?? {}} groupSizeBucket={trip?.group_size_bucket} router={router} canManagePolls={canManagePolls} accentColor={accentColor} />
               </View>
             ))}
           </View>
