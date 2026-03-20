@@ -4,6 +4,7 @@
  */
 import { useState, useCallback, useMemo } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Modal,
   Pressable,
@@ -14,10 +15,10 @@ import {
   View,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useTrip, useUpdateTrip } from '@/hooks/useTrips';
 import {
   useItineraryBlocks,
@@ -38,6 +39,7 @@ import { useAuthStore } from '@/stores/authStore';
 import type { BlockType, ItineraryBlock, ItineraryDay } from '@/types/database';
 import type { CreateBlockInput } from '@/lib/api/itinerary';
 import { DateRangePicker } from '@/components/DateRangePicker';
+import { useAiItineraryDraft, useGenerateAiItinerary } from '@/hooks/useAiItinerary';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -112,7 +114,7 @@ function BlockCard({
   onLongPress,
 }: {
   block: ItineraryBlock;
-  onLongPress: () => void;
+  onLongPress: (() => void) | undefined;
 }) {
   const colors = BLOCK_TYPE_COLORS[block.type];
   const icon = BLOCK_TYPE_ICONS[block.type];
@@ -443,6 +445,144 @@ function BlockEditorModal({
 }
 
 
+// ─── AI Itinerary Banner ──────────────────────────────────────────────────────
+
+function AiItineraryBanner({
+  tripId,
+  blocksEmpty,
+  isPlanner,
+}: {
+  tripId: string;
+  blocksEmpty: boolean;
+  isPlanner: boolean;
+}) {
+  const router = useRouter();
+  const { data: draft } = useAiItineraryDraft(tripId);
+  const generate = useGenerateAiItinerary(tripId);
+
+  if (!isPlanner) return null;
+
+  const isGenerating = draft?.status === 'generating' || generate.isPending;
+  const hasReadyOptions = draft?.status === 'ready' && (draft.options?.length ?? 0) > 0 && !draft.applied_at;
+  const wasApplied = Boolean(draft?.applied_at);
+
+  // Show a small "Regenerate AI options" link after the itinerary has been applied
+  if (wasApplied) {
+    return (
+      <Pressable
+        onPress={() => router.push(`/(app)/trips/${tripId}/ai-itinerary` as any)}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'center', marginBottom: 16 }}
+        accessibilityRole="button"
+      >
+        <Ionicons name="sparkles-outline" size={13} color="#A3A3A3" />
+        <Text style={{ fontSize: 12, color: '#A3A3A3' }}>Regenerate AI options</Text>
+      </Pressable>
+    );
+  }
+
+  // Generating spinner
+  if (isGenerating) {
+    return (
+      <View style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        backgroundColor: '#EEF3F8',
+        borderRadius: 16,
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#D8E4EE',
+      }}>
+        <ActivityIndicator size="small" color="#1A4060" />
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 14, fontWeight: '600', color: '#1A4060' }}>
+            Generating itinerary options…
+          </Text>
+          <Text style={{ fontSize: 12, color: '#4A6E8A', marginTop: 2 }}>
+            About 15–20 seconds
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  // Options are ready — prompt the planner to review them
+  if (hasReadyOptions) {
+    return (
+      <Pressable
+        onPress={() => router.push(`/(app)/trips/${tripId}/ai-itinerary` as any)}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 12,
+          backgroundColor: '#EEF3F8',
+          borderRadius: 16,
+          paddingHorizontal: 16,
+          paddingVertical: 14,
+          marginBottom: 16,
+          borderWidth: 1,
+          borderColor: '#1A4060',
+        }}
+        accessibilityRole="button"
+      >
+        <Ionicons name="sparkles" size={20} color="#1A4060" />
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 14, fontWeight: '700', color: '#1A4060' }}>
+            3 itinerary options ready
+          </Text>
+          <Text style={{ fontSize: 12, color: '#4A6E8A', marginTop: 2 }}>
+            Tap to pick one and apply it →
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color="#1A4060" />
+      </Pressable>
+    );
+  }
+
+  // No draft yet + no blocks — show the generate CTA
+  if (blocksEmpty) {
+    return (
+      <View style={{
+        backgroundColor: '#EEF3F8',
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#D8E4EE',
+        gap: 10,
+      }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Ionicons name="sparkles-outline" size={18} color="#1A4060" />
+          <Text style={{ fontSize: 14, fontWeight: '700', color: '#1A4060' }}>
+            Generate AI itinerary options
+          </Text>
+        </View>
+        <Text style={{ fontSize: 13, color: '#4A6E8A', lineHeight: 18 }}>
+          Rally will create 3 tailored options based on your group's confirmed preferences and trip details.
+        </Text>
+        <Pressable
+          onPress={() => generate.mutate({})}
+          style={{
+            backgroundColor: '#1A4060',
+            borderRadius: 12,
+            paddingVertical: 12,
+            alignItems: 'center',
+          }}
+          accessibilityRole="button"
+        >
+          <Text style={{ fontSize: 14, fontWeight: '700', color: '#FFFFFF' }}>
+            Generate options
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  return null;
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function ItineraryTab({ tripId, isPlanner = true }: { tripId: string; isPlanner?: boolean }) {
@@ -619,10 +759,15 @@ export function ItineraryTab({ tripId, isPlanner = true }: { tripId: string; isP
         </View>
       ) : (
         <ScrollView
-          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 24 }}
+          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 24, paddingTop: 16 }}
           keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
         >
+          <AiItineraryBanner
+            tripId={tripId}
+            blocksEmpty={blocks.length === 0}
+            isPlanner={isPlanner}
+          />
           {days.map((day) => (
             <DaySection
               key={day.date}

@@ -76,6 +76,8 @@ export interface RespondentPreferences {
   needs: string[];
   vibes: string[];
   pace: string | null;
+  /** Phase 4.2 — relaxing vs adventurous energy preference */
+  energy: 'relaxing' | 'adventurous' | null;
 }
 
 export interface Respondent {
@@ -389,6 +391,45 @@ export function getParticipationRate(
   const total = precise ?? GROUP_SIZE_MIDPOINTS[bucket];
   const percent = Math.min(100, Math.round((respondentCount / total) * 100));
   return { count: respondentCount, total, percent };
+}
+
+// ─── Phase 4.2 — AI itinerary types ──────────────────────────────────────────
+
+export interface AiItineraryBlock {
+  type: BlockType;
+  title: string;
+  start_time: string | null;
+  end_time: string | null;
+  location: string | null;
+  notes: string | null;
+}
+
+export interface AiItineraryDay {
+  date: string; // 'YYYY-MM-DD'
+  blocks: AiItineraryBlock[];
+}
+
+export interface AiItineraryOption {
+  index: number;
+  label: 'Packed' | 'Balanced' | 'Relaxed';
+  theme: string;   // one-sentence tone/style description
+  summary: string; // 2-3 sentence overview of the option
+  days: AiItineraryDay[];
+}
+
+export type AiItineraryStatus = 'generating' | 'ready' | 'error';
+
+export interface AiItineraryDraft {
+  id: string;
+  trip_id: string;
+  status: AiItineraryStatus;
+  options: AiItineraryOption[];
+  planner_override: string | null;
+  selected_index: number | null;
+  applied_at: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // ─── Budget tier constants ─────────────────────────────────────────────────────
