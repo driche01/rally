@@ -951,6 +951,11 @@ const PREF_NEEDS = [
   '🧭 Knowing the plan in advance — I don\'t do well with ambiguity',
 ];
 
+const PREF_ENERGY: { value: 'relaxing' | 'adventurous'; label: string; sublabel: string }[] = [
+  { value: 'relaxing',    label: '😌 Take it easy',  sublabel: 'Recharge, slow down, familiar comforts' },
+  { value: 'adventurous', label: '⚡ Push it',        sublabel: 'New experiences, active, off the beaten path' },
+];
+
 const PREF_VIBES = [
   '🛋 Recharge',
   '🍽 Eat & explore',
@@ -1013,6 +1018,7 @@ export default function RespondScreen() {
   // ─── RSVP + preference state ───────────────────────────────────────────────
   const [rsvpChoice, setRsvpChoice] = useState<'in' | 'out' | null>(null);
   const [prefNeeds, setPrefNeeds] = useState<string[]>([]);
+  const [prefEnergy, setPrefEnergy] = useState<'relaxing' | 'adventurous' | null>(null);
   const [prefVibes, setPrefVibes] = useState<string[]>([]);
   const [prefPace, setPrefPace] = useState<string | null>(null);
 
@@ -1199,6 +1205,7 @@ export default function RespondScreen() {
       setRespondentId(respondent.id);
       await saveRespondentRsvpAndPreferences(respondent.id, 'in', {
         needs: prefNeeds,
+        energy: prefEnergy,
         vibes: prefVibes,
         pace: prefPace,
       });
@@ -1657,7 +1664,43 @@ export default function RespondScreen() {
             </View>
           </View>
 
-          {/* Q2: Vibes (multi-select, max 2) */}
+          {/* Q2: Energy (2-option pick, optional) */}
+          <View style={{ marginBottom: 28 }}>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: '#1A1A1A', marginBottom: 4 }}>
+              How adventurous do you want to go?
+            </Text>
+            <Text style={{ fontSize: 12, color: '#aaa', marginBottom: 10 }}>Optional</Text>
+            <View style={{ gap: 8 }}>
+              {PREF_ENERGY.map((opt) => {
+                const sel = prefEnergy === opt.value;
+                return (
+                  <Pressable
+                    key={opt.value}
+                    onPress={() => setPrefEnergy(sel ? null : opt.value)}
+                    style={{
+                      borderWidth: 1.5,
+                      borderColor: sel ? '#235C38' : '#E5E5E5',
+                      backgroundColor: sel ? '#EAF3EC' : '#fff',
+                      borderRadius: 12,
+                      paddingHorizontal: 14,
+                      paddingVertical: 12,
+                    }}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: sel }}
+                  >
+                    <Text style={{ fontSize: 14, color: sel ? '#235C38' : '#404040', fontWeight: sel ? '600' : '400' }}>
+                      {opt.label}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: sel ? '#3A7A55' : '#999', marginTop: 2 }}>
+                      {opt.sublabel}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Q3: Vibes (multi-select, max 2) */}
           <View style={{ marginBottom: 28 }}>
             <Text style={{ fontSize: 15, fontWeight: '700', color: '#1A1A1A', marginBottom: 12 }}>
               Pick the 1–2 vibes that best describe your ideal trip.
@@ -1694,7 +1737,7 @@ export default function RespondScreen() {
             </View>
           </View>
 
-          {/* Q3: Pace (single-select, required) */}
+          {/* Q4: Pace (single-select, required) */}
           <View style={{ marginBottom: 32 }}>
             <Text style={{ fontSize: 15, fontWeight: '700', color: '#1A1A1A', marginBottom: 4 }}>
               What does a perfect trip day look like?

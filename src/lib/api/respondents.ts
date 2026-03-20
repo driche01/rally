@@ -258,7 +258,7 @@ export async function getExistingResponses(
 export async function saveRespondentRsvpAndPreferences(
   respondentId: string,
   rsvp: 'in' | 'out',
-  preferences?: { needs: string[]; vibes: string[]; pace: string | null }
+  preferences?: { needs: string[]; energy: 'relaxing' | 'adventurous' | null; vibes: string[]; pace: string | null }
 ): Promise<void> {
   const { error } = await supabase
     .from('respondents')
