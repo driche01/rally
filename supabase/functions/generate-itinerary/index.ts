@@ -289,10 +289,26 @@ Deno.serve(async (req) => {
     // Admin client (service role) for reads/writes that bypass RLS
     const admin = createClient(supabaseUrl, serviceRoleKey);
 
+    // Verify JWT and confirm user is a planner for this trip
+    const authHeader = req.headers.get('Authorization') ?? '';
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await admin.auth.getUser(token);
+    if (authError || !user) return json({ error: 'Unauthorized' }, 401);
+
     const { trip_id, planner_override } = await req.json();
     if (!trip_id) return json({ error: 'trip_id is required' }, 400);
 
-    // TODO: re-enable auth check after JWT issue is resolved in dev
+    // Confirm user is a planner for this trip
+    const { data: trip_member } = await admin
+      .from('trip_members')
+      .select('role')
+      .eq('trip_id', trip_id)
+      .eq('user_id', user.id)
+      .single();
+
+    if (!trip_member || trip_member.role !== 'planner') {
+      return json({ error: 'Only trip planners can generate itineraries' }, 403);
+    }
 
     // Optimistically mark as generating so the client can show a spinner
     await admin.from('ai_itinerary_options').upsert(

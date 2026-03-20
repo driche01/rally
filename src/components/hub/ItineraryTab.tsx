@@ -563,13 +563,7 @@ function AiItineraryBanner({
           Rally will create 3 tailored options based on your group's confirmed preferences and trip details.
         </Text>
         <Pressable
-          onPress={() => generate.mutate({}, {
-            onError: async (err: any) => {
-              let msg = err?.message ?? JSON.stringify(err);
-              try { const body = await err?.context?.json?.(); if (body) msg += '\n' + JSON.stringify(body); } catch {}
-              Alert.alert('Generation failed', msg);
-            },
-          })}
+          onPress={() => generate.mutate({})}
           style={{
             backgroundColor: '#1A4060',
             borderRadius: 12,
