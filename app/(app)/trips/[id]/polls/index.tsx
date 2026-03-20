@@ -762,7 +762,7 @@ export default function PollsScreen() {
             </View>
             {decidedPolls.map((poll) => (
               <View key={poll.id} onLayout={(e) => { const y = e.nativeEvent.layout.y; setDecidedCardYs((prev) => ({ ...prev, [poll.id]: y })); }}>
-                <PollCard poll={poll} tripId={id} counts={responseCounts[poll.id] ?? {}} groupSizeBucket={trip?.group_size_bucket} router={router} canManagePolls={canManagePolls} accentColor={accentColor} />
+                <PollCard poll={poll} tripId={id} counts={responseCounts[poll.id] ?? {}} groupSizeBucket={trip?.group_size_bucket} groupSizePrecise={trip?.group_size_precise} router={router} canManagePolls={canManagePolls} accentColor={accentColor} />
               </View>
             ))}
           </View>
