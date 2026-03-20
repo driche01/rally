@@ -6,14 +6,13 @@
  * in ai_itinerary_options.
  *
  * Deploy:  supabase functions deploy generate-itinerary
- * Secret:  supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+ * Secret:  supabase secrets set GEMINI_API_KEY=AIza...
  *
  * POST body: { trip_id: string, planner_override?: string }
  * Requires: Authorization header with the planner's JWT
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import Anthropic from 'https://esm.sh/@anthropic-ai/sdk@0.30.0';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -247,10 +246,9 @@ Respond with ONLY valid JSON in this exact structure — no markdown, no explana
 // ─── Response parser ──────────────────────────────────────────────────────────
 
 function parseOptions(text: string): AiItineraryOption[] {
-  // Strip markdown code fences if Claude wrapped the JSON
-  const stripped = text.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim();
+  // Gemini with responseMimeType:'application/json' returns clean JSON — no stripping needed
   try {
-    const parsed = JSON.parse(stripped);
+    const parsed = JSON.parse(text);
     return Array.isArray(parsed.options) ? parsed.options : [];
   } catch (e) {
     console.error('[generate-itinerary] JSON parse failed:', e, '\nRaw text:', text.slice(0, 500));
@@ -284,9 +282,9 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-    const claudeApiKey = Deno.env.get('ANTHROPIC_API_KEY') ?? '';
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY') ?? '';
 
-    if (!claudeApiKey) return json({ error: 'ANTHROPIC_API_KEY not configured' }, 500);
+    if (!geminiApiKey) return json({ error: 'GEMINI_API_KEY not configured' }, 500);
 
     // Admin client (service role) for reads/writes that bypass RLS
     const admin = createClient(supabaseUrl, serviceRoleKey);
@@ -336,40 +334,43 @@ Deno.serve(async (req) => {
     // ── Step 3: Aggregate preferences into a group profile ─────────────────
     const groupProfile = aggregatePreferences(prefs, confirmedCount);
 
-    // ── Step 4: Build prompt and call Claude (MOCKED for billing testing) ──
-    const destination = trip.destination ?? 'your destination';
-    const options: AiItineraryOption[] = [
+    // ── Step 4: Build prompt and call Gemini ───────────────────────────────
+    const prompt = buildPrompt(trip, groupProfile, planner_override);
+
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
       {
-        index: 0,
-        label: 'Packed',
-        theme: 'Make the most of every hour',
-        summary: `A jam-packed adventure in ${destination} with back-to-back experiences.`,
-        days: (trip.start_date ? Array.from({ length: Math.max(1, Math.ceil((new Date(trip.end_date ?? trip.start_date).getTime() - new Date(trip.start_date).getTime()) / 86400000) + 1) }, (_, i) => {
-          const d = new Date(trip.start_date!); d.setDate(d.getDate() + i);
-          return { date: d.toISOString().split('T')[0], blocks: [{ type: 'activity', title: `Morning activity in ${destination}`, start_time: '09:00', end_time: '11:00', location: destination, notes: null }, { type: 'meal', title: 'Lunch at a local favourite', start_time: '12:00', end_time: '13:00', location: null, notes: null }, { type: 'activity', title: 'Afternoon exploration', start_time: '14:00', end_time: '17:00', location: destination, notes: null }, { type: 'meal', title: 'Group dinner', start_time: '19:00', end_time: '21:00', location: null, notes: null }] };
-        }) : []),
-      },
-      {
-        index: 1,
-        label: 'Balanced',
-        theme: 'The best of both worlds',
-        summary: `A balanced mix of activities and downtime in ${destination}.`,
-        days: (trip.start_date ? Array.from({ length: Math.max(1, Math.ceil((new Date(trip.end_date ?? trip.start_date).getTime() - new Date(trip.start_date).getTime()) / 86400000) + 1) }, (_, i) => {
-          const d = new Date(trip.start_date!); d.setDate(d.getDate() + i);
-          return { date: d.toISOString().split('T')[0], blocks: [{ type: 'activity', title: `Morning explore in ${destination}`, start_time: '10:00', end_time: '12:00', location: destination, notes: null }, { type: 'meal', title: 'Relaxed lunch', start_time: '12:30', end_time: '13:30', location: null, notes: null }, { type: 'free_time', title: 'Afternoon free time', start_time: '14:00', end_time: '17:00', location: null, notes: 'Explore at your own pace' }, { type: 'meal', title: 'Group dinner', start_time: '19:00', end_time: '21:00', location: null, notes: null }] };
-        }) : []),
-      },
-      {
-        index: 2,
-        label: 'Relaxed',
-        theme: 'Go with the flow',
-        summary: `A laid-back trip in ${destination} with plenty of time to unwind.`,
-        days: (trip.start_date ? Array.from({ length: Math.max(1, Math.ceil((new Date(trip.end_date ?? trip.start_date).getTime() - new Date(trip.start_date).getTime()) / 86400000) + 1) }, (_, i) => {
-          const d = new Date(trip.start_date!); d.setDate(d.getDate() + i);
-          return { date: d.toISOString().split('T')[0], blocks: [{ type: 'free_time', title: 'Slow morning', start_time: '09:00', end_time: '11:00', location: null, notes: 'Coffee, relax, recharge' }, { type: 'meal', title: 'Brunch together', start_time: '11:00', end_time: '12:30', location: null, notes: null }, { type: 'activity', title: `One highlight activity in ${destination}`, start_time: '14:00', end_time: '16:00', location: destination, notes: null }, { type: 'meal', title: 'Casual dinner', start_time: '18:30', end_time: '20:00', location: null, notes: null }] };
-        }) : []),
-      },
-    ];
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 32768,
+            responseMimeType: 'application/json',
+          },
+        }),
+      }
+    );
+
+    if (!geminiRes.ok) {
+      const errBody = await geminiRes.text();
+      await markError(admin, trip_id, `Gemini API error: ${geminiRes.status}`);
+      return json({ error: `Gemini API error: ${geminiRes.status} ${errBody}` }, 500);
+    }
+
+    const geminiData = await geminiRes.json();
+    // gemini-2.5-flash uses thinking — skip thought parts and find the actual response
+    const parts = geminiData.candidates?.[0]?.content?.parts ?? [];
+    const rawText = parts.find((p: any) => !p.thought)?.text ?? '';
+    console.log('[generate-itinerary] parts count:', parts.length, 'rawText preview:', rawText.slice(0, 300));
+    const options = parseOptions(rawText);
+
+    if (options.length === 0) {
+      console.error('[generate-itinerary] Full response:', JSON.stringify(geminiData).slice(0, 1000));
+      await markError(admin, trip_id, 'Gemini returned no valid options');
+      return json({ error: 'Failed to parse itinerary options from Gemini response' }, 500);
+    }
 
     // ── Step 5: Store the result ───────────────────────────────────────────
     await admin.from('ai_itinerary_options').upsert(
