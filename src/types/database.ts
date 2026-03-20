@@ -72,6 +72,12 @@ export interface PollOption {
   created_at: string;
 }
 
+export interface RespondentPreferences {
+  needs: string[];
+  vibes: string[];
+  pace: string | null;
+}
+
 export interface Respondent {
   id: string;
   trip_id: string;
@@ -80,6 +86,8 @@ export interface Respondent {
   phone: string | null;
   session_token: string;
   is_planner: boolean;
+  rsvp: 'in' | 'out' | null;
+  preferences: RespondentPreferences | null;
   created_at: string;
 }
 

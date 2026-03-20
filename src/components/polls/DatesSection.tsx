@@ -28,7 +28,10 @@ function CalendarPicker({
   const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [pendingStart, setPendingStart] = useState<Date | null>(null);
 
+  const isCurrentMonth = viewYear === today.getFullYear() && viewMonth === today.getMonth();
+
   function prevMonth() {
+    if (isCurrentMonth) return;
     if (viewMonth === 0) { setViewYear((y) => y - 1); setViewMonth(11); }
     else setViewMonth((m) => m - 1);
   }
@@ -62,6 +65,7 @@ function CalendarPicker({
 
   function handleDayPress(d: Date) {
     const clean = stripTime(d);
+    if (clean < today) return;
     if (!pendingStart) {
       setPendingStart(clean);
     } else {
@@ -78,8 +82,8 @@ function CalendarPicker({
     <View className="rounded-2xl border border-neutral-200 bg-white p-4">
       {/* Month nav */}
       <View className="mb-3 flex-row items-center justify-between">
-        <Pressable onPress={prevMonth} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} className="p-1">
-          <Ionicons name="chevron-back" size={20} color="#6B6B6B" />
+        <Pressable onPress={prevMonth} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} className="p-1" disabled={isCurrentMonth}>
+          <Ionicons name="chevron-back" size={20} color={isCurrentMonth ? '#D4D4D4' : '#6B6B6B'} />
         </Pressable>
         <Text className="text-sm font-semibold text-neutral-800">
           {MONTH_NAMES[viewMonth]} {viewYear}
@@ -103,6 +107,7 @@ function CalendarPicker({
         <View key={wi} className="flex-row">
           {week.map((day, di) => {
             if (!day) return <View key={di} style={{ flex: 1 }} />;
+            const isPast = stripTime(day) < today;
             const state = getDayState(day);
             const isEndpoint = ['start', 'end', 'single', 'pending'].includes(state);
             const isIn = state === 'inRange';
@@ -112,21 +117,24 @@ function CalendarPicker({
                 onPress={() => handleDayPress(day)}
                 style={{ flex: 1 }}
                 className="items-center py-0.5"
+                disabled={isPast}
               >
                 <View
                   className={[
                     'h-8 w-8 items-center justify-center rounded-full',
-                    isEndpoint ? 'bg-coral-500' : isIn ? 'bg-coral-100' : '',
+                    isPast ? '' : isEndpoint ? 'bg-coral-500' : isIn ? 'bg-coral-100' : '',
                   ].join(' ')}
                 >
                   <Text
                     className={[
                       'text-xs',
-                      isEndpoint
-                        ? 'font-bold text-white'
-                        : isIn
-                          ? 'text-coral-700'
-                          : 'text-neutral-700',
+                      isPast
+                        ? 'text-neutral-300'
+                        : isEndpoint
+                          ? 'font-bold text-white'
+                          : isIn
+                            ? 'text-coral-700'
+                            : 'text-neutral-700',
                     ].join(' ')}
                   >
                     {day.getDate()}

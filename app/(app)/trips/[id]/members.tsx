@@ -8,6 +8,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useState } from 'react';
 import {
   Alert,
   Linking,
@@ -46,6 +47,8 @@ export default function MembersScreen() {
   // (not just the creator themselves) can see the planner row.
   const { data: plannerProfile } = useProfile(trip?.created_by);
 
+  const [expandedPrefs, setExpandedPrefs] = useState<Set<string>>(new Set());
+
   const isCreator = !!trip && !!currentUser && trip.created_by === currentUser.id;
   // Fall back to auth user metadata for the creator viewing their own trip
   // when the profiles row hasn't loaded yet.
@@ -64,8 +67,10 @@ export default function MembersScreen() {
   const joinUrl = trip ? getShareUrl(trip.share_token) : '';
   // memberCount: everyone in the list (planner + poll respondents) — for the section label
   const memberCount = (showPlanner ? 1 : 0) + respondents.length;
-  // joinPercent: only counts poll respondents (planner hasn't "responded" to their own polls)
-  const joinPercent = total > 0 ? Math.min(100, Math.round((respondents.length / total) * 100)) : 0;
+  // confirmedCount: planner is always confirmed + respondents who explicitly RSVPed 'in'
+  const confirmedCount = (showPlanner ? 1 : 0) + respondents.filter((r) => r.rsvp === 'in').length;
+  // joinPercent: based on confirmed RSVPs vs expected group size
+  const joinPercent = total > 0 ? Math.min(100, Math.round((confirmedCount / total) * 100)) : 0;
 
   async function handleCopyLink() {
     await Clipboard.setStringAsync(joinUrl);
@@ -80,7 +85,7 @@ export default function MembersScreen() {
 
   // Collect phone numbers from all respondents who provided one
   const phones = respondents.map((r) => r.phone).filter(Boolean) as string[];
-  const allResponded = total > 0 && respondents.length >= total;
+  const allResponded = total > 0 && confirmedCount >= total;
 
   function handleStartTextThread() {
     if (phones.length === 0) {
@@ -197,7 +202,7 @@ export default function MembersScreen() {
         <View style={styles.progressCard}>
           <View style={styles.progressRow}>
             <Text style={styles.progressTitle}>
-              {respondents.length} of {total} responded
+              {confirmedCount} of {total} confirmed
             </Text>
             <Text style={styles.progressPct}>{joinPercent}%</Text>
           </View>
@@ -302,9 +307,18 @@ export default function MembersScreen() {
                       </View>
                     </View>
                     <View style={{ flex: 1, gap: 3 }}>
-                      {/* Name */}
+                      {/* Name + RSVP badge */}
                       <View style={styles.nameRow}>
                         <Text style={styles.name}>{r.name}</Text>
+                        {r.rsvp === 'in' ? (
+                          <View style={styles.rsvpIn}>
+                            <Text style={styles.rsvpInText}>✓ In</Text>
+                          </View>
+                        ) : r.rsvp === 'out' ? (
+                          <View style={styles.rsvpOut}>
+                            <Text style={styles.rsvpOutText}>Out</Text>
+                          </View>
+                        ) : null}
                       </View>
                       {r.email ? (
                         <Pressable
@@ -330,6 +344,52 @@ export default function MembersScreen() {
                       ) : null}
                       {!r.email && !r.phone ? (
                         <Text style={styles.noContact}>No contact info provided</Text>
+                      ) : null}
+
+                      {/* Preferences toggle */}
+                      {r.preferences ? (
+                        <Pressable
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            setExpandedPrefs((prev) => {
+                              const next = new Set(prev);
+                              next.has(r.id) ? next.delete(r.id) : next.add(r.id);
+                              return next;
+                            });
+                          }}
+                          style={{ marginTop: 4 }}
+                          accessibilityRole="button"
+                        >
+                          <Text style={styles.prefsToggle}>
+                            {expandedPrefs.has(r.id) ? '▲ Hide preferences' : '▼ See preferences'}
+                          </Text>
+                        </Pressable>
+                      ) : null}
+
+                      {/* Preferences detail */}
+                      {r.preferences && expandedPrefs.has(r.id) ? (
+                        <View style={styles.prefsBox}>
+                          {r.preferences.needs && r.preferences.needs.length > 0 ? (
+                            <View style={styles.prefSection}>
+                              <Text style={styles.prefLabel}>Needs</Text>
+                              {r.preferences.needs.map((n) => (
+                                <Text key={n} style={styles.prefItem}>· {n}</Text>
+                              ))}
+                            </View>
+                          ) : null}
+                          {r.preferences.vibes && r.preferences.vibes.length > 0 ? (
+                            <View style={styles.prefSection}>
+                              <Text style={styles.prefLabel}>Vibes</Text>
+                              <Text style={styles.prefItem}>{r.preferences.vibes.join(', ')}</Text>
+                            </View>
+                          ) : null}
+                          {r.preferences.pace ? (
+                            <View style={styles.prefSection}>
+                              <Text style={styles.prefLabel}>Pace</Text>
+                              <Text style={styles.prefItem}>{r.preferences.pace}</Text>
+                            </View>
+                          ) : null}
+                        </View>
                       ) : null}
                     </View>
                     {/* Chevron hint for planners */}
@@ -491,6 +551,19 @@ const styles = StyleSheet.create({
   contactRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   contactText: { fontSize: 12, color: '#888', flex: 1 },
   noContact: { fontSize: 12, color: '#C0C0C0', fontStyle: 'italic' },
+
+  // RSVP badges
+  rsvpIn: { backgroundColor: '#EAF3EC', borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2 },
+  rsvpInText: { fontSize: 11, fontWeight: '700', color: '#235C38' },
+  rsvpOut: { backgroundColor: '#F0F0F0', borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2 },
+  rsvpOutText: { fontSize: 11, fontWeight: '700', color: '#888' },
+
+  // Preferences
+  prefsToggle: { fontSize: 12, color: '#235C38', fontWeight: '600', marginTop: 2 },
+  prefsBox: { marginTop: 8, backgroundColor: '#F7FAF8', borderRadius: 10, padding: 10, gap: 8 },
+  prefSection: { gap: 2 },
+  prefLabel: { fontSize: 11, fontWeight: '700', color: '#235C38', textTransform: 'uppercase', letterSpacing: 0.5 },
+  prefItem: { fontSize: 13, color: '#404040', lineHeight: 18 },
 
   // Hint below member list
   plannerHint: {

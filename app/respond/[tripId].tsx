@@ -33,7 +33,9 @@ import {
   getExistingResponses,
   submitPollResponses,
   clearTripSession,
+  saveRespondentRsvpAndPreferences,
 } from '@/lib/api/respondents';
+import { getTripStage } from '@/lib/tripStage';
 import { getResponseCountsForTrip } from '@/lib/api/responses';
 import { capture, Events } from '@/lib/analytics';
 import type { TripWithPolls, PollWithOptions, Respondent } from '@/types/database';
@@ -938,9 +940,45 @@ function ItineraryRsvpSection({
   );
 }
 
+// ─── Preference question constants ─────────────────────────────────────────────
+
+const PREF_NEEDS = [
+  '💤 At least one slow morning — no 7am wake-ups',
+  '🙋 Some solo or small group time — not together every moment',
+  '🥗 Options for dietary needs — I have restrictions that matter',
+  '💰 Staying close to budget — I\'ll stress if we go over',
+  '📵 Real downtime — not just busy the whole time',
+  '🧭 Knowing the plan in advance — I don\'t do well with ambiguity',
+];
+
+const PREF_VIBES = [
+  '🛋 Recharge',
+  '🍽 Eat & explore',
+  '🏔 Get outside',
+  '🎉 Go out',
+];
+
+const PREF_PACE = [
+  '☀ Loose mornings, activities pick up in the afternoon',
+  '🏃 Packed from the start — we want to maximize every day',
+  '🔀 Mix of structured days and free days',
+  '🌙 Slow days, big nights',
+];
+
+function formatTripDates(start: string | null, end: string | null): string | null {
+  if (!start) return null;
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const s = new Date(start + 'T12:00:00');
+  const e = end ? new Date(end + 'T12:00:00') : null;
+  const sm = months[s.getMonth()]; const sd = s.getDate();
+  if (!e) return `${sm} ${sd}`;
+  const em = months[e.getMonth()]; const ed = e.getDate();
+  return sm === em ? `${sm} ${sd}–${ed}` : `${sm} ${sd} – ${em} ${ed}`;
+}
+
 // ─── Main screen ───────────────────────────────────────────────────────────────
 
-type Step = 'name' | 'polls' | 'done';
+type Step = 'name' | 'rsvp' | 'preferences' | 'out' | 'polls' | 'done';
 
 export default function RespondScreen() {
   const { tripId: shareToken } = useLocalSearchParams<{ tripId: string }>();
@@ -971,6 +1009,12 @@ export default function RespondScreen() {
   const [dayRsvps, setDayRsvps] = useState<Record<string, DayRsvpStatus>>({});
   const [rsvpSaving, setRsvpSaving] = useState<string | null>(null);
   const nameInputRef = useRef<TextInput>(null);
+
+  // ─── RSVP + preference state ───────────────────────────────────────────────
+  const [rsvpChoice, setRsvpChoice] = useState<'in' | 'out' | null>(null);
+  const [prefNeeds, setPrefNeeds] = useState<string[]>([]);
+  const [prefVibes, setPrefVibes] = useState<string[]>([]);
+  const [prefPace, setPrefPace] = useState<string | null>(null);
 
   // ─── Load trip ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1105,7 +1149,8 @@ export default function RespondScreen() {
       setResponses({});
     }
 
-    setStep('polls');
+    const tripStage = getTripStage(trip!);
+    setStep(tripStage === 'deciding' ? 'polls' : 'rsvp');
   }
 
   // ─── Respond as someone else (clears stored session for this trip) ─────────
@@ -1123,6 +1168,50 @@ export default function RespondScreen() {
     setEmailError('');
     setPhone('');
     setPhoneError('');
+  }
+
+  // ─── RSVP choice ──────────────────────────────────────────────────────────
+  async function handleRsvpChoice(choice: 'in' | 'out') {
+    setRsvpChoice(choice);
+    if (choice === 'out') {
+      if (!trip) return;
+      setSubmitting(true);
+      try {
+        const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(' ');
+        const respondent = await getOrCreateRespondent(trip.id, fullName, email.trim() || null, phone.trim() || null);
+        setRespondentId(respondent.id);
+        await saveRespondentRsvpAndPreferences(respondent.id, 'out');
+      } catch { /* non-fatal */ }
+      setSubmitting(false);
+      setStep('out');
+    } else {
+      setStep('preferences');
+    }
+  }
+
+  // ─── Submit preferences (I'm in!) ─────────────────────────────────────────
+  async function handlePreferencesSubmit() {
+    if (!trip) return;
+    setSubmitting(true);
+    const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(' ');
+    try {
+      const respondent = await getOrCreateRespondent(trip.id, fullName, email.trim() || null, phone.trim() || null);
+      setRespondentId(respondent.id);
+      await saveRespondentRsvpAndPreferences(respondent.id, 'in', {
+        needs: prefNeeds,
+        vibes: prefVibes,
+        pace: prefPace,
+      });
+      if (!hasExistingResponses) {
+        enrollRespondentAsMember(trip.id, email.trim(), firstName.trim(), lastName.trim(), phone.trim()).catch(() => {});
+      }
+      capture(Events.RESPONDENT_SUBMITTED, { trip_id: trip.id, rsvp: 'in' });
+      setStep('done');
+    } catch {
+      Alert.alert('Error', 'Could not save your responses. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   // ─── Submit all responses ──────────────────────────────────────────────────
@@ -1445,6 +1534,240 @@ export default function RespondScreen() {
   }
 
   // ─── Done step ─────────────────────────────────────────────────────────────
+  // ─── RSVP step ─────────────────────────────────────────────────────────────
+  if (step === 'rsvp') {
+    const dateDisplay = formatTripDates(trip.start_date ?? null, trip.end_date ?? null);
+    const pills: string[] = [];
+    if (trip.group_size_precise) pills.push(`${trip.group_size_precise} people`);
+    else if (trip.group_size_bucket) pills.push(`${trip.group_size_bucket} people`);
+    if (trip.budget_per_person) pills.push(`${trip.budget_per_person} pp`);
+    if (trip.trip_type) pills.push(trip.trip_type);
+
+    return (
+      <WebPageShell cardStyle={IS_WEB ? { maxHeight: '95vh' } : {}}>
+        <ScrollView
+          style={IS_WEB ? {} : { flex: 1, backgroundColor: '#F9F9F7' }}
+          contentContainerStyle={{
+            paddingTop: IS_WEB ? 36 : insets.top + 24,
+            paddingHorizontal: IS_WEB ? 36 : 24,
+            paddingBottom: IS_WEB ? 36 : insets.bottom + 40,
+          }}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={{ fontSize: 24, fontWeight: '800', color: '#D85A30', marginBottom: 4 }}>rally</Text>
+
+          {/* Trip hero */}
+          <View style={{ backgroundColor: '#DDE8D8', borderRadius: 20, padding: 20, marginTop: 8, gap: 6 }}>
+            <Text style={{ fontSize: 11, fontWeight: '700', letterSpacing: 1.2, color: '#3A7A55', textTransform: 'uppercase' }}>
+              YOU'RE INVITED
+            </Text>
+            <Text style={{ fontSize: 28, fontWeight: '800', color: '#1A3020' }}>{trip.destination ?? trip.name}</Text>
+            {dateDisplay ? (
+              <Text style={{ fontSize: 22, fontWeight: '700', color: '#1A3020' }}>{dateDisplay}</Text>
+            ) : null}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+              {pills.map((p) => (
+                <View key={p} style={{ backgroundColor: 'rgba(255,255,255,0.55)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 }}>
+                  <Text style={{ fontSize: 13, color: '#1A3020' }}>{p}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          <Text style={{ marginTop: 24, fontSize: 20, fontWeight: '700', color: '#1A1A1A', textAlign: 'center' }}>
+            Are you in?
+          </Text>
+          <Text style={{ marginTop: 6, fontSize: 14, color: '#888', textAlign: 'center' }}>
+            Let the group know so they can plan around you.
+          </Text>
+
+          <View style={{ marginTop: 24, gap: 12 }}>
+            <Pressable
+              onPress={() => handleRsvpChoice('in')}
+              disabled={submitting}
+              style={{ backgroundColor: '#235C38', borderRadius: 999, paddingVertical: 16, alignItems: 'center' }}
+            >
+              <Text style={{ fontSize: 16, fontWeight: '700', color: '#fff' }}>I'm in!</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => handleRsvpChoice('out')}
+              disabled={submitting}
+              style={{ borderWidth: 1.5, borderColor: '#D4D4D4', borderRadius: 999, paddingVertical: 14, alignItems: 'center' }}
+            >
+              <Text style={{ fontSize: 15, fontWeight: '500', color: '#888' }}>I'm out</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </WebPageShell>
+    );
+  }
+
+  // ─── Preferences step ──────────────────────────────────────────────────────
+  if (step === 'preferences') {
+    const canSubmit = prefPace !== null;
+    return (
+      <WebPageShell cardStyle={IS_WEB ? { maxHeight: '95vh' } : {}}>
+        <ScrollView
+          style={IS_WEB ? {} : { flex: 1, backgroundColor: '#F9F9F7' }}
+          contentContainerStyle={{
+            paddingTop: IS_WEB ? 36 : insets.top + 24,
+            paddingHorizontal: IS_WEB ? 36 : 24,
+            paddingBottom: IS_WEB ? 36 : insets.bottom + 40,
+          }}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={{ fontSize: 24, fontWeight: '800', color: '#D85A30', marginBottom: 4 }}>rally</Text>
+          <Text style={{ fontSize: 18, fontWeight: '700', color: '#1A1A1A', marginTop: 4 }}>
+            Help the group plan around you
+          </Text>
+          <Text style={{ fontSize: 14, color: '#888', marginTop: 4, marginBottom: 24 }}>
+            These go to your planner — not the whole group.
+          </Text>
+
+          {/* Q1: Needs (multi-select, optional) */}
+          <View style={{ marginBottom: 28 }}>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: '#1A1A1A', marginBottom: 12 }}>
+              What do you personally need to enjoy this trip?
+            </Text>
+            <Text style={{ fontSize: 12, color: '#aaa', marginBottom: 10 }}>Select all that apply</Text>
+            <View style={{ gap: 8 }}>
+              {PREF_NEEDS.map((opt) => {
+                const sel = prefNeeds.includes(opt);
+                return (
+                  <Pressable
+                    key={opt}
+                    onPress={() => setPrefNeeds((prev) => sel ? prev.filter((x) => x !== opt) : [...prev, opt])}
+                    style={{
+                      borderWidth: 1.5,
+                      borderColor: sel ? '#235C38' : '#E5E5E5',
+                      backgroundColor: sel ? '#EAF3EC' : '#fff',
+                      borderRadius: 12,
+                      paddingHorizontal: 14,
+                      paddingVertical: 12,
+                    }}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: sel }}
+                  >
+                    <Text style={{ fontSize: 14, color: sel ? '#235C38' : '#404040', fontWeight: sel ? '600' : '400' }}>
+                      {opt}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Q2: Vibes (multi-select, max 2) */}
+          <View style={{ marginBottom: 28 }}>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: '#1A1A1A', marginBottom: 12 }}>
+              Pick the 1–2 vibes that best describe your ideal trip.
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {PREF_VIBES.map((opt) => {
+                const sel = prefVibes.includes(opt);
+                const maxReached = prefVibes.length >= 2 && !sel;
+                return (
+                  <Pressable
+                    key={opt}
+                    onPress={() => {
+                      if (maxReached) return;
+                      setPrefVibes((prev) => sel ? prev.filter((x) => x !== opt) : [...prev, opt]);
+                    }}
+                    style={{
+                      borderWidth: 1.5,
+                      borderColor: sel ? '#235C38' : maxReached ? '#eee' : '#E5E5E5',
+                      backgroundColor: sel ? '#EAF3EC' : '#fff',
+                      borderRadius: 999,
+                      paddingHorizontal: 16,
+                      paddingVertical: 10,
+                      opacity: maxReached ? 0.5 : 1,
+                    }}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: sel }}
+                  >
+                    <Text style={{ fontSize: 14, color: sel ? '#235C38' : '#404040', fontWeight: sel ? '600' : '400' }}>
+                      {opt}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Q3: Pace (single-select, required) */}
+          <View style={{ marginBottom: 32 }}>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: '#1A1A1A', marginBottom: 4 }}>
+              What does a perfect trip day look like?
+            </Text>
+            <Text style={{ fontSize: 12, color: '#aaa', marginBottom: 10 }}>Pick 1</Text>
+            <View style={{ gap: 8 }}>
+              {PREF_PACE.map((opt) => {
+                const sel = prefPace === opt;
+                return (
+                  <Pressable
+                    key={opt}
+                    onPress={() => setPrefPace(opt)}
+                    style={{
+                      borderWidth: 1.5,
+                      borderColor: sel ? '#235C38' : '#E5E5E5',
+                      backgroundColor: sel ? '#EAF3EC' : '#fff',
+                      borderRadius: 12,
+                      paddingHorizontal: 14,
+                      paddingVertical: 12,
+                    }}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: sel }}
+                  >
+                    <Text style={{ fontSize: 14, color: sel ? '#235C38' : '#404040', fontWeight: sel ? '600' : '400' }}>
+                      {opt}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          {!canSubmit ? (
+            <Text style={{ textAlign: 'center', fontSize: 13, color: '#aaa', marginBottom: 12 }}>
+              Answer the last question to continue
+            </Text>
+          ) : null}
+          <Pressable
+            onPress={handlePreferencesSubmit}
+            disabled={!canSubmit || submitting}
+            style={{
+              backgroundColor: canSubmit ? '#235C38' : '#D4D4D4',
+              borderRadius: 999,
+              paddingVertical: 16,
+              alignItems: 'center',
+            }}
+          >
+            <Text style={{ fontSize: 16, fontWeight: '700', color: '#fff' }}>
+              {submitting ? 'Sending…' : 'Submit'}
+            </Text>
+          </Pressable>
+        </ScrollView>
+      </WebPageShell>
+    );
+  }
+
+  // ─── Out step ──────────────────────────────────────────────────────────────
+  if (step === 'out') {
+    return (
+      <WebPageShell cardStyle={{ padding: IS_WEB ? 48 : 0 }}>
+        <View style={IS_WEB ? { alignItems: 'center' } : { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F9F9F7', padding: 40 }}>
+          <Text style={{ fontSize: 48 }}>💙</Text>
+          <Text style={{ marginTop: 20, fontSize: 26, fontWeight: '800', color: '#1A1A1A', textAlign: 'center' }}>
+            We'll miss you!
+          </Text>
+          <Text style={{ marginTop: 10, fontSize: 15, color: '#888', textAlign: 'center', lineHeight: 22 }}>
+            No worries — the planner has been notified. If plans change, reach out to them directly.
+          </Text>
+        </View>
+      </WebPageShell>
+    );
+  }
+
   if (step === 'done') {
     return (
       <WebPageShell cardStyle={IS_WEB ? { maxHeight: '95vh' } : {}}>
@@ -1462,10 +1785,12 @@ export default function RespondScreen() {
         <View className="mt-8 items-center">
           <Text className="text-4xl">🎉</Text>
           <Text className="mt-4 text-center text-2xl font-bold text-neutral-800">
-            {hasExistingResponses ? 'Responses updated!' : 'Responses sent!'}
+            {rsvpChoice === 'in' ? "You're in!" : hasExistingResponses ? 'Responses updated!' : 'Responses sent!'}
           </Text>
           <Text className="mt-2 text-center text-base text-neutral-500">
-            You're in. Here's where the group stands so far.
+            {rsvpChoice === 'in'
+              ? 'Your preferences have been shared with the planner.'
+              : "You're in. Here's where the group stands so far."}
           </Text>
         </View>
 
