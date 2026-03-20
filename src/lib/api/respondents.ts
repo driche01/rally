@@ -253,6 +253,20 @@ export async function getExistingResponses(
   return map;
 }
 
+// ─── RSVP + preferences ────────────────────────────────────────────────────────
+
+export async function saveRespondentRsvpAndPreferences(
+  respondentId: string,
+  rsvp: 'in' | 'out',
+  preferences?: { needs: string[]; vibes: string[]; pace: string | null }
+): Promise<void> {
+  const { error } = await supabase
+    .from('respondents')
+    .update({ rsvp, preferences: preferences ?? null })
+    .eq('id', respondentId);
+  if (error) throw error;
+}
+
 // ─── Planner designation ──────────────────────────────────────────────────────
 
 /**

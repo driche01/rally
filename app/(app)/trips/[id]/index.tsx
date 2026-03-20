@@ -69,7 +69,7 @@ const HERO_CONFIG: Record<TripStage, {
   ctaBg: string;
 }> = {
   deciding:     { bg: '#F5F4F0', badge: 'DECIDING',       badgeColor: '#888',    titleColor: '#1A1A1A', subtitleColor: '#666',                pillBg: 'rgba(0,0,0,0.06)', ctaLabel: 'Chat with group!', ctaBg: '#D85A30' },
-  confirmed:    { bg: '#DDE8D8', badge: "YOU'RE GOING",   badgeColor: '#3A7A55', titleColor: '#1A3020', subtitleColor: '#3A6045',             pillBg: 'rgba(255,255,255,0.55)', ctaLabel: 'Chat with group!', ctaBg: '#235C38' },
+  confirmed:    { bg: '#DDE8D8', badge: "YOU'RE GOING",   badgeColor: '#3A7A55', titleColor: '#1A3020', subtitleColor: '#3A6045',             pillBg: 'rgba(255,255,255,0.55)', ctaLabel: 'Share with group!', ctaBg: '#235C38' },
   planning:     { bg: '#D8E4EE', badge: 'PLANNING',       badgeColor: '#2A5068', titleColor: '#0D2B3E', subtitleColor: '#2A5068',             pillBg: 'rgba(255,255,255,0.55)', ctaLabel: 'Chat with group!', ctaBg: '#1A4060' },
   experiencing: { bg: '#085041', badge: "YOU'RE HERE",    badgeColor: 'rgba(255,255,255,0.7)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.75)', pillBg: 'rgba(255,255,255,0.15)', ctaLabel: 'Chat with group!', ctaBg: 'rgba(255,255,255,0.2)' },
   reconciling:  { bg: '#F0EDE8', badge: 'WRAPPING UP',    badgeColor: '#666',    titleColor: '#2C2C2A', subtitleColor: '#666',                pillBg: 'rgba(0,0,0,0.06)', ctaLabel: 'Chat with group!', ctaBg: '#2C2C2A' },
@@ -195,7 +195,21 @@ const stage = trip ? getTripStage(trip) : 'deciding';
   const handleShare = () => {
     if (!trip) return;
     const url = getShareUrl(trip.share_token);
-    const msg = `${trip.name} — help us decide! ${url}`;
+
+    // Build an exciting trip summary message
+    const lines: string[] = [];
+    lines.push(`🎉 ${trip.name} is officially happening!`);
+    if (destination) lines.push(`📍 ${destination}`);
+    if (dateDisplay) lines.push(`📅 ${dateDisplay}`);
+    const details: string[] = [];
+    if (trip.group_size_precise) details.push(`${trip.group_size_precise} people`);
+    if (budgetDisplay) details.push(`${budgetDisplay} pp`);
+    if (details.length > 0) lines.push(`👥 ${details.join(' · ')}`);
+    lines.push('');
+    lines.push(`Confirm you're in and share your preferences:`);
+    lines.push(url);
+    const msg = lines.join('\n');
+
     const encoded = encodeURIComponent(msg);
     Alert.alert('Share with group', 'Choose how to send:', [
       { text: 'iMessage / SMS', onPress: () => Linking.openURL(Platform.OS === 'ios' ? `sms:&body=${encoded}` : `sms:?body=${encoded}`) },
@@ -238,7 +252,11 @@ const stage = trip ? getTripStage(trip) : 'deciding';
   };
 
   const handleCtaPress = () => {
-    router.push(`/(app)/trips/${id}/hub?tab=chat`);
+    if (stage === 'confirmed') {
+      handleShare();
+    } else {
+      router.push(`/(app)/trips/${id}/hub?tab=chat`);
+    }
   };
 
   const ENTRY_CONFIG: Record<Exclude<CardKey, 'members'>, {

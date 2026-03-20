@@ -34,10 +34,10 @@ export const STAGE_LABEL: Record<TripStage, string> = {
  *   reconciling  → end_date < today (trip over, still active)
  *   experiencing → start_date ≤ today ≤ end_date
  *   planning     → phase2_unlocked && trip hasn't started yet
- *   confirmed    → start_date set but phase2 not yet unlocked
- *   deciding     → default (no dates, not unlocked)
+ *   confirmed    → start_date + destination + budget_per_person + trip_type all set, phase2 not yet unlocked
+ *   deciding     → default (still missing one or more of the above)
  */
-export function getTripStage(trip: Pick<Trip, 'status' | 'start_date' | 'end_date' | 'phase2_unlocked'>): TripStage {
+export function getTripStage(trip: Pick<Trip, 'status' | 'start_date' | 'end_date' | 'phase2_unlocked' | 'destination' | 'budget_per_person' | 'trip_type'>): TripStage {
   if (trip.status === 'closed') return 'done';
 
   const today = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
@@ -45,7 +45,7 @@ export function getTripStage(trip: Pick<Trip, 'status' | 'start_date' | 'end_dat
   if (trip.end_date && trip.end_date < today) return 'reconciling';
   if (trip.start_date && trip.start_date <= today && (!trip.end_date || trip.end_date >= today)) return 'experiencing';
   if (trip.phase2_unlocked) return 'planning';
-  if (trip.start_date) return 'confirmed';
+  if (trip.start_date && trip.destination && trip.budget_per_person && trip.trip_type) return 'confirmed';
 
   return 'deciding';
 }
