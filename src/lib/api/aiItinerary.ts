@@ -20,8 +20,11 @@ export async function generateAiItinerary(
   tripId: string,
   plannerOverride?: string | null
 ): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error('No active session — please log out and log back in.');
   const { error } = await supabase.functions.invoke('generate-itinerary', {
     body: { trip_id: tripId, planner_override: plannerOverride ?? null },
+    headers: { Authorization: `Bearer ${session.access_token}` },
   });
   if (error) throw error;
 }
