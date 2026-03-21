@@ -89,7 +89,7 @@ function GroupMembersCard({
   onViewRoster: () => void;
   editMode?: boolean;
 }) {
-  const memberCount = respondents.length;
+  const confirmedCount = 1 + respondents.length;
   const total = trip.group_size_precise ?? GROUP_SIZE_MIDPOINTS[trip.group_size_bucket];
 
   return (
@@ -105,9 +105,9 @@ function GroupMembersCard({
       <View style={styles.entryText}>
         <Text style={styles.entryTitle}>Group members</Text>
         <Text style={styles.entrySubtitle}>
-          {memberCount === 0
+          {respondents.length === 0
             ? 'No one else has joined yet'
-            : `${memberCount} of ${total} joined`}
+            : `${confirmedCount} of ${total} confirmed`}
         </Text>
       </View>
       {editMode
@@ -130,6 +130,7 @@ export default function TripDashboard() {
   const { data: polls = [] } = usePolls(id);
   const { data: respondents = [] } = useRespondents(id);
   const { canEditTrip, canReorderCards } = usePermissions(id);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   // Realtime: keep badge counts fresh
   const pollIdString = useMemo(() => polls.map((p) => p.id).sort().join(','), [polls]);
@@ -402,16 +403,33 @@ const stage = trip ? getTripStage(trip) : 'deciding';
             )) : null}
           </View>
 
-          {/* CTA — stop propagation so it doesn't also trigger the hero card's edit nav */}
-          <Pressable
-            onPress={(e) => { e.stopPropagation(); handleCtaPress(); }}
-            style={[styles.ctaBtn, { backgroundColor: hero.ctaBg }]}
-            accessibilityRole="button"
-          >
-            <Text style={[styles.ctaText, { color: stage === 'experiencing' || stage === 'done' ? hero.titleColor : '#fff' }]}>
-              {hero.ctaLabel}
-            </Text>
-          </Pressable>
+          {/* CTA row — stop propagation so it doesn't also trigger the hero card's edit nav */}
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Pressable
+              onPress={(e) => { e.stopPropagation(); handleCtaPress(); }}
+              style={[styles.ctaBtn, { backgroundColor: hero.ctaBg, flex: 1 }]}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.ctaText, { color: stage === 'experiencing' || stage === 'done' ? hero.titleColor : '#fff' }]}>
+                {hero.ctaLabel}
+              </Text>
+            </Pressable>
+            {stage === 'confirmed' && trip && (
+              <Pressable
+                onPress={(e) => {
+                  e.stopPropagation();
+                  Clipboard.setStringAsync(getShareUrl(trip.share_token));
+                  setLinkCopied(true);
+                  setTimeout(() => setLinkCopied(false), 2000);
+                }}
+                style={[styles.copyLinkPill, { backgroundColor: hero.pillBg }]}
+                accessibilityRole="button"
+                accessibilityLabel="Copy invite link"
+              >
+                <Ionicons name={linkCopied ? 'checkmark' : 'link-outline'} size={18} color={hero.titleColor} />
+              </Pressable>
+            )}
+          </View>
         </TouchableOpacity>
 
 
@@ -446,6 +464,7 @@ const styles = StyleSheet.create({
   pillText: { fontSize: 13 },
   ctaBtn: { marginTop: 8, borderRadius: 999, paddingVertical: 16, alignItems: 'center' },
   ctaText: { fontSize: 16, fontWeight: '600' },
+  copyLinkPill: { marginTop: 8, borderRadius: 999, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
 
   // Entry points
   sectionLabel: { fontSize: 13, color: '#999', textAlign: 'center', marginVertical: 16 },
