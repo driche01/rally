@@ -11,7 +11,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -56,6 +56,13 @@ const BLOCK_TYPE_COLORS: Record<string, string> = {
   accommodation: '#FF6B5B',
   free_time:     '#16A34A',
 };
+
+const LOADING_MESSAGES = [
+  'Analyzing your group\'s preferences…',
+  'Planning activities and experiences…',
+  'Crafting three distinct options…',
+  'Adding finishing touches…',
+];
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -108,7 +115,8 @@ function OptionCard({
   isSelected: boolean;
   onSelect: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  // First option auto-expanded so there's immediate visual richness
+  const [expanded, setExpanded] = useState(option.index === 0);
   const style = OPTION_STYLES[option.label] ?? OPTION_STYLES.Balanced;
 
   return (
@@ -248,38 +256,56 @@ export default function AiItineraryScreen() {
     draft?.selected_index ?? null
   );
   const [regenModalVisible, setRegenModalVisible] = useState(false);
+  const [confirmingApply, setConfirmingApply] = useState(false);
+  const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
 
   const isGenerating = draft?.status === 'generating' || generate.isPending;
   const hasOptions = draft?.status === 'ready' && (draft.options?.length ?? 0) > 0;
   const hasError = draft?.status === 'error';
 
-  function handleApply() {
+  // Cycle through loading messages while generating
+  useEffect(() => {
+    if (!isGenerating) {
+      setLoadingMsgIdx(0);
+      return;
+    }
+    const id = setInterval(() => {
+      setLoadingMsgIdx((i) => (i + 1) % LOADING_MESSAGES.length);
+    }, 3500);
+    return () => clearInterval(id);
+  }, [isGenerating]);
+
+  // Reset confirmation state if selection changes
+  useEffect(() => {
+    setConfirmingApply(false);
+  }, [selectedIndex]);
+
+  const selectedStyle =
+    selectedIndex !== null && draft?.options?.[selectedIndex]
+      ? OPTION_STYLES[draft.options[selectedIndex].label] ?? OPTION_STYLES.Balanced
+      : null;
+
+  function handleApplyPress() {
+    if (selectedIndex === null || !draft || !hasOptions) return;
+    setConfirmingApply(true);
+  }
+
+  function handleConfirmApply() {
     if (selectedIndex === null || !draft || !hasOptions) return;
     const option = draft.options[selectedIndex];
     if (!option) return;
-
-    Alert.alert(
-      `Apply "${option.label}" itinerary?`,
-      'This will replace any blocks currently in your itinerary. You can edit them afterwards.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Apply',
-          onPress: () => {
-            apply.mutate(
-              { draftId: draft.id, option },
-              {
-                onSuccess: () => {
-                  router.back();
-                },
-                onError: () => {
-                  Alert.alert('Error', 'Could not apply the itinerary. Please try again.');
-                },
-              }
-            );
-          },
+    apply.mutate(
+      { draftId: draft.id, option },
+      {
+        onSuccess: () => {
+          setConfirmingApply(false);
+          router.back();
         },
-      ]
+        onError: () => {
+          setConfirmingApply(false);
+          Alert.alert('Error', 'Could not apply the itinerary. Please try again.');
+        },
+      }
     );
   }
 
@@ -322,7 +348,7 @@ export default function AiItineraryScreen() {
       ) : isGenerating ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#FF6B5B" />
-          <Text style={styles.generatingText}>Crafting your itinerary options…</Text>
+          <Text style={styles.generatingText}>{LOADING_MESSAGES[loadingMsgIdx]}</Text>
           <Text style={styles.generatingSubText}>This takes about 15–20 seconds</Text>
         </View>
       ) : hasError ? (
@@ -370,26 +396,53 @@ export default function AiItineraryScreen() {
             ))}
           </ScrollView>
 
-          {/* Apply button */}
+          {/* Apply bar — normal or confirming state */}
           <View style={[styles.applyBar, { paddingBottom: insets.bottom + 12 }]}>
-            <Pressable
-              onPress={handleApply}
-              disabled={selectedIndex === null || apply.isPending}
-              style={[
-                styles.applyBtn,
-                (selectedIndex === null || apply.isPending) && styles.applyBtnDisabled,
-              ]}
-            >
-              {apply.isPending ? (
-                <ActivityIndicator size="small" color="white" />
-              ) : (
+            {confirmingApply ? (
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <Pressable
+                  onPress={() => setConfirmingApply(false)}
+                  style={[styles.applyBtn, styles.applyBtnBack]}
+                >
+                  <Ionicons name="arrow-back" size={16} color="#525252" />
+                  <Text style={[styles.applyBtnText, { color: '#525252' }]}>Back</Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleConfirmApply}
+                  disabled={apply.isPending}
+                  style={[
+                    styles.applyBtn,
+                    { flex: 2, backgroundColor: selectedStyle?.accent ?? '#1A4060' },
+                    apply.isPending && { opacity: 0.6 },
+                  ]}
+                >
+                  {apply.isPending ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : (
+                    <Text style={styles.applyBtnText}>
+                      ✓ Apply {draft.options[selectedIndex!]?.label}
+                    </Text>
+                  )}
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable
+                onPress={handleApplyPress}
+                disabled={selectedIndex === null}
+                style={[
+                  styles.applyBtn,
+                  selectedIndex !== null
+                    ? { backgroundColor: selectedStyle?.accent ?? '#1A4060' }
+                    : styles.applyBtnDisabled,
+                ]}
+              >
                 <Text style={styles.applyBtnText}>
                   {selectedIndex !== null
                     ? `Apply "${draft.options[selectedIndex]?.label}" itinerary`
                     : 'Select an option to apply'}
                 </Text>
-              )}
-            </Pressable>
+              </Pressable>
+            )}
           </View>
         </>
       )}
@@ -581,11 +634,17 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   applyBtn: {
-    backgroundColor: '#1A4060',
+    flex: 1,
     borderRadius: 16,
     paddingVertical: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  applyBtnBack: {
+    flex: 1,
+    backgroundColor: '#F5F5F3',
   },
   applyBtnDisabled: {
     backgroundColor: '#D4D4D4',

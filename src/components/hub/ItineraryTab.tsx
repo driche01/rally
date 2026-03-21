@@ -2,7 +2,7 @@
  * ItineraryTab — F6 Itinerary Builder
  * Day-by-day timeline of itinerary blocks for a trip.
  */
-import { useState, useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -14,8 +14,10 @@ import {
   TextInput,
   View,
   KeyboardAvoidingView,
+  Linking,
   Platform,
 } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -35,11 +37,14 @@ import {
   generateIcal,
 } from '@/lib/api/itinerary';
 import { getShareUrl } from '@/lib/api/trips';
+import { lookupRestaurantDetails, type RestaurantDetails } from '@/lib/api/restaurantDetails';
 import { useAuthStore } from '@/stores/authStore';
 import type { BlockType, ItineraryBlock, ItineraryDay } from '@/types/database';
 import type { CreateBlockInput } from '@/lib/api/itinerary';
 import { DateRangePicker } from '@/components/DateRangePicker';
+import { BlockAlternativesSheet } from '@/components/hub/BlockAlternativesSheet';
 import { useAiItineraryDraft, useGenerateAiItinerary } from '@/hooks/useAiItinerary';
+import type { AiBlockAlternative } from '@/types/database';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -68,6 +73,187 @@ const BLOCK_TYPE_COLORS: Record<BlockType, { bg: string; text: string; pill: str
   accommodation: { bg: 'bg-coral-50', text: 'text-coral-600', pill: 'bg-coral-50' },
   free_time: { bg: 'bg-green-50', text: 'text-green-600', pill: 'bg-green-50' },
 };
+
+const LOADING_MESSAGES = [
+  'Analyzing your group\'s preferences…',
+  'Planning activities and experiences…',
+  'Crafting three distinct options…',
+  'Almost ready…',
+];
+
+const AI_OPTION_STYLES: Record<string, { accent: string; badge: string }> = {
+  Packed:   { accent: '#1A4060', badge: '#D8E4EE' },
+  Balanced: { accent: '#235C38', badge: '#DDE8D8' },
+  Relaxed:  { accent: '#7A4C1E', badge: '#F2E5D8' },
+};
+
+// ─── Time Picker ──────────────────────────────────────────────────────────────
+
+const TP_ITEM_H = 52;
+const TP_VISIBLE = 5;
+const TP_COL_H = TP_ITEM_H * TP_VISIBLE;
+
+const TP_HOURS = Array.from({ length: 24 }, (_, i) => i);
+const TP_MINUTES = Array.from({ length: 12 }, (_, i) => i * 5);
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+function parseTimeToIndices(time: string): { hi: number; mi: number } {
+  if (!time) return { hi: 8, mi: 0 };
+  const parts = time.split(':');
+  const h = parseInt(parts[0] ?? '8', 10);
+  const mRaw = parseInt(parts[1] ?? '0', 10);
+  const hi = isNaN(h) ? 8 : Math.max(0, Math.min(23, h));
+  const mi = isNaN(mRaw) ? 0 : Math.max(0, Math.min(11, Math.round(mRaw / 5)));
+  return { hi, mi };
+}
+
+interface TpColumnProps {
+  items: number[];
+  initialIndex: number;
+  onChange: (idx: number) => void;
+}
+
+function TpColumn({ items, initialIndex, onChange }: TpColumnProps) {
+  const scrollRef = useRef<ScrollView>(null);
+  const [activeIdx, setActiveIdx] = useState(initialIndex);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      scrollRef.current?.scrollTo({ y: initialIndex * TP_ITEM_H, animated: false });
+    }, 80);
+    return () => clearTimeout(t);
+  }, []); // run once on mount
+
+  function handleScrollEnd(e: any) {
+    const raw = e.nativeEvent.contentOffset.y / TP_ITEM_H;
+    const clamped = Math.max(0, Math.min(Math.round(raw), items.length - 1));
+    setActiveIdx(clamped);
+    onChange(clamped);
+  }
+
+  function handleItemPress(i: number) {
+    setActiveIdx(i);
+    onChange(i);
+    scrollRef.current?.scrollTo({ y: i * TP_ITEM_H, animated: true });
+  }
+
+  return (
+    <View style={{ width: 72, height: TP_COL_H, overflow: 'hidden' }}>
+      <ScrollView
+        ref={scrollRef}
+        showsVerticalScrollIndicator={false}
+        snapToInterval={TP_ITEM_H}
+        decelerationRate="fast"
+        onMomentumScrollEnd={handleScrollEnd}
+        contentContainerStyle={{ paddingVertical: TP_ITEM_H * 2 }}
+      >
+        {items.map((v, i) => (
+          <Pressable
+            key={i}
+            onPress={() => handleItemPress(i)}
+            style={{ height: TP_ITEM_H, alignItems: 'center', justifyContent: 'center' }}
+          >
+            <Text
+              style={{
+                fontSize: 24,
+                fontWeight: activeIdx === i ? '700' : '400',
+                color: activeIdx === i ? '#1C1C1C' : '#C8C8C8',
+              }}
+            >
+              {pad2(v)}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+interface InlineTimePickerProps {
+  field: 'start' | 'end';
+  initialTime: string;
+  onConfirm: (time: string) => void;
+  onClear: () => void;
+  onBack: () => void;
+}
+
+function InlineTimePicker({ field, initialTime, onConfirm, onClear, onBack }: InlineTimePickerProps) {
+  const { hi, mi } = parseTimeToIndices(initialTime);
+  const hourIdxRef = useRef(hi);
+  const minIdxRef = useRef(mi);
+
+  return (
+    <View>
+      {/* Back header */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+        <Pressable onPress={onBack} hitSlop={8} style={{ padding: 2 }}>
+          <Ionicons name="chevron-back" size={22} color="#737373" />
+        </Pressable>
+        <Text style={{ flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '700', color: '#1C1C1C' }}>
+          {field === 'start' ? 'Start time' : 'End time'}
+        </Text>
+        <View style={{ width: 30 }} />
+      </View>
+
+      {/* Drum wheel */}
+      <View style={{ alignItems: 'center' }}>
+        <View style={{ position: 'relative' }}>
+          {/* Selection highlight band */}
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: (TP_COL_H - TP_ITEM_H) / 2,
+              left: -24,
+              right: -24,
+              height: TP_ITEM_H,
+              backgroundColor: '#F4F4F2',
+              borderRadius: 14,
+            }}
+          />
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <TpColumn
+              items={TP_HOURS}
+              initialIndex={hi}
+              onChange={(idx) => { hourIdxRef.current = idx; }}
+            />
+            <Text style={{ fontSize: 28, fontWeight: '700', color: '#1C1C1C', width: 22, textAlign: 'center', marginBottom: 3 }}>
+              :
+            </Text>
+            <TpColumn
+              items={TP_MINUTES}
+              initialIndex={mi}
+              onChange={(idx) => { minIdxRef.current = idx; }}
+            />
+          </View>
+        </View>
+      </View>
+
+      <Pressable
+        onPress={() => {
+          const time = `${pad2(TP_HOURS[hourIdxRef.current])}:${pad2(TP_MINUTES[minIdxRef.current])}`;
+          onConfirm(time);
+        }}
+        style={{
+          backgroundColor: '#FF6B5B',
+          borderRadius: 14,
+          paddingVertical: 14,
+          alignItems: 'center',
+          marginTop: 20,
+        }}
+      >
+        <Text style={{ fontSize: 15, fontWeight: '700', color: 'white' }}>Confirm</Text>
+      </Pressable>
+
+      <Pressable onPress={onClear} style={{ marginTop: 12, alignItems: 'center' }}>
+        <Text style={{ fontSize: 14, color: '#A3A3A3' }}>Clear time</Text>
+      </Pressable>
+    </View>
+  );
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -111,10 +297,12 @@ function isValidDate(s: string): boolean {
 
 function BlockCard({
   block,
+  onPress,
   onLongPress,
 }: {
   block: ItineraryBlock;
-  onLongPress: (() => void) | undefined;
+  onPress: (() => void) | undefined;
+  onLongPress?: (() => void) | undefined;
 }) {
   const colors = BLOCK_TYPE_COLORS[block.type];
   const icon = BLOCK_TYPE_ICONS[block.type];
@@ -130,6 +318,7 @@ function BlockCard({
 
   return (
     <Pressable
+      onPress={onPress}
       onLongPress={onLongPress}
       className="mb-2 flex-row items-start gap-3 rounded-2xl bg-white p-3"
       style={{
@@ -172,7 +361,7 @@ function BlockCard({
         </View>
       </View>
 
-      <Ionicons name="ellipsis-horizontal" size={14} color="#D4D4D4" />
+      <Ionicons name="chevron-forward" size={14} color="#D4D4D4" />
     </Pressable>
   );
 }
@@ -181,11 +370,15 @@ function DaySection({
   day,
   onAddBlock,
   onEditBlock,
+  onDeleteBlock,
+  onLongPressBlock,
   isPlanner = true,
 }: {
   day: ItineraryDay;
   onAddBlock: (dayDate: string) => void;
   onEditBlock: (block: ItineraryBlock) => void;
+  onDeleteBlock: (block: ItineraryBlock) => void;
+  onLongPressBlock: (block: ItineraryBlock) => void;
   isPlanner?: boolean;
 }) {
   const { going, not_sure } = day.rsvpCounts;
@@ -214,9 +407,10 @@ function DaySection({
         isPlanner ? (
           <Pressable
             onPress={() => onAddBlock(day.date)}
-            className="mb-2 items-center justify-center rounded-2xl border-2 border-dashed border-neutral-200 py-4"
+            className="mb-2 items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-neutral-200 py-5"
           >
-            <Ionicons name="add" size={20} color="#D4D4D4" />
+            <Ionicons name="add-circle-outline" size={18} color="#D4D4D4" />
+            <Text style={{ fontSize: 12, color: '#D0D0D0' }}>Tap to add activities</Text>
           </Pressable>
         ) : (
           <View className="mb-2 items-center justify-center rounded-2xl border-2 border-dashed border-neutral-200 py-4">
@@ -225,15 +419,45 @@ function DaySection({
         )
       ) : (
         day.blocks.map((block) => (
-          <BlockCard
-            key={block.id}
-            block={block}
-            onLongPress={isPlanner ? () => onEditBlock(block) : undefined}
-          />
+          isPlanner ? (
+            <Swipeable
+              key={block.id}
+              overshootRight={false}
+              renderRightActions={() => (
+                <Pressable
+                  onPress={() => onDeleteBlock(block)}
+                  style={{
+                    backgroundColor: '#EF4444',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    width: 72,
+                    borderRadius: 16,
+                    marginBottom: 8,
+                    marginLeft: 6,
+                  }}
+                >
+                  <Ionicons name="trash-outline" size={18} color="white" />
+                  <Text style={{ color: 'white', fontSize: 10, fontWeight: '700', marginTop: 3 }}>Delete</Text>
+                </Pressable>
+              )}
+            >
+              <BlockCard
+                block={block}
+                onPress={() => onEditBlock(block)}
+                onLongPress={() => onLongPressBlock(block)}
+              />
+            </Swipeable>
+          ) : (
+            <BlockCard
+              key={block.id}
+              block={block}
+              onPress={undefined}
+            />
+          )
         ))
       )}
 
-      {/* Add block button — planners only */}
+      {/* Add block button — planners only, when day has blocks */}
       {day.blocks.length > 0 && isPlanner ? (
         <Pressable
           onPress={() => onAddBlock(day.date)}
@@ -265,17 +489,41 @@ function BlockEditorModal({
   deleting: boolean;
 }) {
   const [state, setState] = useState<BlockEditorState>(editor);
+  const [timePickerFor, setTimePickerFor] = useState<'start' | 'end' | null>(null);
+  const [tpKey, setTpKey] = useState(0);
+  const [restaurantInfo, setRestaurantInfo] = useState<RestaurantDetails | null>(null);
+  const [restaurantLoading, setRestaurantLoading] = useState(false);
 
-  // Sync when editor changes (re-open)
   useMemo(() => {
     setState(editor);
+    setTimePickerFor(null);
+    setRestaurantInfo(null);
+    setRestaurantLoading(false);
   }, [editor.visible]);
+
+  async function handleLookupRestaurant() {
+    if (!state.title.trim() && !state.location.trim()) return;
+    setRestaurantLoading(true);
+    setRestaurantInfo(null);
+    const result = await lookupRestaurantDetails(
+      state.title,
+      state.location,
+      editor.dayDate ?? '',
+    );
+    setRestaurantLoading(false);
+    if (result.found) setRestaurantInfo(result);
+  }
 
   const set = useCallback(
     <K extends keyof BlockEditorState>(key: K, value: BlockEditorState[K]) =>
       setState((prev) => ({ ...prev, [key]: value })),
     []
   );
+
+  function openTimePicker(field: 'start' | 'end') {
+    setTimePickerFor(field);
+    setTpKey((k) => k + 1);
+  }
 
   const canSave = state.title.trim().length > 0;
 
@@ -294,149 +542,264 @@ function BlockEditorModal({
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <Pressable
             onPress={() => {}}
-            style={{ backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, gap: 16 }}
+            style={{
+              backgroundColor: 'white',
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              padding: 24,
+              gap: timePickerFor ? 0 : 16,
+            }}
           >
             {/* Drag handle */}
-            <View style={{ alignItems: 'center', marginBottom: 4 }}>
+            <View style={{ alignItems: 'center', marginBottom: timePickerFor ? 0 : 4 }}>
               <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#E5E5E5' }} />
             </View>
 
-            <Text style={{ fontSize: 17, fontWeight: '700', color: '#1C1C1C' }}>
-              {editor.mode === 'create' ? 'Add block' : 'Edit block'}
-            </Text>
-
-            {/* Type selector */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                {BLOCK_TYPES.map((t) => {
-                  const active = state.type === t;
-                  return (
-                    <Pressable
-                      key={t}
-                      onPress={() => set('type', t)}
-                      style={{
-                        paddingHorizontal: 12,
-                        paddingVertical: 6,
-                        borderRadius: 20,
-                        borderWidth: 1.5,
-                        borderColor: active ? '#FF6B5B' : '#E5E5E5',
-                        backgroundColor: active ? '#FFF1F0' : 'white',
-                      }}
-                    >
-                      <Text style={{ fontSize: 13, fontWeight: '600', color: active ? '#FF6B5B' : '#737373' }}>
-                        {BLOCK_TYPE_LABELS[t]}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </ScrollView>
-
-            {/* Title */}
-            <View>
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Title *</Text>
-              <TextInput
-                value={state.title}
-                onChangeText={(v) => set('title', v)}
-                placeholder="e.g. Dinner at The Bistro"
-                placeholderTextColor="#A3A3A3"
-                style={{ borderWidth: 1.5, borderColor: '#E5E5E5', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1C1C1C' }}
-                autoFocus={editor.mode === 'create'}
-                maxLength={100}
+            {timePickerFor !== null ? (
+              <InlineTimePicker
+                key={tpKey}
+                field={timePickerFor}
+                initialTime={timePickerFor === 'start' ? state.startTime : state.endTime}
+                onConfirm={(time) => {
+                  set(timePickerFor === 'start' ? 'startTime' : 'endTime', time);
+                  setTimePickerFor(null);
+                }}
+                onClear={() => {
+                  set(timePickerFor === 'start' ? 'startTime' : 'endTime', '');
+                  setTimePickerFor(null);
+                }}
+                onBack={() => setTimePickerFor(null)}
               />
-            </View>
-
-            {/* Times */}
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Start time</Text>
-                <TextInput
-                  value={state.startTime}
-                  onChangeText={(v) => set('startTime', v)}
-                  placeholder="HH:MM"
-                  placeholderTextColor="#A3A3A3"
-                  style={{ borderWidth: 1.5, borderColor: '#E5E5E5', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1C1C1C' }}
-                  maxLength={5}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>End time</Text>
-                <TextInput
-                  value={state.endTime}
-                  onChangeText={(v) => set('endTime', v)}
-                  placeholder="HH:MM"
-                  placeholderTextColor="#A3A3A3"
-                  style={{ borderWidth: 1.5, borderColor: '#E5E5E5', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1C1C1C' }}
-                  maxLength={5}
-                />
-              </View>
-            </View>
-
-            {/* Location */}
-            <View>
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Location</Text>
-              <TextInput
-                value={state.location}
-                onChangeText={(v) => set('location', v)}
-                placeholder="Address or place name"
-                placeholderTextColor="#A3A3A3"
-                style={{ borderWidth: 1.5, borderColor: '#E5E5E5', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1C1C1C' }}
-                maxLength={200}
-              />
-            </View>
-
-            {/* Notes */}
-            <View>
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Notes</Text>
-              <TextInput
-                value={state.notes}
-                onChangeText={(v) => set('notes', v)}
-                placeholder="Any details…"
-                placeholderTextColor="#A3A3A3"
-                multiline
-                numberOfLines={2}
-                style={{ borderWidth: 1.5, borderColor: '#E5E5E5', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1C1C1C', minHeight: 72, textAlignVertical: 'top' }}
-                maxLength={500}
-              />
-            </View>
-
-            {/* Actions */}
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              {editor.mode === 'edit' ? (
-                <Pressable
-                  onPress={onDelete}
-                  disabled={deleting}
-                  style={{ flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#FCA5A5', alignItems: 'center', justifyContent: 'center' }}
-                >
-                  {deleting ? (
-                    <ActivityIndicator size="small" color="#EF4444" />
-                  ) : (
-                    <Text style={{ fontSize: 15, fontWeight: '600', color: '#EF4444' }}>Delete</Text>
-                  )}
-                </Pressable>
-              ) : (
-                <Pressable
-                  onPress={onClose}
-                  style={{ flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#E5E5E5', alignItems: 'center' }}
-                >
-                  <Text style={{ fontSize: 15, fontWeight: '600', color: '#525252' }}>Cancel</Text>
-                </Pressable>
-              )}
-
-              <Pressable
-                onPress={() => canSave && onSave(state)}
-                disabled={!canSave || saving}
-                style={{ flex: 2, paddingVertical: 14, borderRadius: 14, backgroundColor: canSave ? '#FF6B5B' : '#FCA99F', alignItems: 'center', justifyContent: 'center' }}
-              >
-                {saving ? (
-                  <ActivityIndicator size="small" color="white" />
-                ) : (
-                  <Text style={{ fontSize: 15, fontWeight: '600', color: 'white' }}>
-                    {editor.mode === 'create' ? 'Add block' : 'Save changes'}
+            ) : (
+              <>
+                {/* Title + day label */}
+                <View style={{ gap: 2 }}>
+                  <Text style={{ fontSize: 17, fontWeight: '700', color: '#1C1C1C' }}>
+                    {editor.mode === 'create' ? 'Add block' : 'Edit block'}
                   </Text>
-                )}
-              </Pressable>
-            </View>
+                  {editor.dayDate ? (
+                    <Text style={{ fontSize: 13, color: '#A3A3A3' }}>
+                      {formatDayLabel(editor.dayDate)}
+                    </Text>
+                  ) : null}
+                </View>
+
+                {/* Type selector */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {BLOCK_TYPES.map((t) => {
+                      const active = state.type === t;
+                      return (
+                        <Pressable
+                          key={t}
+                          onPress={() => set('type', t)}
+                          style={{
+                            paddingHorizontal: 12,
+                            paddingVertical: 6,
+                            borderRadius: 20,
+                            borderWidth: 1.5,
+                            borderColor: active ? '#FF6B5B' : '#E5E5E5',
+                            backgroundColor: active ? '#FFF1F0' : 'white',
+                          }}
+                        >
+                          <Text style={{ fontSize: 13, fontWeight: '600', color: active ? '#FF6B5B' : '#737373' }}>
+                            {BLOCK_TYPE_LABELS[t]}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+
+                {/* Title */}
+                <View>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Title *</Text>
+                  <TextInput
+                    value={state.title}
+                    onChangeText={(v) => set('title', v)}
+                    placeholder="e.g. Dinner at The Bistro"
+                    placeholderTextColor="#A3A3A3"
+                    style={{ borderWidth: 1.5, borderColor: '#E5E5E5', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1C1C1C' }}
+                    autoFocus={editor.mode === 'create'}
+                    maxLength={100}
+                  />
+                </View>
+
+                {/* Times — tappable, open drum picker */}
+                <View style={{ flexDirection: 'row', gap: 12 }}>
+                  <Pressable
+                    onPress={() => openTimePicker('start')}
+                    style={{ flex: 1, borderWidth: 1.5, borderColor: '#E5E5E5', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12 }}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#A3A3A3', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
+                      Start time
+                    </Text>
+                    <Text style={{ fontSize: 15, color: state.startTime ? '#1C1C1C' : '#C8C8C8', fontWeight: state.startTime ? '500' : '400' }}>
+                      {state.startTime ? formatTime(state.startTime) : 'Set time'}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => openTimePicker('end')}
+                    style={{ flex: 1, borderWidth: 1.5, borderColor: '#E5E5E5', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12 }}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#A3A3A3', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
+                      End time
+                    </Text>
+                    <Text style={{ fontSize: 15, color: state.endTime ? '#1C1C1C' : '#C8C8C8', fontWeight: state.endTime ? '500' : '400' }}>
+                      {state.endTime ? formatTime(state.endTime) : 'Set time'}
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {/* Location */}
+                <View>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Location</Text>
+                  <TextInput
+                    value={state.location}
+                    onChangeText={(v) => { set('location', v); setRestaurantInfo(null); }}
+                    placeholder="Address or place name"
+                    placeholderTextColor="#A3A3A3"
+                    style={{ borderWidth: 1.5, borderColor: '#E5E5E5', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1C1C1C' }}
+                    maxLength={200}
+                  />
+                </View>
+
+                {/* Restaurant lookup — meal blocks only */}
+                {state.type === 'meal' ? (
+                  <View style={{ gap: 10 }}>
+                    {/* Look up button */}
+                    {!restaurantInfo ? (
+                      <Pressable
+                        onPress={handleLookupRestaurant}
+                        disabled={restaurantLoading || (!state.title.trim() && !state.location.trim())}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 6,
+                          paddingVertical: 10,
+                          borderRadius: 12,
+                          borderWidth: 1.5,
+                          borderColor: restaurantLoading ? '#E5E5E5' : '#FF6B5B',
+                          backgroundColor: restaurantLoading ? '#F9F9F9' : '#FFF1F0',
+                        }}
+                      >
+                        {restaurantLoading ? (
+                          <ActivityIndicator size="small" color="#FF6B5B" />
+                        ) : (
+                          <Ionicons name="storefront-outline" size={15} color="#FF6B5B" />
+                        )}
+                        <Text style={{ fontSize: 13, fontWeight: '600', color: restaurantLoading ? '#A3A3A3' : '#FF6B5B' }}>
+                          {restaurantLoading ? 'Looking up…' : 'Look up restaurant info'}
+                        </Text>
+                      </Pressable>
+                    ) : (
+                      /* Restaurant info card */
+                      <View style={{ backgroundColor: '#FFF8F7', borderRadius: 14, borderWidth: 1.5, borderColor: '#FFD5CF', padding: 14, gap: 10 }}>
+                        {/* Name + dismiss */}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <Text style={{ fontSize: 14, fontWeight: '700', color: '#1C1C1C', flex: 1 }} numberOfLines={1}>
+                            {restaurantInfo.name}
+                          </Text>
+                          <Pressable onPress={() => setRestaurantInfo(null)} hitSlop={8}>
+                            <Ionicons name="close-circle" size={18} color="#C8C8C8" />
+                          </Pressable>
+                        </View>
+
+                        {/* Price + hours row */}
+                        <View style={{ flexDirection: 'row', gap: 16 }}>
+                          {restaurantInfo.price_display ? (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                              <Ionicons name="cash-outline" size={13} color="#737373" />
+                              <Text style={{ fontSize: 13, color: '#525252', fontWeight: '600' }}>
+                                {restaurantInfo.price_display}
+                              </Text>
+                            </View>
+                          ) : null}
+                          {restaurantInfo.hours_today ? (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                              <Ionicons name="time-outline" size={13} color="#737373" />
+                              <Text style={{ fontSize: 13, color: '#525252' }}>
+                                {restaurantInfo.hours_today.all_day
+                                  ? 'Open 24 hrs'
+                                  : `${restaurantInfo.hours_today.open} – ${restaurantInfo.hours_today.close}`}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+
+                        {/* Google Maps link */}
+                        {restaurantInfo.google_maps_url ? (
+                          <Pressable
+                            onPress={() => Linking.openURL(restaurantInfo.google_maps_url!)}
+                            style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}
+                          >
+                            <Ionicons name="map-outline" size={13} color="#FF6B5B" />
+                            <Text style={{ fontSize: 13, color: '#FF6B5B', fontWeight: '600' }}>
+                              View on Google Maps
+                            </Text>
+                            <Ionicons name="open-outline" size={11} color="#FF6B5B" />
+                          </Pressable>
+                        ) : null}
+                      </View>
+                    )}
+                  </View>
+                ) : null}
+
+                {/* Notes */}
+                <View>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Notes</Text>
+                  <TextInput
+                    value={state.notes}
+                    onChangeText={(v) => set('notes', v)}
+                    placeholder="Any details…"
+                    placeholderTextColor="#A3A3A3"
+                    multiline
+                    numberOfLines={2}
+                    style={{ borderWidth: 1.5, borderColor: '#E5E5E5', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1C1C1C', minHeight: 72, textAlignVertical: 'top' }}
+                    maxLength={500}
+                  />
+                </View>
+
+                {/* Actions */}
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  {editor.mode === 'edit' ? (
+                    <Pressable
+                      onPress={onDelete}
+                      disabled={deleting}
+                      style={{ flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#FCA5A5', alignItems: 'center', justifyContent: 'center' }}
+                    >
+                      {deleting ? (
+                        <ActivityIndicator size="small" color="#EF4444" />
+                      ) : (
+                        <Text style={{ fontSize: 15, fontWeight: '600', color: '#EF4444' }}>Delete</Text>
+                      )}
+                    </Pressable>
+                  ) : (
+                    <Pressable
+                      onPress={onClose}
+                      style={{ flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#E5E5E5', alignItems: 'center' }}
+                    >
+                      <Text style={{ fontSize: 15, fontWeight: '600', color: '#525252' }}>Cancel</Text>
+                    </Pressable>
+                  )}
+
+                  <Pressable
+                    onPress={() => canSave && onSave(state)}
+                    disabled={!canSave || saving}
+                    style={{ flex: 2, paddingVertical: 14, borderRadius: 14, backgroundColor: canSave ? '#FF6B5B' : '#FCA99F', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    {saving ? (
+                      <ActivityIndicator size="small" color="white" />
+                    ) : (
+                      <Text style={{ fontSize: 15, fontWeight: '600', color: 'white' }}>
+                        {editor.mode === 'create' ? 'Add block' : 'Save changes'}
+                      </Text>
+                    )}
+                  </Pressable>
+                </View>
+              </>
+            )}
           </Pressable>
         </KeyboardAvoidingView>
       </Pressable>
@@ -459,6 +822,7 @@ function AiItineraryBanner({
   const router = useRouter();
   const { data: draft } = useAiItineraryDraft(tripId);
   const generate = useGenerateAiItinerary(tripId);
+  const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
 
   if (!isPlanner) return null;
 
@@ -466,21 +830,68 @@ function AiItineraryBanner({
   const hasReadyOptions = draft?.status === 'ready' && (draft.options?.length ?? 0) > 0 && !draft.applied_at;
   const wasApplied = Boolean(draft?.applied_at);
 
-  // Show a small "Regenerate AI options" link after the itinerary has been applied
+  useEffect(() => {
+    if (!isGenerating) {
+      setLoadingMsgIdx(0);
+      return;
+    }
+    const id = setInterval(() => {
+      setLoadingMsgIdx((i) => (i + 1) % LOADING_MESSAGES.length);
+    }, 3500);
+    return () => clearInterval(id);
+  }, [isGenerating]);
+
+  // Post-apply: prominent banner showing applied option + regenerate link
   if (wasApplied) {
+    const appliedLabel =
+      draft?.selected_index != null
+        ? (draft.options?.[draft.selected_index]?.label ?? 'Balanced')
+        : 'Balanced';
+    const appliedStyle = AI_OPTION_STYLES[appliedLabel] ?? AI_OPTION_STYLES.Balanced;
+
     return (
       <Pressable
         onPress={() => router.push(`/(app)/trips/${tripId}/ai-itinerary` as any)}
-        style={{ flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'center', marginBottom: 16 }}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 10,
+          backgroundColor: appliedStyle.badge,
+          borderRadius: 14,
+          paddingHorizontal: 14,
+          paddingVertical: 12,
+          marginBottom: 16,
+          borderWidth: 1,
+          borderColor: appliedStyle.accent + '30',
+        }}
         accessibilityRole="button"
       >
-        <Ionicons name="sparkles-outline" size={13} color="#A3A3A3" />
-        <Text style={{ fontSize: 12, color: '#A3A3A3' }}>Regenerate AI options</Text>
+        <Ionicons name="sparkles" size={16} color={appliedStyle.accent} />
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 13, fontWeight: '700', color: appliedStyle.accent }}>
+            {appliedLabel} itinerary applied
+          </Text>
+          <Text style={{ fontSize: 11, color: appliedStyle.accent, opacity: 0.75, marginTop: 1 }}>
+            AI-generated · tap any block to edit
+          </Text>
+        </View>
+        <View
+          style={{
+            backgroundColor: appliedStyle.accent + '18',
+            borderRadius: 8,
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+          }}
+        >
+          <Text style={{ fontSize: 11, fontWeight: '600', color: appliedStyle.accent }}>
+            Regenerate
+          </Text>
+        </View>
       </Pressable>
     );
   }
 
-  // Generating spinner
+  // Generating spinner with animated messages
   if (isGenerating) {
     return (
       <View style={{
@@ -498,7 +909,7 @@ function AiItineraryBanner({
         <ActivityIndicator size="small" color="#1A4060" />
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 14, fontWeight: '600', color: '#1A4060' }}>
-            Generating itinerary options…
+            {LOADING_MESSAGES[loadingMsgIdx]}
           </Text>
           <Text style={{ fontSize: 12, color: '#4A6E8A', marginTop: 2 }}>
             About 15–30 seconds
@@ -601,6 +1012,8 @@ export function ItineraryTab({ tripId, isPlanner = true }: { tripId: string; isP
   const [dateSheetVisible, setDateSheetVisible] = useState(false);
   const [editor, setEditor] = useState<BlockEditorState>(DEFAULT_EDITOR);
   const [deletingBlockId, setDeletingBlockId] = useState<string | null>(null);
+  const [altSheetBlock, setAltSheetBlock] = useState<ItineraryBlock | null>(null);
+  const [applyingAlt, setApplyingAlt] = useState(false);
 
   // Build itinerary days
   const days = useMemo(() => {
@@ -634,6 +1047,40 @@ export function ItineraryTab({ tripId, isPlanner = true }: { tripId: string; isP
 
   function closeEditor() {
     setEditor(DEFAULT_EDITOR);
+  }
+
+  function handleSwipeDelete(block: ItineraryBlock) {
+    deleteBlock.mutate(block.id, {
+      onError: () => Alert.alert('Error', 'Could not delete block. Please try again.'),
+    });
+  }
+
+  function handleApplyBlockAlt(alt: AiBlockAlternative) {
+    if (!altSheetBlock) return;
+    setApplyingAlt(true);
+    updateBlock.mutate(
+      {
+        blockId: altSheetBlock.id,
+        updates: {
+          title: alt.title,
+          type: alt.type as BlockType,
+          start_time: alt.start_time,
+          end_time: alt.end_time,
+          location: alt.location,
+          notes: alt.notes,
+        },
+      },
+      {
+        onSuccess: () => {
+          setApplyingAlt(false);
+          setAltSheetBlock(null);
+        },
+        onError: () => {
+          setApplyingAlt(false);
+          Alert.alert('Error', 'Could not apply change. Please try again.');
+        },
+      }
+    );
   }
 
   function handleSaveBlock(state: BlockEditorState) {
@@ -699,31 +1146,68 @@ export function ItineraryTab({ tripId, isPlanner = true }: { tripId: string; isP
     );
   }
 
+  function buildShareText(): string {
+    if (!trip) return '';
+
+    const BLOCK_EMOJI: Record<string, string> = {
+      activity:      '🚵',
+      meal:          '🍽️',
+      travel:        '🚗',
+      accommodation: '🏠',
+      free_time:     '☀️',
+    };
+
+    // `days` is the memoized itinerary already built by the component
+
+    // Header
+    const dateRange = trip.start_date && trip.end_date
+      ? (() => {
+          const [sy, sm, sd] = trip.start_date.split('-').map(Number);
+          const [ey, em, ed] = trip.end_date.split('-').map(Number);
+          const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+          const start = `${months[sm - 1]} ${sd}`;
+          const end = sm === em ? `${ed}` : `${months[em - 1]} ${ed}`;
+          return `${start}–${end}`;
+        })()
+      : '';
+
+    const lines: string[] = [
+      `✈️ ${trip.name}`,
+      dateRange ? `📅 ${dateRange}` : '',
+      '',
+    ].filter((l, i) => i < 2 || l !== '');
+
+    for (const day of days) {
+      if (!day.blocks.length) continue;
+      lines.push(`── ${formatDayLabel(day.date)} ──`);
+      for (const block of day.blocks) {
+        const emoji = BLOCK_EMOJI[block.type] ?? '📌';
+        const time = block.start_time
+          ? block.end_time
+            ? `${formatTime(block.start_time)} – ${formatTime(block.end_time)}`
+            : formatTime(block.start_time)
+          : '';
+        const location = block.location ? `  📍 ${block.location}` : '';
+        lines.push(`${emoji} ${time ? `${time}  ` : ''}${block.title}${location}`);
+      }
+      lines.push('');
+    }
+
+    const shareUrl = getShareUrl(trip.share_token);
+    lines.push(`Planned with Rally 🎉`);
+    lines.push(shareUrl);
+
+    return lines.join('\n');
+  }
+
   function handleShare() {
     if (!trip) return;
-    const shareUrl = getShareUrl(trip.share_token);
-    const icalString = generateIcal(blocks, trip.name);
-
-    Alert.alert('Share itinerary', 'Choose an option', [
-      {
-        text: 'Export to calendar (.ics)',
-        onPress: () => {
-          Share.share({
-            title: `${trip.name} — Itinerary`,
-            message: icalString,
-          });
-        },
-      },
-      {
-        text: 'Copy share link',
-        onPress: () => {
-          Share.share({
-            title: trip.name,
-            message: shareUrl,
-            url: shareUrl,
-          });
-        },
-      },
+    const msg = buildShareText();
+    const encoded = encodeURIComponent(msg);
+    Alert.alert('Share itinerary', 'Choose how to send:', [
+      { text: 'iMessage / SMS', onPress: () => Linking.openURL(Platform.OS === 'ios' ? `sms:&body=${encoded}` : `sms:?body=${encoded}`) },
+      { text: 'WhatsApp', onPress: () => Linking.openURL(`whatsapp://send?text=${encoded}`) },
+      { text: 'More options…', onPress: async () => { try { await Share.share({ message: msg }); } catch {} } },
       { text: 'Cancel', style: 'cancel' },
     ]);
   }
@@ -774,6 +1258,8 @@ export function ItineraryTab({ tripId, isPlanner = true }: { tripId: string; isP
               day={day}
               onAddBlock={openAddBlock}
               onEditBlock={openEditBlock}
+              onDeleteBlock={handleSwipeDelete}
+              onLongPressBlock={setAltSheetBlock}
               isPlanner={isPlanner}
             />
           ))}
@@ -797,6 +1283,16 @@ export function ItineraryTab({ tripId, isPlanner = true }: { tripId: string; isP
         onDelete={handleDeleteBlock}
         saving={createBlock.isPending || updateBlock.isPending}
         deleting={deletingBlockId != null}
+      />
+
+      {/* AI Block Alternatives Sheet */}
+      <BlockAlternativesSheet
+        visible={altSheetBlock !== null}
+        block={altSheetBlock}
+        tripId={tripId}
+        onClose={() => setAltSheetBlock(null)}
+        onApply={handleApplyBlockAlt}
+        applying={applyingAlt}
       />
 
       {/* Date picker for setting trip start/end dates */}
