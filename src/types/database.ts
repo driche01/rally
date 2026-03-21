@@ -432,6 +432,18 @@ export interface AiItineraryDraft {
   updated_at: string;
 }
 
+// ─── Phase 4.3 — AI block alternatives ────────────────────────────────────────
+
+export interface AiBlockAlternative {
+  title: string;
+  type: BlockType;
+  start_time: string | null;
+  end_time: string | null;
+  location: string | null;
+  notes: string | null;
+  reason: string; // one-sentence explanation of why this suits the group
+}
+
 // ─── Budget tier constants ─────────────────────────────────────────────────────
 
 export const BUDGET_TIERS = [

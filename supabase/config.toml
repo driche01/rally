@@ -2,3 +2,9 @@ project_id = "qxpbnixvjtwckuedlrfj"
 
 [functions.generate-itinerary]
 verify_jwt = false
+
+[functions.suggest-block-alternatives]
+verify_jwt = false
+
+[functions.restaurant-details]
+verify_jwt = false
