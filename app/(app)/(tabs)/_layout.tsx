@@ -7,7 +7,7 @@
  *
  * Trip detail screens (hub, edit, recap, etc.) live outside this group in the
  * parent Stack so they push full-screen without the global tab bar.
- * The hub screen retains its own inner 5-tab nav.
+ * The hub screen retains its own inner tab nav (Polls | Itinerary | Lodging | Travel | Expenses).
  */
 
 import { Ionicons } from '@expo/vector-icons';
@@ -26,9 +26,8 @@ const TAB_CONFIG: Record<
     iconActive: React.ComponentProps<typeof Ionicons>['name'];
   }
 > = {
-  index:   { label: 'Trips',   icon: 'home-outline',        iconActive: 'home' },
-  chat:    { label: 'Chat',    icon: 'chatbubble-outline',  iconActive: 'chatbubble' },
-  account: { label: 'Account', icon: 'person-outline',      iconActive: 'person' },
+  index:   { label: 'Trips',   icon: 'home-outline',   iconActive: 'home' },
+  account: { label: 'Account', icon: 'person-outline', iconActive: 'person' },
 };
 
 // ─── Custom tab bar ───────────────────────────────────────────────────────────

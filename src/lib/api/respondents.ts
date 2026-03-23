@@ -204,6 +204,38 @@ export async function getRespondentsForTrip(tripId: string): Promise<Respondent[
   return data ?? [];
 }
 
+export async function createRespondentManually(
+  tripId: string,
+  name: string,
+  email: string,
+  phone: string
+): Promise<Respondent> {
+  // Generate a unique session token so the not-null constraint is satisfied
+  const sessionToken = `manual_${Math.random().toString(36).substring(2)}${Date.now().toString(36)}`;
+  const { data, error } = await supabase
+    .from('respondents')
+    .insert({
+      trip_id: tripId,
+      name: name.trim(),
+      email: email.trim(),
+      phone: phone.trim(),
+      session_token: sessionToken,
+      rsvp: 'in',
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteRespondent(respondentId: string): Promise<void> {
+  const { error } = await supabase
+    .from('respondents')
+    .delete()
+    .eq('id', respondentId);
+  if (error) throw error;
+}
+
 // ─── Poll responses ────────────────────────────────────────────────────────────
 
 export async function submitPollResponses(

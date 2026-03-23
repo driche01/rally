@@ -2,7 +2,7 @@
  * Trip Hub — Phase 2 entry point.
  *
  * Shown after a planner unlocks Phase 2 for a trip.
- * Hosts a custom bottom tab bar: Polls | Itinerary | Lodging | Expenses | Chat
+ * Hosts a custom bottom tab bar: Polls | Itinerary | Lodging | Travel | Expenses
  *
  * Navigation: pushed from the trip detail (index.tsx) after Phase 2 unlock.
  */
@@ -25,25 +25,11 @@ import { PollsTab } from '@/components/hub/PollsTab';
 import { ItineraryTab } from '@/components/hub/ItineraryTab';
 import { LodgingTab } from '@/components/hub/LodgingTab';
 import { TravelTab } from '@/components/hub/TravelTab';
-import { ChatTab } from '@/components/hub/ChatTab';
 import { ExpensesTab } from '@/components/hub/ExpensesTab';
 
 // ─── Tab definitions ─────────────────────────────────────────────────────────
 
-type TabId = 'polls' | 'itinerary' | 'lodging' | 'travel' | 'expenses' | 'chat';
-
-const TABS: {
-  id: TabId;
-  label: string;
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  iconActive: React.ComponentProps<typeof Ionicons>['name'];
-}[] = [
-  { id: 'polls',     label: 'Polls',     icon: 'stats-chart-outline',  iconActive: 'stats-chart' },
-  { id: 'itinerary', label: 'Itinerary', icon: 'calendar-outline',     iconActive: 'calendar' },
-  { id: 'lodging',   label: 'Lodging',   icon: 'home-outline',         iconActive: 'home' },
-  { id: 'expenses',  label: 'Expenses',  icon: 'receipt-outline',      iconActive: 'receipt' },
-  { id: 'chat',      label: 'Chat',      icon: 'chatbubble-outline',   iconActive: 'chatbubble' },
-];
+type TabId = 'polls' | 'itinerary' | 'lodging' | 'travel' | 'expenses';
 
 // ─── Hub screen ──────────────────────────────────────────────────────────────
 
@@ -73,7 +59,6 @@ export default function TripHubScreen() {
       case 'lodging':   return <LodgingTab tripId={id} isPlanner={canManageLodging} />;
       case 'travel':    return <TravelTab tripId={id} isPlanner={canManageTravel} />;
       case 'expenses':  return <ExpensesTab tripId={id} isPlanner={canManageExpenses} />;
-      case 'chat':      return <ChatTab tripId={id} />;
     }
   }
 

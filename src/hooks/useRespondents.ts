@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getRespondentsForTrip,
   getOrCreateRespondent,
+  createRespondentManually,
+  deleteRespondent,
   submitPollResponses,
   setRespondentPlanner,
 } from '../lib/api/respondents';
@@ -23,6 +25,23 @@ export function useSetRespondentPlanner(tripId: string) {
   return useMutation({
     mutationFn: ({ respondentId, isPlanner }: { respondentId: string; isPlanner: boolean }) =>
       setRespondentPlanner(respondentId, isPlanner),
+    onSuccess: () => qc.invalidateQueries({ queryKey: respondentKeys.forTrip(tripId) }),
+  });
+}
+
+export function useDeleteRespondent(tripId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (respondentId: string) => deleteRespondent(respondentId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: respondentKeys.forTrip(tripId) }),
+  });
+}
+
+export function useCreateRespondentManually(tripId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, email, phone }: { name: string; email: string; phone: string }) =>
+      createRespondentManually(tripId, name, email, phone),
     onSuccess: () => qc.invalidateQueries({ queryKey: respondentKeys.forTrip(tripId) }),
   });
 }
