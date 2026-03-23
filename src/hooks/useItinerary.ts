@@ -4,13 +4,14 @@ import {
   createBlock,
   updateBlock,
   deleteBlock,
+  deleteBlocksByType,
   reorderBlocks,
   getRsvpsForTrip,
   upsertDayRsvp,
   buildItineraryDays,
   type CreateBlockInput,
 } from '@/lib/api/itinerary';
-import type { DayRsvpStatus } from '@/types/database';
+import type { BlockType, DayRsvpStatus } from '@/types/database';
 
 export const itineraryKeys = {
   blocks: (tripId: string) => ['itinerary', 'blocks', tripId] as const,
@@ -72,6 +73,14 @@ export function useDeleteBlock(tripId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (blockId: string) => deleteBlock(blockId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: itineraryKeys.blocks(tripId) }),
+  });
+}
+
+export function useDeleteBlocksByType(tripId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (type: BlockType) => deleteBlocksByType(tripId, type),
     onSuccess: () => qc.invalidateQueries({ queryKey: itineraryKeys.blocks(tripId) }),
   });
 }

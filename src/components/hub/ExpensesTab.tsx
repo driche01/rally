@@ -13,6 +13,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Share,
   Text,
   TextInput,
   TouchableOpacity,
@@ -632,18 +633,35 @@ export function ExpensesTab({ tripId, isPlanner = true }: { tripId: string; isPl
         <View className="flex-row items-center justify-between pt-4 pb-3">
           <Text className="text-base font-bold text-neutral-800">Expenses</Text>
           {hasExpenses ? (
-            <Pressable
-              onPress={() => {
-                const csv = exportExpensesCsv(expenses, respondents, plannerProfile);
-                Alert.alert('Export', 'CSV data copied to clipboard.', [{ text: 'OK' }]);
-                // In a real implementation: Clipboard.setString(csv)
-                void csv;
-              }}
-              className="flex-row items-center gap-1 rounded-xl border border-neutral-200 px-3 py-1.5"
-            >
-              <Ionicons name="download-outline" size={14} color="#737373" />
-              <Text className="text-xs font-medium text-neutral-600">Export CSV</Text>
-            </Pressable>
+            <View className="flex-row items-center gap-2">
+              <Pressable
+                onPress={async () => {
+                  const lines = [`💰 Expense summary`];
+                  balances.forEach((b) => {
+                    const net = b.net;
+                    if (net === 0) lines.push(`${b.name}: even`);
+                    else if (net > 0) lines.push(`${b.name}: owed ${formatCents(net)}`);
+                    else lines.push(`${b.name}: owes ${formatCents(Math.abs(net))}`);
+                  });
+                  try { await Share.share({ message: lines.join('\n') }); } catch {}
+                }}
+                className="flex-row items-center gap-1 rounded-xl border border-neutral-200 px-3 py-1.5"
+              >
+                <Ionicons name="share-outline" size={14} color="#737373" />
+                <Text className="text-xs font-medium text-neutral-600">Share</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  const csv = exportExpensesCsv(expenses, respondents, plannerProfile);
+                  Alert.alert('Export', 'CSV data copied to clipboard.', [{ text: 'OK' }]);
+                  void csv;
+                }}
+                className="flex-row items-center gap-1 rounded-xl border border-neutral-200 px-3 py-1.5"
+              >
+                <Ionicons name="download-outline" size={14} color="#737373" />
+                <Text className="text-xs font-medium text-neutral-600">Export CSV</Text>
+              </Pressable>
+            </View>
           ) : null}
         </View>
 

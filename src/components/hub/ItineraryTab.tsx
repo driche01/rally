@@ -461,10 +461,21 @@ function DaySection({
       {day.blocks.length > 0 && isPlanner ? (
         <Pressable
           onPress={() => onAddBlock(day.date)}
-          className="flex-row items-center gap-1 self-start rounded-xl px-2 py-1.5 active:bg-neutral-100"
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            paddingVertical: 10,
+            borderRadius: 12,
+            borderWidth: 2,
+            borderStyle: 'dashed',
+            borderColor: '#E5E5E5',
+            marginTop: 4,
+          }}
         >
-          <Ionicons name="add-circle-outline" size={14} color="#A3A3A3" />
-          <Text className="text-xs font-medium text-neutral-400">Add block</Text>
+          <Ionicons name="add-circle-outline" size={14} color="#D4D4D4" />
+          <Text style={{ fontSize: 12, color: '#D0D0D0' }}>Add block</Text>
         </Pressable>
       ) : null}
     </View>
@@ -1272,6 +1283,17 @@ export function ItineraryTab({ tripId, isPlanner = true }: { tripId: string; isP
             <Ionicons name="pencil-outline" size={12} color="#A3A3A3" />
             <Text className="text-xs text-neutral-400">Edit trip dates</Text>
           </Pressable>
+
+          {/* Empty state */}
+          {blocks.length === 0 ? (
+            <View style={{ alignItems: 'center', paddingVertical: 48, gap: 10 }}>
+              <Ionicons name="calendar-outline" size={44} color="#D0D0D0" />
+              <Text style={{ fontSize: 16, fontWeight: '600', color: '#1A1A1A' }}>No activities yet</Text>
+              <Text style={{ fontSize: 14, color: '#888', textAlign: 'center', lineHeight: 20, paddingHorizontal: 32 }}>
+                Tap any day above to start building your itinerary, or use AI to generate options.
+              </Text>
+            </View>
+          ) : null}
         </ScrollView>
       )}
 

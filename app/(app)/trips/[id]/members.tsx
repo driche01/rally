@@ -8,21 +8,24 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   Alert,
   Linking,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
   Share,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRespondents, useSetRespondentPlanner } from '@/hooks/useRespondents';
+import { useRespondents, useSetRespondentPlanner, useCreateRespondentManually, useDeleteRespondent } from '@/hooks/useRespondents';
 import { useTrip } from '@/hooks/useTrips';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useProfile } from '@/hooks/useProfile';
@@ -31,6 +34,54 @@ import { getShareUrl } from '@/lib/api/trips';
 import { getTripStage, STAGE_ACCENT } from '@/lib/tripStage';
 import { GROUP_SIZE_MIDPOINTS } from '@/types/database';
 import type { Respondent } from '@/types/database';
+
+// ─── Swipeable member row ──────────────────────────────────────────────────────
+
+function DeleteMemberAction({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{ backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center', width: 80 }}
+      accessibilityRole="button"
+      accessibilityLabel="Remove member"
+    >
+      <Ionicons name="trash-outline" size={20} color="white" />
+      <Text style={{ color: 'white', fontSize: 11, fontWeight: '600', marginTop: 3 }}>Remove</Text>
+    </Pressable>
+  );
+}
+
+function MemberRow({
+  children,
+  canManage,
+  onPress,
+  onDelete,
+  style,
+}: {
+  children: React.ReactNode;
+  canManage: boolean;
+  onPress?: () => void;
+  onDelete?: (ref: React.RefObject<Swipeable>) => void;
+  style?: any;
+}) {
+  const swipeRef = useRef<Swipeable>(null);
+  return (
+    <Swipeable
+      ref={swipeRef}
+      renderRightActions={onDelete ? () => <DeleteMemberAction onPress={() => onDelete(swipeRef)} /> : undefined}
+      overshootRight={false}
+      friction={2}
+    >
+      <Pressable
+        onPress={onPress}
+        style={style}
+        accessibilityRole={canManage ? 'button' : 'none'}
+      >
+        {children}
+      </Pressable>
+    </Swipeable>
+  );
+}
 
 export default function MembersScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -42,12 +93,41 @@ export default function MembersScreen() {
   const { data: respondents = [] } = useRespondents(id);
   const { canDesignatePlanners } = usePermissions(id);
   const setPlanner = useSetRespondentPlanner(id);
+  const deleteMember = useDeleteRespondent(id);
   const currentUser = useAuthStore((s) => s.user);
   // Fetch the planner's profile directly by trip.created_by so any trip member
   // (not just the creator themselves) can see the planner row.
   const { data: plannerProfile } = useProfile(trip?.created_by);
 
   const [expandedPrefs, setExpandedPrefs] = useState<Set<string>>(new Set());
+  const [addModalVisible, setAddModalVisible] = useState(false);
+  const [addFirstName, setAddFirstName] = useState('');
+  const [addLastName, setAddLastName] = useState('');
+  const [addEmail, setAddEmail] = useState('');
+  const [addPhone, setAddPhone] = useState('');
+  const createMember = useCreateRespondentManually(id);
+
+  function handleAddMember() {
+    const firstName = addFirstName.trim();
+    const lastName = addLastName.trim();
+    const name = [firstName, lastName].filter(Boolean).join(' ');
+    const email = addEmail.trim();
+    const phone = addPhone.trim();
+    if (!firstName || !email || !phone) {
+      Alert.alert('Required fields', 'Please fill in first name, email, and phone number.');
+      return;
+    }
+    createMember.mutate({ name, email, phone }, {
+      onSuccess: () => {
+        setAddModalVisible(false);
+        setAddFirstName('');
+        setAddLastName('');
+        setAddEmail('');
+        setAddPhone('');
+      },
+      onError: (e: unknown) => Alert.alert('Could not add member', e instanceof Error ? e.message : 'Please try again.'),
+    });
+  }
 
   const isCreator = !!trip && !!currentUser && trip.created_by === currentUser.id;
   // Fall back to auth user metadata for the creator viewing their own trip
@@ -83,66 +163,30 @@ export default function MembersScreen() {
     } catch {}
   }
 
-  // Collect phone numbers from all respondents who provided one
-  const phones = respondents.map((r) => r.phone).filter(Boolean) as string[];
+  // Collect phone numbers from confirmed respondents only
+  const confirmedRespondents = respondents.filter((r) => r.rsvp === 'in');
+  const phones = confirmedRespondents.map((r) => r.phone).filter(Boolean) as string[];
   const allResponded = total > 0 && confirmedCount >= total;
 
   function handleStartTextThread() {
     if (phones.length === 0) {
-      Alert.alert('No phone numbers', 'None of your group members provided a phone number.');
+      Alert.alert('No phone numbers', 'None of your confirmed group members provided a phone number.');
       return;
     }
 
-    const numbersFormatted = phones.join('\n');
+    // iOS: sms:?addresses=num1,num2 opens iMessage/SMS with all recipients pre-filled
+    // Android: sms:num1;num2
+    const addresses = Platform.OS === 'ios' ? phones.join(',') : phones.join(';');
+    const url = Platform.OS === 'ios'
+      ? `sms:?addresses=${encodeURIComponent(addresses)}`
+      : `sms:${addresses}`;
 
-    if (Platform.OS === 'ios') {
-      const addresses = phones.join(',');
-      Alert.alert('Start a group thread', 'Choose your messaging app:', [
-        {
-          text: 'iMessage / SMS',
-          onPress: () => Linking.openURL(`sms:?addresses=${encodeURIComponent(addresses)}`).catch(() =>
-            Linking.openURL(`sms:${addresses}`).catch(() => {}),
-          ),
-        },
-        {
-          text: 'WhatsApp',
-          onPress: () =>
-            phones.length === 1
-              ? Linking.openURL(`whatsapp://send?phone=${phones[0]}`).catch(() => {})
-              : Alert.alert(
-                  'WhatsApp',
-                  `WhatsApp doesn't support opening a group via link.\n\nNumbers to add:\n${numbersFormatted}`,
-                  [
-                    {
-                      text: 'Copy numbers',
-                      onPress: () =>
-                        Clipboard.setStringAsync(phones.join(', ')).then(() =>
-                          Alert.alert('Copied', 'All phone numbers copied to clipboard.'),
-                        ),
-                    },
-                    { text: 'OK' },
-                  ],
-                ),
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
-    } else {
-      const addresses = phones.join(';');
-      Alert.alert('Start a group thread', 'Choose your messaging app:', [
-        {
-          text: 'SMS',
-          onPress: () => Linking.openURL(`sms:${addresses}`).catch(() => {}),
-        },
-        {
-          text: 'Copy numbers',
-          onPress: () =>
-            Clipboard.setStringAsync(phones.join(', ')).then(() =>
-              Alert.alert('Copied', 'All phone numbers copied to clipboard.'),
-            ),
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
-    }
+    Linking.openURL(url).catch(() => {
+      // Fallback: try without encoding
+      Linking.openURL(`sms:${addresses}`).catch(() =>
+        Alert.alert('Could not open Messages', 'Please open your Messages app manually.'),
+      );
+    });
   }
 
   function handleMemberMenu(r: Respondent) {
@@ -287,13 +331,31 @@ export default function MembersScreen() {
                   Clipboard.setStringAsync(value);
                   Alert.alert('Copied', `${label} copied to clipboard.`);
                 }
+                function handleDelete(swipeRef: React.RefObject<Swipeable>) {
+                  swipeRef.current?.close();
+                  Alert.alert(
+                    'Remove member?',
+                    `${r.name} will be removed from this trip.`,
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Remove',
+                        style: 'destructive',
+                        onPress: () =>
+                          deleteMember.mutate(r.id, {
+                            onError: () => Alert.alert('Error', 'Could not remove member.'),
+                          }),
+                      },
+                    ],
+                  );
+                }
                 return (
-                  <Pressable
+                  <MemberRow
                     key={r.id}
+                    canManage={canDesignatePlanners}
                     onPress={canDesignatePlanners ? () => handleMemberMenu(r) : undefined}
+                    onDelete={canDesignatePlanners ? handleDelete : undefined}
                     style={[styles.row, i < respondents.length - 1 && styles.rowBorder]}
-                    accessibilityRole={canDesignatePlanners ? 'button' : 'none'}
-                    accessibilityLabel={canDesignatePlanners ? `Manage ${r.name}` : undefined}
                   >
                     {/* Avatar — crown above circle for planners */}
                     <View style={styles.avatarWrap}>
@@ -396,7 +458,7 @@ export default function MembersScreen() {
                     {canDesignatePlanners ? (
                       <Ionicons name="ellipsis-horizontal" size={16} color="#CCC" />
                     ) : null}
-                  </Pressable>
+                  </MemberRow>
                 );
               })}
             </View>
@@ -420,7 +482,95 @@ export default function MembersScreen() {
             </Text>
           </View>
         ) : null}
+
+        {/* Add member — planners only */}
+        {canDesignatePlanners ? (
+          <Pressable
+            onPress={() => setAddModalVisible(true)}
+            style={{
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 4,
+              paddingVertical: 20,
+              borderRadius: 16,
+              borderWidth: 2,
+              borderStyle: 'dashed',
+              borderColor: '#E5E5E5',
+              marginTop: 12,
+            }}
+          >
+            <Ionicons name="add-circle-outline" size={18} color="#D4D4D4" />
+            <Text style={{ fontSize: 12, color: '#D0D0D0' }}>Tap to add a group member</Text>
+          </Pressable>
+        ) : null}
       </ScrollView>
+
+      {/* Add member modal */}
+      <Modal visible={addModalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setAddModalVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: '#F5F4F0' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#EEE', backgroundColor: 'white' }}>
+            <Pressable onPress={() => setAddModalVisible(false)}>
+              <Text style={{ fontSize: 16, color: '#D85A30' }}>Cancel</Text>
+            </Pressable>
+            <Text style={{ fontSize: 17, fontWeight: '600', color: '#1A1A1A' }}>Add member</Text>
+            <Pressable onPress={handleAddMember} disabled={createMember.isPending}>
+              <Text style={{ fontSize: 16, fontWeight: '600', color: createMember.isPending ? '#CCC' : '#D85A30' }}>
+                {createMember.isPending ? 'Adding…' : 'Add'}
+              </Text>
+            </Pressable>
+          </View>
+          <View style={{ padding: 20, gap: 16 }}>
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <View style={{ flex: 1, gap: 6 }}>
+                <Text style={{ fontSize: 12, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>First name *</Text>
+                <TextInput
+                  value={addFirstName}
+                  onChangeText={setAddFirstName}
+                  placeholder="First"
+                  placeholderTextColor="#A3A3A3"
+                  style={{ backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#E5E5E5', paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1A1A1A' }}
+                  autoCapitalize="words"
+                  autoFocus
+                />
+              </View>
+              <View style={{ flex: 1, gap: 6 }}>
+                <Text style={{ fontSize: 12, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>Last name</Text>
+                <TextInput
+                  value={addLastName}
+                  onChangeText={setAddLastName}
+                  placeholder="Last"
+                  placeholderTextColor="#A3A3A3"
+                  style={{ backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#E5E5E5', paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1A1A1A' }}
+                  autoCapitalize="words"
+                />
+              </View>
+            </View>
+            <View style={{ gap: 6 }}>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>Email *</Text>
+              <TextInput
+                value={addEmail}
+                onChangeText={setAddEmail}
+                placeholder="email@example.com"
+                placeholderTextColor="#A3A3A3"
+                style={{ backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#E5E5E5', paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1A1A1A' }}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+            <View style={{ gap: 6 }}>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>Phone *</Text>
+              <TextInput
+                value={addPhone}
+                onChangeText={setAddPhone}
+                placeholder="+1 555 000 0000"
+                placeholderTextColor="#A3A3A3"
+                style={{ backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#E5E5E5', paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1A1A1A' }}
+                keyboardType="phone-pad"
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

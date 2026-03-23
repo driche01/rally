@@ -1,5 +1,5 @@
 import { supabase } from '../supabase';
-import type { AiItineraryDraft, AiItineraryOption } from '../../types/database';
+import type { AiItineraryDraft, AiItineraryOption, AiItineraryDay, AiItineraryBlock } from '../../types/database';
 import type { CreateBlockInput } from './itinerary';
 
 // ─── Read ─────────────────────────────────────────────────────────────────────
@@ -36,17 +36,20 @@ export async function applyAiItineraryOption(
   draftId: string,
   option: AiItineraryOption
 ): Promise<void> {
-  // 1. Clear any existing blocks for this trip
-  const { error: deleteError } = await supabase
+  // 1. Snapshot IDs of existing blocks so we can delete them AFTER a successful insert
+  const { data: existing, error: fetchError } = await supabase
     .from('itinerary_blocks')
-    .delete()
+    .select('id')
     .eq('trip_id', tripId);
-  if (deleteError) throw deleteError;
+  if (fetchError) throw fetchError;
+  const existingIds = (existing ?? []).map((r: { id: string }) => r.id);
 
-  // 2. Batch-insert the selected option's blocks
+  // 2. Build + insert the new blocks
+  const days: AiItineraryDay[] = Array.isArray((option as any).days) ? (option as any).days : [];
   const blocks: CreateBlockInput[] = [];
-  for (const day of option.days) {
-    day.blocks.forEach((block, position) => {
+  for (const day of days) {
+    const dayBlocks: AiItineraryBlock[] = Array.isArray(day.blocks) ? day.blocks : [];
+    dayBlocks.forEach((block, position) => {
       blocks.push({
         trip_id: tripId,
         day_date: day.date,
@@ -61,14 +64,25 @@ export async function applyAiItineraryOption(
     });
   }
 
-  if (blocks.length > 0) {
-    const { error: insertError } = await supabase
-      .from('itinerary_blocks')
-      .insert(blocks);
-    if (insertError) throw insertError;
+  if (blocks.length === 0) {
+    throw new Error('The selected itinerary option has no blocks. Try regenerating options.');
   }
 
-  // 3. Mark the draft as applied
+  const { error: insertError } = await supabase
+    .from('itinerary_blocks')
+    .insert(blocks);
+  if (insertError) throw insertError;
+
+  // 3. Now delete old blocks (insert succeeded, so data is safe)
+  if (existingIds.length > 0) {
+    const { error: deleteError } = await supabase
+      .from('itinerary_blocks')
+      .delete()
+      .in('id', existingIds);
+    if (deleteError) throw deleteError;
+  }
+
+  // 4. Mark the draft as applied
   const { error: updateError } = await supabase
     .from('ai_itinerary_options')
     .update({
