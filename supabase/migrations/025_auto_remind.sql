@@ -22,7 +22,7 @@ create extension if not exists pg_net  with schema extensions;
 -- BEFORE APPLYING: replace the two placeholders below with your project's
 -- actual values from Supabase Dashboard → Settings → API:
 --   <PROJECT_REF>      e.g. abcdefghijklmnop
---   <SERVICE_ROLE_KEY> the service_role JWT (keep this secret)
+--   <***SCRUBBED-SUPABASE-SERVICE-ROLE-KEY***> the service_role JWT (keep this secret)
 
 select cron.schedule(
   'auto-remind-daily',
@@ -30,7 +30,7 @@ select cron.schedule(
   $$
   select
     net.http_post(
-      url     := 'https://<PROJECT_REF>.supabase.co/functions/v1/auto-remind',
+      url     := 'https://qxpbnixvjtwckuedlrfj.supabase.co/functions/v1/auto-remind',
       headers := jsonb_build_object(
         'Content-Type',  'application/json',
         'Authorization', 'Bearer <SERVICE_ROLE_KEY>'
