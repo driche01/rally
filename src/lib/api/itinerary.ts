@@ -60,6 +60,15 @@ export async function deleteBlock(blockId: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function deleteBlocksByType(tripId: string, type: BlockType): Promise<void> {
+  const { error } = await supabase
+    .from('itinerary_blocks')
+    .delete()
+    .eq('trip_id', tripId)
+    .eq('type', type);
+  if (error) throw error;
+}
+
 export async function reorderBlocks(
   updates: { id: string; position: number }[]
 ): Promise<void> {
