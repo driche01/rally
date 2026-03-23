@@ -2,20 +2,22 @@
  * LodgingTab — F7 Lodging Search + Deep-Link Handoff
  * Search panel, property add, and property card list.
  */
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Linking,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
+  Share,
   Text,
   TextInput,
   View,
-  Platform,
 } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { PlacesAutocompleteInput } from '@/components/ui';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,6 +37,9 @@ import {
   formatCents,
   type LodgingSearchParams,
 } from '@/lib/api/lodging';
+import { useGetLodgingSuggestions } from '@/hooks/useAiSuggestions';
+import type { LodgingSuggestion } from '@/lib/api/aiSuggestions';
+import { useCreateBlock, useDeleteBlocksByType } from '@/hooks/useItinerary';
 import type { LodgingOptionWithVotes, LodgingPlatform } from '@/types/database';
 import { GROUP_SIZE_MIDPOINTS } from '@/types/database';
 
@@ -56,6 +61,7 @@ const MIN_BEDROOMS_OPTIONS = [1, 2, 3, 4, 5];
 interface BookingSheetState {
   visible: boolean;
   optionId: string;
+  isEditing: boolean;
   confirmation: string;
   checkInTime: string;
   checkOutTime: string;
@@ -65,6 +71,7 @@ interface BookingSheetState {
 const DEFAULT_BOOKING_SHEET: BookingSheetState = {
   visible: false,
   optionId: '',
+  isEditing: false,
   confirmation: '',
   checkInTime: '',
   checkOutTime: '',
@@ -111,7 +118,7 @@ function BookingSheet({
               <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#E5E5E5' }} />
             </View>
 
-            <Text style={{ fontSize: 17, fontWeight: '700', color: '#1C1C1C' }}>Confirm booking</Text>
+            <Text style={{ fontSize: 17, fontWeight: '700', color: '#1C1C1C' }}>{local.isEditing ? 'Edit booking' : 'Mark as booked'}</Text>
 
             <View>
               <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Confirmation #</Text>
@@ -392,6 +399,54 @@ function ManualEntrySheet({
   );
 }
 
+// ─── Lodging share helper ──────────────────────────────────────────────────
+
+function buildLodgingShareText(option: LodgingOptionWithVotes): string {
+  const platform = PLATFORM_COLORS[option.platform];
+  const parts: string[] = [`🏠 ${option.title} (${platform.label})`];
+  if (option.url) parts.push(`🔗 ${option.url}`);
+  if (option.check_in_date && option.check_out_date) {
+    parts.push(`📅 ${option.check_in_date} → ${option.check_out_date}`);
+  }
+  if (option.check_in_time || option.check_out_time) {
+    const times: string[] = [];
+    if (option.check_in_time) times.push(`Check-in: ${option.check_in_time}`);
+    if (option.check_out_time) times.push(`Check-out: ${option.check_out_time}`);
+    parts.push(times.join(' · '));
+  }
+  if (option.booking_confirmation) {
+    parts.push(`Confirmation: ${option.booking_confirmation}`);
+  }
+  if (option.total_cost_cents) {
+    parts.push(`Total: ${formatCents(option.total_cost_cents)}`);
+  }
+  if (option.notes) parts.push(option.notes);
+  return parts.join('\n');
+}
+
+// ─── Swipe delete action ──────────────────────────────────────────────────────
+
+function SwipeDeleteAction({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        width: 76,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#FF3B30',
+        borderRadius: 16,
+        marginLeft: 8,
+        marginBottom: 12,
+      }}
+      accessibilityLabel="Delete property"
+    >
+      <Ionicons name="trash-outline" size={20} color="#fff" />
+      <Text style={{ fontSize: 11, color: '#fff', marginTop: 3, fontWeight: '600' }}>Delete</Text>
+    </Pressable>
+  );
+}
+
 // ─── Property Card ─────────────────────────────────────────────────────────
 
 function PropertyCard({
@@ -405,6 +460,7 @@ function PropertyCard({
   onDelete: () => void;
   onMarkSettled: () => void;
 }) {
+  const swipeRef = useRef<Swipeable>(null);
   const platform = PLATFORM_COLORS[option.platform];
   const isBooked = option.status === 'booked';
 
@@ -415,27 +471,37 @@ function PropertyCard({
       ? `Check-in ${option.check_in_date}`
       : null;
 
-  function handleLongPress() {
-    const actions: { text: string; style?: 'cancel' | 'destructive'; onPress?: () => void }[] = [
+  function handleSwipeDelete() {
+    swipeRef.current?.close();
+    Alert.alert('Delete property?', option.title, [
       { text: 'Cancel', style: 'cancel' },
-    ];
-    if (!isBooked) {
-      actions.push({ text: 'I booked this', onPress: onBook });
-    }
-    actions.push({
-      text: 'Delete',
-      style: 'destructive',
-      onPress: () =>
-        Alert.alert('Delete property?', 'This cannot be undone.', [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Delete', style: 'destructive', onPress: onDelete },
-        ]),
-    });
-    Alert.alert(option.title, undefined, actions);
+      { text: 'Delete', style: 'destructive', onPress: onDelete },
+    ]);
+  }
+
+  function handleLongPress() {
+    Alert.alert(option.title, undefined, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () =>
+          Alert.alert('Delete property?', 'This cannot be undone.', [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Delete', style: 'destructive', onPress: onDelete },
+          ]),
+      },
+    ]);
   }
 
   return (
+    <Swipeable
+      ref={swipeRef}
+      renderRightActions={() => <SwipeDeleteAction onPress={handleSwipeDelete} />}
+      overshootRight={false}
+    >
     <Pressable
+      onPress={onBook}
       onLongPress={handleLongPress}
       className="mb-3 overflow-hidden rounded-2xl bg-white"
       style={{
@@ -448,8 +514,19 @@ function PropertyCard({
     >
       {/* Booked banner */}
       {isBooked ? (
-        <View className="bg-coral-500 px-4 py-2">
+        <View className="flex-row items-center justify-between bg-coral-500 px-4 py-2">
           <Text className="text-xs font-semibold text-white">✓ Booked</Text>
+          <Pressable
+            onPress={async () => {
+              try { await Share.share({ message: buildLodgingShareText(option) }); } catch {}
+            }}
+            className="flex-row items-center gap-1"
+            accessibilityRole="button"
+            accessibilityLabel="Share booking details"
+          >
+            <Ionicons name="share-outline" size={13} color="rgba(255,255,255,0.85)" />
+            <Text className="text-xs font-medium text-white opacity-90">Share</Text>
+          </Pressable>
         </View>
       ) : null}
 
@@ -523,12 +600,171 @@ function PropertyCard({
               className="flex-row items-center gap-1 rounded-xl bg-coral-50 px-3 py-1.5"
             >
               <Ionicons name="checkmark-circle-outline" size={12} color="#FF6B5B" />
-              <Text className="text-xs font-medium text-coral-600">I booked this</Text>
+              <Text className="text-xs font-medium text-coral-600">Mark as booked</Text>
             </Pressable>
           ) : null}
         </View>
       </View>
     </Pressable>
+    </Swipeable>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+// ─── AI Lodging Suggestion Card ───────────────────────────────────────────────
+
+function LodgingAiSuggestionCard({
+  tripId,
+  onSelect,
+}: {
+  tripId: string;
+  onSelect: (s: LodgingSuggestion) => void;
+}) {
+  const getSuggestions = useGetLodgingSuggestions(tripId);
+  const [expanded, setExpanded] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const suggestions = getSuggestions.data ?? [];
+
+  function handleGenerate() {
+    if (suggestions.length > 0) {
+      setExpanded((p) => !p);
+      return;
+    }
+    getSuggestions.mutate(undefined, {
+      onSuccess: () => setExpanded(true),
+      onError: () => Alert.alert('Error', 'Could not get AI suggestions. Please try again.'),
+    });
+  }
+
+  // No suggestions yet — show itinerary-style generate card
+  if (suggestions.length === 0) {
+    return (
+      <View style={{ backgroundColor: '#EEF3F8', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#D8E4EE', gap: 10 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Ionicons name="sparkles-outline" size={18} color="#1A4060" />
+          <Text style={{ fontSize: 14, fontWeight: '700', color: '#1A4060' }}>AI lodging suggestions</Text>
+        </View>
+        <Text style={{ fontSize: 13, color: '#4A6E8A', lineHeight: 18 }}>
+          Rally will suggest 3 options based on your destination, dates, group size, and member preferences.
+        </Text>
+        <Pressable
+          onPress={handleGenerate}
+          disabled={getSuggestions.isPending}
+          style={{ backgroundColor: '#1A4060', borderRadius: 12, paddingVertical: 12, alignItems: 'center' }}
+          accessibilityRole="button"
+        >
+          {getSuggestions.isPending ? (
+            <ActivityIndicator size="small" color="white" />
+          ) : (
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#FFFFFF' }}>Get suggestions</Text>
+          )}
+        </Pressable>
+      </View>
+    );
+  }
+
+  return (
+    <View
+      className="mb-4 overflow-hidden rounded-2xl bg-white"
+      style={{ borderWidth: 1, borderColor: '#D8E4EE', shadowColor: '#1A4060', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 }}
+    >
+      <Pressable
+        onPress={handleGenerate}
+        className="flex-row items-center justify-between px-4 py-3"
+        accessibilityRole="button"
+      >
+        <View className="flex-row items-center gap-2">
+          <Ionicons name="sparkles-outline" size={15} color="#1A4060" />
+          <Text style={{ fontSize: 14, fontWeight: '700', color: '#1A4060' }}>AI lodging suggestions</Text>
+        </View>
+        {getSuggestions.isPending ? (
+          <ActivityIndicator size="small" color="#1A4060" />
+        ) : (
+          <Ionicons
+            name={expanded ? 'chevron-up' : 'chevron-down'}
+            size={15}
+            color="#A3A3A3"
+          />
+        )}
+      </Pressable>
+
+      {expanded && suggestions.length > 0 ? (
+        <View style={{ paddingHorizontal: 14, paddingBottom: 14, gap: 8 }}>
+          {suggestions.map((s: LodgingSuggestion) => (
+            <Pressable
+              key={s.index}
+              onPress={() => setSelectedIndex(selectedIndex === s.index ? null : s.index)}
+              style={{
+                borderRadius: 12,
+                borderWidth: selectedIndex === s.index ? 2 : 1,
+                borderColor: selectedIndex === s.index ? '#1A4060' : '#E5E5E5',
+                padding: 12,
+                gap: 8,
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#1A1A1A' }}>{s.label}</Text>
+                  <Text style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{s.propertyType} · {s.idealFor}</Text>
+                </View>
+                {selectedIndex === s.index ? (
+                  <View style={{ backgroundColor: '#1A4060', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 }}>
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: 'white' }}>Selected</Text>
+                  </View>
+                ) : s.estimatedNightlyRate ? (
+                  <Text style={{ fontSize: 11, fontWeight: '500', color: '#888' }}>{s.estimatedNightlyRate}</Text>
+                ) : null}
+              </View>
+              <Text style={{ fontSize: 12, color: '#555', lineHeight: 17 }}>{s.description}</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                {s.airbnbUrl ? (
+                  <Pressable
+                    onPress={() => Linking.openURL(s.airbnbUrl!)}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FEF2F2', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 }}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#DC2626' }}>Airbnb</Text>
+                    <Ionicons name="open-outline" size={10} color="#DC2626" />
+                  </Pressable>
+                ) : null}
+                {s.vrboUrl ? (
+                  <Pressable
+                    onPress={() => Linking.openURL(s.vrboUrl!)}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#EFF6FF', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 }}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#2563EB' }}>VRBO</Text>
+                    <Ionicons name="open-outline" size={10} color="#2563EB" />
+                  </Pressable>
+                ) : null}
+                {s.bookingUrl ? (
+                  <Pressable
+                    onPress={() => Linking.openURL(s.bookingUrl!)}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#F8FAFC', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 }}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#475569' }}>Booking.com</Text>
+                    <Ionicons name="open-outline" size={10} color="#475569" />
+                  </Pressable>
+                ) : null}
+              </View>
+            </Pressable>
+          ))}
+          {selectedIndex !== null ? (
+            <Pressable
+              onPress={() => {
+                const s = suggestions.find((s: LodgingSuggestion) => s.index === selectedIndex);
+                if (s) { onSelect(s); setExpanded(false); setSelectedIndex(null); }
+              }}
+              style={{ backgroundColor: '#1A4060', borderRadius: 12, paddingVertical: 13, alignItems: 'center', marginTop: 4 }}
+            >
+              <Text style={{ fontSize: 14, fontWeight: '700', color: 'white' }}>
+                Add "{suggestions.find((s: LodgingSuggestion) => s.index === selectedIndex)?.label}" to lodging
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+
+    </View>
   );
 }
 
@@ -538,14 +774,27 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
   const insets = useSafeAreaInsets();
 
   const { data: trip } = useTrip(tripId);
-  const { data: options = [] } = useLodgingOptions(tripId);
+  const { data: options = [], isSuccess: optionsLoaded } = useLodgingOptions(tripId);
   const createOption = useCreateLodgingOption(tripId);
   const updateOption = useUpdateLodgingOption(tripId);
   const deleteOption = useDeleteLodgingOption(tripId);
   const confirmBooking = useConfirmLodgingBooking(tripId);
+  const createBlock = useCreateBlock(tripId);
+  const deleteBlocksByType = useDeleteBlocksByType(tripId);
 
-  // Search state
+  // Search / add state — start expanded when no options yet, collapse once options load
   const [searchExpanded, setSearchExpanded] = useState(true);
+  const [addSectionExpanded, setAddSectionExpanded] = useState(true);
+  const searchInitialized = useRef(false);
+  useEffect(() => {
+    if (optionsLoaded && !searchInitialized.current) {
+      searchInitialized.current = true;
+      if (options.length > 0) {
+        setSearchExpanded(false);
+        setAddSectionExpanded(false);
+      }
+    }
+  }, [optionsLoaded, options.length]);
   const guestDefault =
     trip?.group_size_precise ??
     GROUP_SIZE_MIDPOINTS[trip?.group_size_bucket ?? '5-8'];
@@ -631,11 +880,12 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
       state.totalCost
         ? Math.round(parseFloat(state.totalCost) * 100)
         : null;
+    const title = state.title.trim();
     createOption.mutate(
       {
         trip_id: tripId,
         platform: state.platform,
-        title: state.title.trim(),
+        title,
         url: state.url.trim() || null,
         notes: state.notes.trim() || null,
         check_in_date: state.checkIn || null,
@@ -655,6 +905,8 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
       state.totalCost
         ? Math.round(parseFloat(state.totalCost) * 100)
         : undefined;
+    const bookedOption = options.find((o) => o.id === state.optionId);
+    const bookedTitle = bookedOption?.title ?? 'Accommodation';
     confirmBooking.mutate(
       {
         optionId: state.optionId,
@@ -666,7 +918,36 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
         },
       },
       {
-        onSuccess: () => setBookingSheet(DEFAULT_BOOKING_SHEET),
+        onSuccess: () => {
+          setBookingSheet(DEFAULT_BOOKING_SHEET);
+          deleteBlocksByType.mutate('accommodation', {
+            onSuccess: () => {
+              if (!trip?.start_date) return;
+              const start = new Date(trip.start_date + 'T12:00:00');
+              const end = trip.end_date ? new Date(trip.end_date + 'T12:00:00') : start;
+              const cur = new Date(start);
+              while (cur <= end) {
+                const dateStr = cur.toISOString().slice(0, 10);
+                const isFirst = dateStr === trip.start_date;
+                const isLast = dateStr === (trip.end_date ?? trip.start_date);
+                const blockTitle = isFirst
+                  ? `Check in: ${bookedTitle}`
+                  : isLast
+                  ? `Check out: ${bookedTitle}`
+                  : bookedTitle;
+                createBlock.mutate({
+                  trip_id: tripId,
+                  day_date: dateStr,
+                  type: 'accommodation',
+                  title: blockTitle,
+                  lodging_option_id: state.optionId,
+                  position: 0,
+                });
+                cur.setDate(cur.getDate() + 1);
+              }
+            },
+          });
+        },
         onError: () => Alert.alert('Error', 'Could not confirm booking. Please try again.'),
       }
     );
@@ -689,6 +970,61 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
           ) : null}
         </View>
 
+        {/* ── AI Suggestions ── */}
+        {isPlanner ? (
+          <LodgingAiSuggestionCard
+            tripId={tripId}
+            onSelect={(s) => {
+              setSearchExpanded(false);
+              setAddSectionExpanded(false);
+              createOption.mutate({
+                trip_id: tripId,
+                platform: 'manual',
+                title: s.label,
+                url: s.airbnbUrl ?? s.vrboUrl ?? s.bookingUrl ?? undefined,
+                notes: [
+                  s.description,
+                  `Type: ${s.propertyType}`,
+                  `Ideal for: ${s.idealFor}`,
+                  s.estimatedNightlyRate ? `Estimated: ${s.estimatedNightlyRate}` : null,
+                ].filter(Boolean).join('\n'),
+                check_in_date: trip?.start_date ?? null,
+                check_out_date: trip?.end_date ?? null,
+              });
+            }}
+          />
+        ) : null}
+
+        {/* ── Section C: Property cards ── */}
+        {options.length > 0 ? (
+          options.map((option) => (
+            <PropertyCard
+              key={option.id}
+              option={option}
+              onBook={() =>
+                setBookingSheet({
+                  ...DEFAULT_BOOKING_SHEET,
+                  visible: true,
+                  optionId: option.id,
+                  isEditing: option.status === 'booked',
+                  confirmation: option.booking_confirmation ?? '',
+                  checkInTime: option.check_in_time ?? '',
+                  checkOutTime: option.check_out_time ?? '',
+                  totalCost: option.total_cost_cents
+                    ? (option.total_cost_cents / 100).toFixed(2)
+                    : '',
+                })
+              }
+              onDelete={() =>
+                deleteOption.mutate(option.id, {
+                  onError: () => Alert.alert('Error', 'Could not delete. Please try again.'),
+                })
+              }
+              onMarkSettled={() => {}}
+            />
+          ))
+        ) : null}
+
         {/* ── Section A: Search panel ── */}
         <View
           className="mb-4 overflow-hidden rounded-2xl bg-white"
@@ -700,7 +1036,7 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
           >
             <View className="flex-row items-center gap-2">
               <Ionicons name="search-outline" size={16} color="#737373" />
-              <Text className="text-sm font-semibold text-neutral-700">Search properties</Text>
+              <Text className="text-sm font-semibold text-neutral-700">Search for lodging</Text>
             </View>
             <Ionicons
               name={searchExpanded ? 'chevron-up' : 'chevron-down'}
@@ -824,10 +1160,25 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
         {/* ── Section B: Add a property ── */}
         {!atLimit ? (
           <View
-            className="mb-4 rounded-2xl bg-white p-4"
+            className="mb-4 overflow-hidden rounded-2xl bg-white"
             style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 2 }}
           >
-            <Text className="mb-3 text-sm font-semibold text-neutral-700">Add a property</Text>
+            <Pressable
+              onPress={() => setAddSectionExpanded((p) => !p)}
+              className="flex-row items-center justify-between px-4 py-3"
+            >
+              <View className="flex-row items-center gap-2">
+                <Ionicons name="add-circle-outline" size={16} color="#737373" />
+                <Text className="text-sm font-semibold text-neutral-700">Add lodging</Text>
+              </View>
+              <Ionicons
+                name={addSectionExpanded ? 'chevron-up' : 'chevron-down'}
+                size={16}
+                color="#A3A3A3"
+              />
+            </Pressable>
+            {addSectionExpanded ? (
+            <View className="px-4 pb-4">
 
             {/* URL paste row */}
             <View className="mb-2 flex-row items-center gap-2">
@@ -895,49 +1246,27 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
             {/* Manual link */}
             <Pressable
               onPress={() => setManualSheet({ ...DEFAULT_MANUAL_SHEET, visible: true })}
-              className="flex-row items-center gap-1 self-start"
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                paddingVertical: 10,
+                borderRadius: 12,
+                borderWidth: 2,
+                borderStyle: 'dashed',
+                borderColor: '#E5E5E5',
+                marginTop: 8,
+              }}
             >
-              <Ionicons name="add-circle-outline" size={14} color="#FF6B5B" />
-              <Text className="text-xs font-medium text-coral-500">Or add manually</Text>
+              <Ionicons name="add-circle-outline" size={14} color="#D4D4D4" />
+              <Text style={{ fontSize: 12, color: '#D0D0D0' }}>Or add manually</Text>
             </Pressable>
+          </View>
+            ) : null}
           </View>
         ) : null}
 
-        {/* ── Section C: Property cards ── */}
-        {options.length === 0 ? (
-          <View className="mt-4 items-center gap-2 py-8">
-            <Ionicons name="home-outline" size={32} color="#D4D4D4" />
-            <Text className="text-sm font-semibold text-neutral-400">No properties yet</Text>
-            <Text className="text-center text-xs text-neutral-400">
-              Paste a listing URL or add manually above.
-            </Text>
-          </View>
-        ) : (
-          options.map((option) => (
-            <PropertyCard
-              key={option.id}
-              option={option}
-              onBook={() =>
-                setBookingSheet({
-                  ...DEFAULT_BOOKING_SHEET,
-                  visible: true,
-                  optionId: option.id,
-                  checkInTime: option.check_in_time ?? '',
-                  checkOutTime: option.check_out_time ?? '',
-                  totalCost: option.total_cost_cents
-                    ? (option.total_cost_cents / 100).toFixed(2)
-                    : '',
-                })
-              }
-              onDelete={() =>
-                deleteOption.mutate(option.id, {
-                  onError: () => Alert.alert('Error', 'Could not delete. Please try again.'),
-                })
-              }
-              onMarkSettled={() => {}}
-            />
-          ))
-        )}
       </ScrollView>
 
       {/* Booking confirmation sheet */}

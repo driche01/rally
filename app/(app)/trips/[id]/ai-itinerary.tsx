@@ -301,9 +301,10 @@ export default function AiItineraryScreen() {
           setConfirmingApply(false);
           router.back();
         },
-        onError: () => {
+        onError: (err: any) => {
           setConfirmingApply(false);
-          Alert.alert('Error', 'Could not apply the itinerary. Please try again.');
+          const msg = err?.message ?? 'Could not apply the itinerary. Please try again.';
+          Alert.alert('Error', msg);
         },
       }
     );

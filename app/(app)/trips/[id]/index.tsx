@@ -16,10 +16,15 @@ import {
   View,
 } from 'react-native';
 import { SortableEntryList, type CardKey } from '@/components/SortableEntryList';
+import { PlannerCoachCard } from '@/components/trips/PlannerCoachCard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePolls, pollKeys } from '@/hooks/usePolls';
 import { useRespondents, respondentKeys } from '@/hooks/useRespondents';
 import { useTrip } from '@/hooks/useTrips';
+import { useItineraryBlocks } from '@/hooks/useItinerary';
+import { useLodgingOptions } from '@/hooks/useLodging';
+import { useTravelLegs } from '@/hooks/useTravelLegs';
+import { useExpenses } from '@/hooks/useExpenses';
 import { usePermissions } from '@/hooks/usePermissions';
 import { supabase } from '@/lib/supabase';
 import { getShareUrl } from '@/lib/api/trips';
@@ -68,12 +73,12 @@ const HERO_CONFIG: Record<TripStage, {
   ctaLabel: string;
   ctaBg: string;
 }> = {
-  deciding:     { bg: '#F5F4F0', badge: 'DECIDING',       badgeColor: '#888',    titleColor: '#1A1A1A', subtitleColor: '#666',                pillBg: 'rgba(0,0,0,0.06)', ctaLabel: 'Chat with group!', ctaBg: '#D85A30' },
-  confirmed:    { bg: '#DDE8D8', badge: "YOU'RE GOING",   badgeColor: '#3A7A55', titleColor: '#1A3020', subtitleColor: '#3A6045',             pillBg: 'rgba(255,255,255,0.55)', ctaLabel: 'Share with group!', ctaBg: '#235C38' },
-  planning:     { bg: '#D8E4EE', badge: 'PLANNING',       badgeColor: '#2A5068', titleColor: '#0D2B3E', subtitleColor: '#2A5068',             pillBg: 'rgba(255,255,255,0.55)', ctaLabel: 'Chat with group!', ctaBg: '#1A4060' },
-  experiencing: { bg: '#085041', badge: "YOU'RE HERE",    badgeColor: 'rgba(255,255,255,0.7)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.75)', pillBg: 'rgba(255,255,255,0.15)', ctaLabel: 'Chat with group!', ctaBg: 'rgba(255,255,255,0.2)' },
-  reconciling:  { bg: '#F0EDE8', badge: 'WRAPPING UP',    badgeColor: '#666',    titleColor: '#2C2C2A', subtitleColor: '#666',                pillBg: 'rgba(0,0,0,0.06)', ctaLabel: 'Chat with group!', ctaBg: '#2C2C2A' },
-  done:         { bg: '#2C2C2A', badge: 'DONE',           badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'Chat with group!', ctaBg: 'rgba(255,255,255,0.15)' },
+  deciding:     { bg: '#F5F4F0', badge: 'DECIDING',       badgeColor: '#888',    titleColor: '#1A1A1A', subtitleColor: '#666',                pillBg: 'rgba(0,0,0,0.06)', ctaLabel: 'Share poll!', ctaBg: '#D85A30' },
+  confirmed:    { bg: '#DDE8D8', badge: "YOU'RE GOING",   badgeColor: '#3A7A55', titleColor: '#1A3020', subtitleColor: '#3A6045',             pillBg: 'rgba(255,255,255,0.55)', ctaLabel: 'Confirm group members!', ctaBg: '#235C38' },
+  planning:     { bg: '#D8E4EE', badge: 'PLANNING',       badgeColor: '#2A5068', titleColor: '#0D2B3E', subtitleColor: '#2A5068',             pillBg: 'rgba(255,255,255,0.55)', ctaLabel: 'Plan the trip', ctaBg: '#1A4060' },
+  experiencing: { bg: '#085041', badge: "YOU'RE HERE",    badgeColor: 'rgba(255,255,255,0.7)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.75)', pillBg: 'rgba(255,255,255,0.15)', ctaLabel: "See today's plan", ctaBg: 'rgba(255,255,255,0.2)' },
+  reconciling:  { bg: '#F0EDE8', badge: 'WRAPPING UP',    badgeColor: '#666',    titleColor: '#2C2C2A', subtitleColor: '#666',                pillBg: 'rgba(0,0,0,0.06)', ctaLabel: 'Settle expenses', ctaBg: '#2C2C2A' },
+  done:         { bg: '#2C2C2A', badge: 'DONE',           badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'View recap', ctaBg: 'rgba(255,255,255,0.15)' },
 };
 
 // ─── Group Members Card ───────────────────────────────────────────────────────
@@ -130,6 +135,10 @@ export default function TripDashboard() {
   const { data: polls = [] } = usePolls(id);
   const { data: respondents = [] } = useRespondents(id);
   const { canEditTrip, canReorderCards } = usePermissions(id);
+  const { data: itineraryBlocks = [] } = useItineraryBlocks(id);
+  const { data: lodgingOptions = [] } = useLodgingOptions(id);
+  const { data: travelLegs = [] } = useTravelLegs(id);
+  const { data: expenses = [] } = useExpenses(id);
   const [linkCopied, setLinkCopied] = useState(false);
 
   // Realtime: keep badge counts fresh
@@ -253,10 +262,168 @@ const stage = trip ? getTripStage(trip) : 'deciding';
   };
 
   const handleCtaPress = () => {
-    if (stage === 'confirmed') {
-      handleShare();
-    } else {
-      router.push(`/(app)/trips/${id}/hub?tab=chat`);
+    switch (stage) {
+      case 'deciding':
+        handleShare();
+        break;
+      case 'confirmed':
+        router.push(`/(app)/trips/${id}/members`);
+        break;
+      case 'planning':
+        router.push(`/(app)/trips/${id}/hub?tab=itinerary`);
+        break;
+      case 'experiencing':
+        router.push(`/(app)/trips/${id}/hub?tab=itinerary`);
+        break;
+      case 'reconciling':
+        router.push(`/(app)/trips/${id}/hub?tab=expenses`);
+        break;
+      case 'done':
+        router.push(`/(app)/trips/${id}/hub?tab=itinerary`);
+        break;
+    }
+  };
+
+  const handleLinkIconPress = () => {
+    if (!trip) return;
+
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const fmtDate = (iso: string | null) => {
+      if (!iso) return '';
+      const [, m, d] = iso.split('-');
+      return `${months[parseInt(m, 10) - 1]} ${parseInt(d, 10)}`;
+    };
+    const fmtTime = (t: string | null) => {
+      if (!t) return '';
+      const [h, min] = t.split(':');
+      const hour = parseInt(h, 10);
+      return `${hour % 12 || 12}:${min} ${hour < 12 ? 'AM' : 'PM'}`;
+    };
+    const today = new Date().toISOString().split('T')[0];
+
+    let text = '';
+
+    if (stage === 'deciding' || stage === 'confirmed') {
+      // Copy invite link
+      Clipboard.setStringAsync(getShareUrl(trip.share_token));
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+      return;
+    }
+
+    if (stage === 'planning') {
+      const lines: string[] = [`📋 ${trip.name ?? 'Trip'} — Plan Details`];
+      if (destination) lines.push(`📍 ${destination}`);
+      if (dateDisplay) lines.push(`📅 ${dateDisplay}`);
+      lines.push('');
+
+      // Itinerary
+      if (itineraryBlocks.length > 0) {
+        const byDay = itineraryBlocks.reduce<Record<string, typeof itineraryBlocks>>((acc, b) => {
+          (acc[b.day_date] = acc[b.day_date] ?? []).push(b);
+          return acc;
+        }, {});
+        lines.push('📅 ITINERARY');
+        Object.keys(byDay).sort().forEach((date) => {
+          lines.push(`\n${fmtDate(date)}`);
+          byDay[date].sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? '')).forEach((b) => {
+            const time = b.start_time ? `${fmtTime(b.start_time)} ` : '';
+            lines.push(`  ${time}${b.title}${b.location ? ` @ ${b.location}` : ''}`);
+          });
+        });
+        lines.push('');
+      }
+
+      // Lodging
+      if (lodgingOptions.length > 0) {
+        lines.push('🏠 LODGING');
+        lodgingOptions.forEach((o) => {
+          const status = o.status === 'booked' ? '✓ Booked' : 'Option';
+          lines.push(`  ${status}: ${o.title}`);
+          if (o.check_in_date || o.check_out_date) {
+            lines.push(`  Check-in: ${fmtDate(o.check_in_date)} → Check-out: ${fmtDate(o.check_out_date)}`);
+          }
+          if (o.url) lines.push(`  🔗 ${o.url}`);
+        });
+        lines.push('');
+      }
+
+      // Travel
+      if (travelLegs.length > 0) {
+        lines.push('✈️ TRAVEL');
+        travelLegs.forEach((leg) => {
+          lines.push(`  ${leg.mode.charAt(0).toUpperCase() + leg.mode.slice(1)}: ${leg.label}`);
+          if (leg.departure_date || leg.departure_time) {
+            lines.push(`  Departs: ${[fmtDate(leg.departure_date), fmtTime(leg.departure_time)].filter(Boolean).join(' at ')}`);
+          }
+          if (leg.arrival_date || leg.arrival_time) {
+            lines.push(`  Arrives: ${[fmtDate(leg.arrival_date), fmtTime(leg.arrival_time)].filter(Boolean).join(' at ')}`);
+          }
+          if (leg.booking_ref) lines.push(`  Ref: ${leg.booking_ref}`);
+        });
+      }
+      text = lines.join('\n');
+    }
+
+    if (stage === 'experiencing') {
+      const todayBlocks = itineraryBlocks
+        .filter((b) => b.day_date === today)
+        .sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? ''));
+      const lines: string[] = [`📅 Today — ${fmtDate(today)}`, `📍 ${destination}`];
+      if (todayBlocks.length === 0) {
+        lines.push('No itinerary blocks for today.');
+      } else {
+        lines.push('');
+        todayBlocks.forEach((b) => {
+          const time = b.start_time ? `${fmtTime(b.start_time)} ` : '';
+          const end = b.end_time ? `–${fmtTime(b.end_time)} ` : '';
+          lines.push(`${time}${end}${b.title}${b.location ? ` @ ${b.location}` : ''}`);
+          if (b.notes) lines.push(`  ${b.notes}`);
+        });
+      }
+      text = lines.join('\n');
+    }
+
+    if (stage === 'reconciling') {
+      const lines: string[] = [`💰 ${trip.name ?? 'Trip'} — Expenses`];
+      if (destination) lines.push(`📍 ${destination}`);
+      lines.push('');
+      if (expenses.length === 0) {
+        lines.push('No expenses recorded yet.');
+      } else {
+        const total = expenses.reduce((sum, e) => sum + e.amount_cents, 0);
+        expenses.forEach((e) => {
+          const amt = `$${(e.amount_cents / 100).toFixed(2)}`;
+          lines.push(`• ${e.description} — ${amt} (${e.category})`);
+        });
+        lines.push('');
+        lines.push(`Total: $${(total / 100).toFixed(2)}`);
+      }
+      text = lines.join('\n');
+    }
+
+    if (stage === 'done') {
+      const lines: string[] = [`🎉 ${trip.name ?? 'Trip'} Recap`];
+      if (destination) lines.push(`📍 ${destination}`);
+      if (dateDisplay) lines.push(`📅 ${dateDisplay}`);
+      lines.push('');
+      const highlights = itineraryBlocks
+        .filter((b) => b.type === 'activity' || b.type === 'meal')
+        .sort((a, b) => a.day_date.localeCompare(b.day_date) || (a.start_time ?? '').localeCompare(b.start_time ?? ''))
+        .slice(0, 8);
+      if (highlights.length > 0) {
+        lines.push('Highlights:');
+        highlights.forEach((b) => lines.push(`• ${b.title}${b.location ? ` @ ${b.location}` : ''}`));
+        lines.push('');
+      }
+      lines.push('What a trip! 🎉');
+      text = lines.join('\n');
+    }
+
+    if (text) {
+      Clipboard.setStringAsync(text);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
     }
   };
 
@@ -275,7 +442,7 @@ const stage = trip ? getTripStage(trip) : 'deciding';
     itinerary: {
       icon: 'calendar-outline',
       title: 'Itinerary',
-      subtitle: nights ? `${nights}-day plan` : 'Build your day-by-day plan',
+      subtitle: nights ? `${nights + 1}-day plan` : 'Build your day-by-day plan',
       onPress: () => router.push(`/(app)/trips/${id}/hub?tab=itinerary`),
     },
     lodging: {
@@ -414,17 +581,12 @@ const stage = trip ? getTripStage(trip) : 'deciding';
                 {hero.ctaLabel}
               </Text>
             </Pressable>
-            {stage === 'confirmed' && trip && (
+            {trip && (
               <Pressable
-                onPress={(e) => {
-                  e.stopPropagation();
-                  Clipboard.setStringAsync(getShareUrl(trip.share_token));
-                  setLinkCopied(true);
-                  setTimeout(() => setLinkCopied(false), 2000);
-                }}
+                onPress={(e) => { e.stopPropagation(); handleLinkIconPress(); }}
                 style={[styles.copyLinkPill, { backgroundColor: hero.pillBg }]}
                 accessibilityRole="button"
-                accessibilityLabel="Copy invite link"
+                accessibilityLabel="Copy to clipboard"
               >
                 <Ionicons name={linkCopied ? 'checkmark' : 'link-outline'} size={18} color={hero.titleColor} />
               </Pressable>
@@ -432,6 +594,9 @@ const stage = trip ? getTripStage(trip) : 'deciding';
           </View>
         </TouchableOpacity>
 
+
+        {/* Planner coach — only shown to planner */}
+        {canEditTrip ? <PlannerCoachCard tripId={id} /> : null}
 
         {/* Entry points — long-press any card to reorder */}
         <Text style={styles.sectionLabel}>Where do you want to start?</Text>
