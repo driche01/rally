@@ -54,6 +54,7 @@ export interface BudgetSectionProps {
   onLabelUpdate: (id: string, label: string) => void;
   onTierAdd: () => void;
   onTierRemove: (id: string) => void;
+  accentColor?: string;
 }
 
 export function BudgetSection({
@@ -65,6 +66,7 @@ export function BudgetSection({
   onLabelUpdate,
   onTierAdd,
   onTierRemove,
+  accentColor = '#D85A30',
 }: BudgetSectionProps) {
   return (
     <>
@@ -72,7 +74,7 @@ export function BudgetSection({
         label="Question"
         value={title}
         onChangeText={onTitleChange}
-        placeholder="What's your budget?"
+        placeholder="What's the spend looking like?"
       />
 
       <Divider />
@@ -87,12 +89,11 @@ export function BudgetSection({
           return (
             <View
               key={r.id}
-              className={[
-                'flex-row items-center gap-2 rounded-xl border px-3 py-3',
-                r.selected
-                  ? 'border-coral-300 bg-coral-50'
-                  : 'border-neutral-200 bg-white',
-              ].join(' ')}
+              className="flex-row items-center gap-2 rounded-xl border px-3 py-3"
+              style={r.selected
+                ? { borderColor: accentColor + '80', backgroundColor: accentColor + '10' }
+                : { borderColor: '#E5E5E5', backgroundColor: '#FFFFFF' }
+              }
             >
               {/* Checkbox */}
               <Pressable
@@ -101,12 +102,11 @@ export function BudgetSection({
                 accessibilityState={{ checked: r.selected }}
               >
                 <View
-                  className={[
-                    'h-5 w-5 items-center justify-center rounded-md border-2',
-                    r.selected
-                      ? 'border-coral-500 bg-coral-500'
-                      : 'border-neutral-300 bg-white',
-                  ].join(' ')}
+                  className="h-5 w-5 items-center justify-center rounded-md border-2"
+                  style={r.selected
+                    ? { borderColor: accentColor, backgroundColor: accentColor }
+                    : { borderColor: '#D4D4D4', backgroundColor: '#FFFFFF' }
+                  }
                 >
                   {r.selected ? <Ionicons name="checkmark" size={12} color="white" /> : null}
                 </View>
@@ -153,8 +153,8 @@ export function BudgetSection({
             className="flex-row items-center gap-2 py-2"
             accessibilityRole="button"
           >
-            <Ionicons name="add-circle-outline" size={20} color="#FF6B5B" />
-            <Text className="text-base text-coral-500">Add tier</Text>
+            <Ionicons name="add-circle-outline" size={20} color={accentColor} />
+            <Text className="text-base" style={{ color: accentColor }}>Add tier</Text>
           </Pressable>
         ) : null}
       </View>

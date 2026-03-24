@@ -4,6 +4,7 @@ import { makeRedirectUri } from 'expo-auth-session';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
 import { identify, reset } from '../lib/analytics';
+import { setUser as setSentryUser, clearUser as clearSentryUser } from '../lib/sentry';
 import { registerPushToken, deregisterPushToken } from '../lib/notifications';
 
 // Required for expo-auth-session to close the browser on web after OAuth redirect
@@ -19,6 +20,7 @@ export function useAuthListener() {
       setLoading(false);
       if (session?.user) {
         identify(session.user.id, { email: session.user.email });
+        setSentryUser(session.user.id, session.user.email);
         registerPushToken();
       }
     });
@@ -31,12 +33,14 @@ export function useAuthListener() {
       setLoading(false);
       if (session?.user) {
         identify(session.user.id, { email: session.user.email });
+        setSentryUser(session.user.id, session.user.email);
         if (event === 'SIGNED_IN') {
           registerPushToken();
         }
       } else {
         // User signed out — reset PostHog identity and remove push token
         reset();
+        clearSentryUser();
         deregisterPushToken();
       }
     });

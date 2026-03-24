@@ -58,14 +58,14 @@ function AppTabBar({ state, navigation }: BottomTabBarProps) {
         <Ionicons
           name={isFocused ? tab.iconActive : tab.icon}
           size={22}
-          color={isFocused ? '#FF6B5B' : '#A8A8A8'}
+          color={isFocused ? '#D85A30' : '#A8A8A8'}
         />
         <Text
           style={{
             marginTop: 2,
             fontSize: 10,
             fontWeight: isFocused ? '600' : '400',
-            color: isFocused ? '#FF6B5B' : '#A8A8A8',
+            color: isFocused ? '#D85A30' : '#A8A8A8',
           }}
         >
           {tab.label}
@@ -87,7 +87,7 @@ function AppTabBar({ state, navigation }: BottomTabBarProps) {
               width: 36,
               height: 36,
               borderRadius: 18,
-              backgroundColor: '#FF6B5B',
+              backgroundColor: '#D85A30',
               alignItems: 'center',
               justifyContent: 'center',
             }}

@@ -13,6 +13,7 @@ export interface CustomSectionProps {
   onOptionChange: (id: string, optIdx: number, value: string) => void;
   onOptionRemove: (id: string, optIdx: number) => void;
   onMultiToggle: (id: string) => void;
+  accentColor?: string;
 }
 
 export function CustomSection({
@@ -24,6 +25,7 @@ export function CustomSection({
   onOptionChange,
   onOptionRemove,
   onMultiToggle,
+  accentColor = '#D85A30',
 }: CustomSectionProps) {
   return (
     <>
@@ -99,7 +101,7 @@ export function CustomSection({
             <TextInput
               value={cp.question}
               onChangeText={(v) => onQuestionChange(cp.id, v)}
-              placeholder="e.g. What vibe are you feeling?"
+              placeholder="e.g. What vibe are we going for?"
               maxLength={80}
               className="min-h-[48px] rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-base text-neutral-800"
               placeholderTextColor="#A8A8A8"
@@ -138,19 +140,19 @@ export function CustomSection({
                   className="flex-row items-center gap-2 py-1"
                   accessibilityRole="button"
                 >
-                  <Ionicons name="add-circle-outline" size={20} color="#FF6B5B" />
-                  <Text className="text-sm text-coral-500">Add option</Text>
+                  <Ionicons name="add-circle-outline" size={20} color={accentColor} />
+                  <Text className="text-sm" style={{ color: accentColor }}>Add option</Text>
                 </Pressable>
               ) : null}
             </View>
 
             {/* Allow multi toggle */}
             <View className="flex-row items-center justify-between pt-1 border-t border-neutral-100">
-              <Text className="text-sm text-neutral-700">Allow multiple choices</Text>
+              <Text className="text-sm text-neutral-700">Allow multiple picks</Text>
               <Switch
                 value={cp.allowMulti}
                 onValueChange={() => onMultiToggle(cp.id)}
-                trackColor={{ false: '#E8E8E8', true: '#FF6B5B' }}
+                trackColor={{ false: '#E8E8E8', true: accentColor }}
                 thumbColor="white"
               />
             </View>
@@ -164,8 +166,8 @@ export function CustomSection({
           className="flex-row items-center gap-2 py-2"
           accessibilityRole="button"
         >
-          <Ionicons name="add-circle-outline" size={20} color="#FF6B5B" />
-          <Text className="text-base text-coral-500">Add another question</Text>
+          <Ionicons name="add-circle-outline" size={20} color={accentColor} />
+          <Text className="text-base" style={{ color: accentColor }}>Add another question</Text>
         </Pressable>
       ) : null}
     </>

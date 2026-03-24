@@ -238,7 +238,7 @@ function InlineTimePicker({ field, initialTime, onConfirm, onClear, onBack }: In
           onConfirm(time);
         }}
         style={{
-          backgroundColor: '#FF6B5B',
+          backgroundColor: '#D85A30',
           borderRadius: 14,
           paddingVertical: 14,
           alignItems: 'center',
@@ -331,7 +331,7 @@ function BlockCard({
     >
       {/* Type icon */}
       <View className={`mt-0.5 h-8 w-8 items-center justify-center rounded-xl ${colors.bg}`}>
-        <Ionicons name={icon} size={16} color={colors.text.replace('text-', '').includes('coral') ? '#FF6B5B' : undefined} style={colors.text.includes('blue') ? { color: '#2563EB' } : colors.text.includes('orange') ? { color: '#EA580C' } : colors.text.includes('purple') ? { color: '#9333EA' } : colors.text.includes('coral') ? { color: '#FF6B5B' } : { color: '#16A34A' }} />
+        <Ionicons name={icon} size={16} color={colors.text.replace('text-', '').includes('coral') ? '#D85A30' : undefined} style={colors.text.includes('blue') ? { color: '#2563EB' } : colors.text.includes('orange') ? { color: '#EA580C' } : colors.text.includes('purple') ? { color: '#9333EA' } : colors.text.includes('coral') ? { color: '#D85A30' } : { color: '#16A34A' }} />
       </View>
 
       {/* Content */}
@@ -609,11 +609,11 @@ function BlockEditorModal({
                             paddingVertical: 6,
                             borderRadius: 20,
                             borderWidth: 1.5,
-                            borderColor: active ? '#FF6B5B' : '#E5E5E5',
+                            borderColor: active ? '#D85A30' : '#E5E5E5',
                             backgroundColor: active ? '#FFF1F0' : 'white',
                           }}
                         >
-                          <Text style={{ fontSize: 13, fontWeight: '600', color: active ? '#FF6B5B' : '#737373' }}>
+                          <Text style={{ fontSize: 13, fontWeight: '600', color: active ? '#D85A30' : '#737373' }}>
                             {BLOCK_TYPE_LABELS[t]}
                           </Text>
                         </Pressable>
@@ -691,16 +691,16 @@ function BlockEditorModal({
                           paddingVertical: 10,
                           borderRadius: 12,
                           borderWidth: 1.5,
-                          borderColor: restaurantLoading ? '#E5E5E5' : '#FF6B5B',
+                          borderColor: restaurantLoading ? '#E5E5E5' : '#D85A30',
                           backgroundColor: restaurantLoading ? '#F9F9F9' : '#FFF1F0',
                         }}
                       >
                         {restaurantLoading ? (
-                          <ActivityIndicator size="small" color="#FF6B5B" />
+                          <ActivityIndicator size="small" color="#D85A30" />
                         ) : (
-                          <Ionicons name="storefront-outline" size={15} color="#FF6B5B" />
+                          <Ionicons name="storefront-outline" size={15} color="#D85A30" />
                         )}
-                        <Text style={{ fontSize: 13, fontWeight: '600', color: restaurantLoading ? '#A3A3A3' : '#FF6B5B' }}>
+                        <Text style={{ fontSize: 13, fontWeight: '600', color: restaurantLoading ? '#A3A3A3' : '#D85A30' }}>
                           {restaurantLoading ? 'Looking up…' : 'Look up restaurant info'}
                         </Text>
                       </Pressable>
@@ -745,11 +745,11 @@ function BlockEditorModal({
                             onPress={() => Linking.openURL(restaurantInfo.google_maps_url!)}
                             style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}
                           >
-                            <Ionicons name="map-outline" size={13} color="#FF6B5B" />
-                            <Text style={{ fontSize: 13, color: '#FF6B5B', fontWeight: '600' }}>
+                            <Ionicons name="map-outline" size={13} color="#D85A30" />
+                            <Text style={{ fontSize: 13, color: '#D85A30', fontWeight: '600' }}>
                               View on Google Maps
                             </Text>
-                            <Ionicons name="open-outline" size={11} color="#FF6B5B" />
+                            <Ionicons name="open-outline" size={11} color="#D85A30" />
                           </Pressable>
                         ) : null}
                       </View>
@@ -798,7 +798,7 @@ function BlockEditorModal({
                   <Pressable
                     onPress={() => canSave && onSave(state)}
                     disabled={!canSave || saving}
-                    style={{ flex: 2, paddingVertical: 14, borderRadius: 14, backgroundColor: canSave ? '#FF6B5B' : '#FCA99F', alignItems: 'center', justifyContent: 'center' }}
+                    style={{ flex: 2, paddingVertical: 14, borderRadius: 14, backgroundColor: canSave ? '#D85A30' : '#FCA99F', alignItems: 'center', justifyContent: 'center' }}
                   >
                     {saving ? (
                       <ActivityIndicator size="small" color="white" />
@@ -1239,7 +1239,7 @@ export function ItineraryTab({ tripId, isPlanner = true }: { tripId: string; isP
         /* Empty state — no dates */
         <View className="flex-1 items-center justify-center gap-4 px-8">
           <View className="h-14 w-14 items-center justify-center rounded-2xl bg-coral-50">
-            <Ionicons name="calendar-outline" size={28} color="#FF6B5B" />
+            <Ionicons name="calendar-outline" size={28} color="#D85A30" />
           </View>
           <Text className="text-base font-semibold text-neutral-800">No trip dates yet</Text>
           <Text className="text-center text-sm text-neutral-500">

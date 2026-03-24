@@ -24,7 +24,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button } from '@/components/ui';
+import { Button, useCelebration } from '@/components/ui';
 import { getTripByShareToken } from '@/lib/api/trips';
 import { enrollRespondentAsMember } from '@/lib/api/members';
 import {
@@ -38,6 +38,7 @@ import {
 import { getTripStage } from '@/lib/tripStage';
 import { getResponseCountsForTrip } from '@/lib/api/responses';
 import { capture, Events } from '@/lib/analytics';
+import { log } from '@/lib/logger';
 import type { TripWithPolls, PollWithOptions, Respondent } from '@/types/database';
 import { supabase } from '@/lib/supabase';
 import { getBlocksForTrip, upsertDayRsvp, formatDayLabel, formatTime } from '@/lib/api/itinerary';
@@ -372,14 +373,14 @@ function DatesPollCard({
                     borderRadius: 16,
                     alignItems: 'center',
                     justifyContent: 'center',
-                    backgroundColor: isSelected ? '#FF6B5B' : isHighlighted ? '#FFF0EE' : 'transparent',
+                    backgroundColor: isSelected ? '#D85A30' : isHighlighted ? '#FFF0EE' : 'transparent',
                   }}
                 >
                   <Text
                     style={{
                       fontSize: 13,
                       fontWeight: isHighlighted ? '600' : '400',
-                      color: isSelected ? '#FFFFFF' : isHighlighted ? '#FF6B5B' : '#D1D5DB',
+                      color: isSelected ? '#FFFFFF' : isHighlighted ? '#D85A30' : '#D1D5DB',
                     }}
                   >
                     {date.getDate()}
@@ -395,7 +396,7 @@ function DatesPollCard({
       {selectedOptions.length > 0 ? (
         isPerDayPoll ? (
           <View className="mt-3 flex-row items-center gap-1.5">
-            <Ionicons name="checkmark-circle" size={14} color="#FF6B5B" />
+            <Ionicons name="checkmark-circle" size={14} color="#D85A30" />
             <Text className="text-xs font-medium text-coral-600">
               {selectedOptions.length} day{selectedOptions.length !== 1 ? 's' : ''} selected
             </Text>
@@ -406,7 +407,7 @@ function DatesPollCard({
               .filter((o) => selectedOptions.includes(o.id))
               .map((o) => (
                 <View key={o.id} className="flex-row items-center gap-1 rounded-full bg-coral-50 px-3 py-1">
-                  <Ionicons name="checkmark-circle" size={13} color="#FF6B5B" />
+                  <Ionicons name="checkmark-circle" size={13} color="#D85A30" />
                   <Text className="text-xs font-medium text-coral-600">{o.label}</Text>
                 </View>
               ))}
@@ -648,7 +649,7 @@ function DateResultsCalendar({
                     justifyContent: 'center',
                     backgroundColor: bgColor,
                     borderWidth: isMyPick ? 2 : 0,
-                    borderColor: '#FF6B5B',
+                    borderColor: '#D85A30',
                   }}
                 >
                   <Text style={{ fontSize: 12, fontWeight: isInRange ? '600' : '400', color: textColor }}>
@@ -668,12 +669,12 @@ function DateResultsCalendar({
           <Text className="text-xs text-neutral-400">No votes</Text>
         </View>
         <View className="flex-row items-center gap-1">
-          <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#FF6B5B' }} />
+          <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#D85A30' }} />
           <Text className="text-xs text-neutral-400">Popular</Text>
         </View>
         {myOptionIds.length > 0 ? (
           <View className="flex-row items-center gap-1">
-            <View style={{ width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: '#FF6B5B' }} />
+            <View style={{ width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: '#D85A30' }} />
             <Text className="text-xs text-neutral-400">Your picks</Text>
           </View>
         ) : null}
@@ -863,7 +864,7 @@ function ItineraryRsvpSection({
 
             {/* RSVP buttons */}
             {isSaving ? (
-              <ActivityIndicator size="small" color="#FF6B5B" />
+              <ActivityIndicator size="small" color="#D85A30" />
             ) : (
               <View className="flex-row gap-2">
                 <Pressable
@@ -990,6 +991,7 @@ export default function RespondScreen() {
   const insets = useSafeAreaInsets();
 
   const [step, setStep] = useState<Step>('name');
+  const { celebrate, CelebrationOverlay } = useCelebration();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [firstNameError, setFirstNameError] = useState('');
@@ -1213,8 +1215,11 @@ export default function RespondScreen() {
         enrollRespondentAsMember(trip.id, email.trim(), firstName.trim(), lastName.trim(), phone.trim()).catch(() => {});
       }
       capture(Events.RESPONDENT_SUBMITTED, { trip_id: trip.id, rsvp: 'in' });
+      log.action(Events.RESPONDENT_SUBMITTED, { trip_id: trip.id, rsvp: 'in' });
+      celebrate();
       setStep('done');
-    } catch {
+    } catch (err) {
+      log.error('rsvp_submit_failed', err, { trip_id: trip.id });
       Alert.alert('Error', 'Could not save your responses. Please try again.');
     } finally {
       setSubmitting(false);
@@ -1235,6 +1240,7 @@ export default function RespondScreen() {
         await submitPollResponses(poll.id, respondent.id, optionIds);
       }
       capture(Events.RESPONDENT_SUBMITTED, { trip_id: trip.id, poll_count: polls.length });
+      log.action(Events.RESPONDENT_SUBMITTED, { trip_id: trip.id, poll_count: polls.length });
 
       // On their first submission: create a Rally account and add them as a
       // trip member so the trip shows up in their app once they log in.
@@ -1275,6 +1281,7 @@ export default function RespondScreen() {
           }
         } catch { /* non-fatal — itinerary section will just not show */ }
       }
+      celebrate();
       setStep('done');
     } catch (err: unknown) {
       const msg =
@@ -1308,7 +1315,7 @@ export default function RespondScreen() {
     return (
       <WebPageShell cardStyle={{ padding: 48 }}>
         <View className={IS_WEB ? 'items-center justify-center' : 'flex-1 items-center justify-center bg-neutral-50'}>
-          <ActivityIndicator size="large" color="#FF6B5B" />
+          <ActivityIndicator size="large" color="#D85A30" />
         </View>
       </WebPageShell>
     );
@@ -1814,6 +1821,7 @@ export default function RespondScreen() {
   if (step === 'done') {
     return (
       <WebPageShell cardStyle={IS_WEB ? { maxHeight: '95vh' } : {}}>
+      {CelebrationOverlay}
       <ScrollView
         style={IS_WEB ? {} : { flex: 1, backgroundColor: '#F9F9F7' }}
         contentContainerStyle={{

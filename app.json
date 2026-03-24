@@ -21,7 +21,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#FF6B5B",
+        "backgroundColor": "#D85A30",
         "foregroundImage": "./assets/android-icon-foreground.png"
       },
       "package": "io.rallyapp.app"
@@ -35,9 +35,24 @@
       "expo-router",
       "expo-font",
       [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "project": "rally",
+          "organization": "rally"
+        }
+      ],
+      [
         "expo-notifications",
         {
-          "color": "#FF6B5B"
+          "color": "#D85A30"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Rally uses your location to show your group where everyone is during the trip.",
+          "locationWhenInUsePermission": "Rally uses your location to show your group where everyone is during the trip."
         }
       ],
       "expo-secure-store",

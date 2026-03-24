@@ -71,7 +71,7 @@ export default function TripHubScreen() {
           <Text className="text-base" style={{ color: accentColor }}>← Back</Text>
         </Pressable>
         <View className="flex-1 items-center px-4">
-          <Text className="text-base font-bold text-neutral-800" numberOfLines={1}>
+          <Text className="text-base text-neutral-800" style={{ fontFamily: 'SpaceGrotesk_700Bold' }} numberOfLines={1}>
             {trip?.name ?? ''}
           </Text>
           {trip?.start_date && trip?.end_date ? (

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { Button, Input } from '@/components/ui';
 import { useGoogleSignIn, useSignIn } from '@/hooks/useAuth';
+import { log } from '@/lib/logger';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -28,8 +29,10 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await signIn(email.trim().toLowerCase(), password);
+      log.action('signed_in', { method: 'email' });
       router.replace('/(app)/(tabs)');
-    } catch {
+    } catch (err) {
+      log.error('sign_in_failed', err, { method: 'email' });
       Alert.alert('Login failed', 'Incorrect email or password.');
     } finally {
       setLoading(false);
@@ -40,8 +43,12 @@ export default function LoginScreen() {
     setGoogleLoading(true);
     try {
       const result = await googleSignIn();
-      if (result) router.replace('/(app)/(tabs)');
+      if (result) {
+        log.action('signed_in', { method: 'google' });
+        router.replace('/(app)/(tabs)');
+      }
     } catch (err: unknown) {
+      log.error('sign_in_failed', err, { method: 'google' });
       const message = err instanceof Error ? err.message : 'Google sign-in failed.';
       Alert.alert('Sign-in failed', message);
     } finally {
@@ -60,9 +67,9 @@ export default function LoginScreen() {
       >
         {/* Logo / wordmark */}
         <View className="mb-10">
-          <Text className="text-4xl font-bold text-coral-500">rally</Text>
+          <Text className="text-4xl text-coral-500" style={{ fontFamily: 'SpaceGrotesk_700Bold' }}>rally</Text>
           <Text className="mt-1 text-base text-neutral-500">
-            Group trip planning, made easy.
+            Gather the crew. Plan the ripper trip.
           </Text>
         </View>
 
@@ -115,7 +122,7 @@ export default function LoginScreen() {
           </Link>
 
           <Button onPress={handleLogin} loading={loading} fullWidth className="mt-2">
-            Log in
+            Let's go
           </Button>
 
         </View>
