@@ -102,9 +102,9 @@ export default function TripRecapScreen() {
 
         {/* Hero */}
         <View className="items-center pt-12 pb-8">
-          <Text style={{ fontSize: 56, marginBottom: 16 }}>🏁</Text>
+          <Text style={{ fontSize: 56, marginBottom: 16 }}>🎉</Text>
           <Text className="text-3xl font-bold text-neutral-800 text-center mb-2">
-            Trip complete!
+            What a ripper trip!
           </Text>
           {trip ? (
             <Text className="text-lg font-semibold text-coral-500 text-center">
@@ -116,7 +116,7 @@ export default function TripRecapScreen() {
           ) : null}
           {decidedDestination ? (
             <View className="mt-3 flex-row items-center gap-1.5">
-              <Ionicons name="location-outline" size={14} color="#FF6B5B" />
+              <Ionicons name="location-outline" size={14} color="#D85A30" />
               <Text className="text-sm font-medium text-coral-600">{decidedDestination}</Text>
             </View>
           ) : null}
@@ -151,10 +151,10 @@ export default function TripRecapScreen() {
         {/* Next trip CTA */}
         <View className="gap-4">
           <Text className="text-lg font-bold text-neutral-800 text-center">
-            Ready for the next one?
+            Ready for the next ripper?
           </Text>
           <Text className="text-sm text-neutral-500 text-center leading-5">
-            Your group size is pre-filled.{'\n'}Just pick a destination and rally again.
+            Your crew size is pre-filled.{'\n'}Just pick a destination and let's go again.
           </Text>
 
           <Pressable
@@ -163,7 +163,7 @@ export default function TripRecapScreen() {
             className="items-center justify-center rounded-2xl bg-coral-500 py-4"
             style={{
               opacity: createTrip.isPending || !trip ? 0.7 : 1,
-              shadowColor: '#FF6B5B',
+              shadowColor: '#D85A30',
               shadowOffset: { width: 0, height: 4 },
               shadowOpacity: 0.3,
               shadowRadius: 8,
@@ -174,7 +174,7 @@ export default function TripRecapScreen() {
             {createTrip.isPending ? (
               <ActivityIndicator color="white" />
             ) : (
-              <Text className="text-base font-bold text-white">Start a new trip →</Text>
+              <Text className="text-base font-bold text-white">Plan another rally →</Text>
             )}
           </Pressable>
 
@@ -183,7 +183,7 @@ export default function TripRecapScreen() {
             className="items-center py-3"
             accessibilityRole="button"
           >
-            <Text className="text-sm text-neutral-400">Back to all trips</Text>
+            <Text className="text-sm text-neutral-400">Back to all rallies</Text>
           </Pressable>
         </View>
 
@@ -214,7 +214,7 @@ function StatCard({
         elevation: 2,
       }}
     >
-      <Ionicons name={icon} size={20} color="#FF6B5B" />
+      <Ionicons name={icon} size={20} color="#D85A30" />
       <Text className="text-xl font-bold text-neutral-800">{value}</Text>
       <Text className="text-xs text-neutral-400 text-center">{label}</Text>
     </View>

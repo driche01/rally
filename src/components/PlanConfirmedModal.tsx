@@ -135,7 +135,7 @@ export function PlanConfirmedModal({
                 }}
               >
                 Your group decided on{' '}
-                <Text style={{ color: '#FF6B5B', fontWeight: '600' }}>{destination}</Text>
+                <Text style={{ color: '#D85A30', fontWeight: '600' }}>{destination}</Text>
                 {'. '}
                 Time to turn that decision into a real trip.
               </Text>
@@ -163,7 +163,7 @@ export function PlanConfirmedModal({
                       justifyContent: 'center',
                     }}
                   >
-                    <Ionicons name={icon} size={16} color="#FF6B5B" />
+                    <Ionicons name={icon} size={16} color="#D85A30" />
                   </View>
                   <Text style={{ flex: 1, fontSize: 14, color: '#525252' }}>{text}</Text>
                 </View>
@@ -174,7 +174,7 @@ export function PlanConfirmedModal({
             <Pressable
               onPress={handleBuildTrip}
               style={{
-                backgroundColor: '#FF6B5B',
+                backgroundColor: '#D85A30',
                 borderRadius: 16,
                 paddingVertical: 16,
                 alignItems: 'center',

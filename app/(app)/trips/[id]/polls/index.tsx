@@ -866,12 +866,12 @@ function TravelWindowModal({
                     style={{
                       flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
                       gap: 6, paddingVertical: 10, borderRadius: 999, borderWidth: 1.5,
-                      borderColor: isSelected ? '#FF6B5B' : '#E5E5E5',
+                      borderColor: isSelected ? '#D85A30' : '#E5E5E5',
                       backgroundColor: isSelected ? '#FFF4F2' : 'white',
                     }}
                   >
-                    <Ionicons name={SEASON_ICON[season] ?? 'sunny-outline'} size={14} color={isSelected ? '#FF6B5B' : '#737373'} />
-                    <Text style={{ fontSize: 14, fontWeight: '500', color: isSelected ? '#FF6B5B' : '#525252' }}>{season}</Text>
+                    <Ionicons name={SEASON_ICON[season] ?? 'sunny-outline'} size={14} color={isSelected ? '#D85A30' : '#737373'} />
+                    <Text style={{ fontSize: 14, fontWeight: '500', color: isSelected ? '#D85A30' : '#525252' }}>{season}</Text>
                   </Pressable>
                 );
               })}
@@ -880,7 +880,7 @@ function TravelWindowModal({
               <Pressable onPress={onClose} style={{ flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#E5E5E5', alignItems: 'center' }}>
                 <Text style={{ fontSize: 15, fontWeight: '600', color: '#525252' }}>Cancel</Text>
               </Pressable>
-              <Pressable onPress={handleSave} style={{ flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: '#FF6B5B', alignItems: 'center' }}>
+              <Pressable onPress={handleSave} style={{ flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: '#D85A30', alignItems: 'center' }}>
                 <Text style={{ fontSize: 15, fontWeight: '600', color: 'white' }}>{selected.length === 0 ? 'Clear' : 'Save'}</Text>
               </Pressable>
             </View>

@@ -80,7 +80,7 @@ function BlockAttachmentPreview({
     <View
       className="flex-row items-center gap-2 rounded-xl border border-coral-500 bg-coral-50 px-3 py-2"
     >
-      <Ionicons name={icon} size={14} color="#FF6B5B" />
+      <Ionicons name={icon} size={14} color="#D85A30" />
       <View className="flex-1">
         <Text className="text-xs font-semibold text-coral-700" numberOfLines={1}>
           {block.title}
@@ -89,7 +89,7 @@ function BlockAttachmentPreview({
       </View>
       {onRemove ? (
         <Pressable onPress={onRemove} className="p-0.5">
-          <Ionicons name="close" size={14} color="#FF6B5B" />
+          <Ionicons name="close" size={14} color="#D85A30" />
         </Pressable>
       ) : null}
     </View>
@@ -233,7 +233,7 @@ function BlockPickerSheet({
                           borderColor: '#F0F0F0',
                         }}
                       >
-                        <Ionicons name={icon} size={16} color="#FF6B5B" />
+                        <Ionicons name={icon} size={16} color="#D85A30" />
                         <Text style={{ fontSize: 14, fontWeight: '500', color: '#1C1C1C' }} numberOfLines={1}>
                           {block.title}
                         </Text>
@@ -345,7 +345,7 @@ function MessageItem({
 
           {/* Pinned indicator */}
           {message.is_pinned ? (
-            <Ionicons name="pin" size={12} color="#FF6B5B" />
+            <Ionicons name="pin" size={12} color="#D85A30" />
           ) : null}
         </View>
       </View>
@@ -369,7 +369,7 @@ function PinnedBar({ messages }: { messages: TripMessageWithReactions[] }) {
         onPress={() => setExpanded((p) => !p)}
         className="flex-row items-center gap-2"
       >
-        <Ionicons name="pin" size={13} color="#FF6B5B" />
+        <Ionicons name="pin" size={13} color="#D85A30" />
         <Text className="flex-1 text-xs font-semibold text-neutral-600">
           {pinned.length} pinned {pinned.length === 1 ? 'message' : 'messages'}
         </Text>

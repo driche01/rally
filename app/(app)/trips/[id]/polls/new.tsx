@@ -16,7 +16,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Divider } from '@/components/ui';
 import { useCreatePoll, usePolls, useUpdateCustomPoll } from '@/hooks/usePolls';
+import { useTrip } from '@/hooks/useTrips';
 import { capture, Events } from '@/lib/analytics';
+import { getTripStage, STAGE_ACCENT } from '@/lib/tripStage';
 import { DEFAULT_BUDGET_RANGES, generateRangeLabel, getMinForRange } from '@/lib/pollFormUtils';
 import type { PollType } from '@/types/database';
 import type { BudgetRange, CustomPoll, DateRange } from '@/types/polls';
@@ -38,7 +40,6 @@ const tabStyles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
   },
-  active:   { borderColor: '#FF6B5B', backgroundColor: '#FF6B5B' },
   inactive: { borderColor: '#E5E5E5', backgroundColor: '#FFFFFF' },
   taken:    { borderColor: '#E5E5E5', backgroundColor: '#F5F5F5' },
   textActive:   { fontSize: 14, fontWeight: '500', color: '#FFFFFF' },
@@ -72,6 +73,8 @@ export default function NewPollScreen() {
   const { id: tripId } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { data: trip } = useTrip(tripId);
+  const accentColor = STAGE_ACCENT[trip ? getTripStage(trip) : 'deciding'];
   const createPoll = useCreatePoll(tripId);
   const updateCustomPoll = useUpdateCustomPoll(tripId);
 
@@ -117,20 +120,20 @@ export default function NewPollScreen() {
   }, [takenCount]);
 
   // ── Destination state ──
-  const [destTitle, setDestTitle] = useState('Where should we go?');
+  const [destTitle, setDestTitle] = useState('Where are we headed?');
   const [destOptions, setDestOptions] = useState(['', '']);
   const [destAllowMulti, setDestAllowMulti] = useState(false);
 
   // ── Dates state ──
-  const [datesTitle, setDatesTitle] = useState('When works best for you?');
+  const [datesTitle, setDatesTitle] = useState('When can ya make it?');
   const [dateRanges, setDateRanges] = useState<DateRange[]>([]);
-  const [durationTitle, setDurationTitle] = useState('How long should the trip be?');
+  const [durationTitle, setDurationTitle] = useState("How long's the trip?");
   const [selectedDurations, setSelectedDurations] = useState<string[]>([]);
   const [customDurationInput, setCustomDurationInput] = useState('');
   const [customDurationUnit, setCustomDurationUnit] = useState<'days' | 'weeks' | 'months'>('days');
 
   // ── Budget state ──
-  const [budgetTitle, setBudgetTitle] = useState("What's your budget?");
+  const [budgetTitle, setBudgetTitle] = useState("What's the spend looking like?");
   const [budgetRanges, setBudgetRanges] = useState<BudgetRange[]>(DEFAULT_BUDGET_RANGES);
 
   // ── Custom polls state ──
@@ -404,7 +407,7 @@ export default function NewPollScreen() {
     });
 
     if (mutations.length === 0) {
-      Alert.alert('Nothing to save', 'Fill in at least one section before saving.');
+      Alert.alert('Nothing to save', 'Fill in at least one section, legend.');
       return;
     }
 
@@ -426,11 +429,11 @@ export default function NewPollScreen() {
         return;
       }
       Alert.alert(
-        'Go live?',
-        'Once polls receive responses they can no longer be edited — only closed or cloned.',
+        'Ready to send it?',
+        'Once the crew responds, polls can no longer be edited — only closed or cloned.',
         [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Go live', onPress: () => doSave('live') },
+          { text: 'Not yet', style: 'cancel' },
+          { text: 'Send it!', onPress: () => doSave('live') },
         ]
       );
     } else {
@@ -451,7 +454,7 @@ export default function NewPollScreen() {
         style={{ paddingTop: insets.top + 16 }}
       >
         <TouchableOpacity onPress={() => router.back()} accessibilityRole="button">
-          <Text className="text-base text-coral-500">{allTaken ? 'Back' : 'Cancel'}</Text>
+          <Text className="text-base" style={{ color: accentColor }}>{allTaken ? 'Back' : 'Cancel'}</Text>
         </TouchableOpacity>
         <Text className="text-lg font-semibold text-neutral-800">Add poll</Text>
         <View style={{ width: 60 }} />
@@ -477,7 +480,7 @@ export default function NewPollScreen() {
               disabled={isTaken}
               style={[
                 tabStyles.base,
-                isTaken ? tabStyles.taken : (active ? tabStyles.active : tabStyles.inactive),
+                isTaken ? tabStyles.taken : (active ? { borderColor: accentColor, backgroundColor: accentColor } : tabStyles.inactive),
                 { flex: 1, alignItems: 'center' },
               ]}
               accessibilityRole="tab"
@@ -523,7 +526,7 @@ export default function NewPollScreen() {
                 <Text className="text-2xl font-bold text-neutral-800">Almost rallied!</Text>
                 <Text className="text-sm font-semibold text-coral-500">All polls are live or decided</Text>
                 <Text className="text-sm text-center text-neutral-400 px-6" style={{ lineHeight: 20 }}>
-                  The group is voting — once the results are in, make your decisions and lock in the trip!
+                  The crew is voting — once results are in, call it and lock in the trip!
                 </Text>
               </View>
             </View>
@@ -543,7 +546,7 @@ export default function NewPollScreen() {
                 <Text className="text-2xl font-bold text-neutral-800">All polls drafted</Text>
                 <Text className="text-sm font-semibold text-neutral-500">Ready to go live</Text>
                 <Text className="text-sm text-center text-neutral-400 px-6" style={{ lineHeight: 20 }}>
-                  Head back to the polls screen to publish your polls and start collecting votes.
+                  Head back and go live to start getting the crew's votes.
                 </Text>
               </View>
             </View>
@@ -573,6 +576,7 @@ export default function NewPollScreen() {
               onOptionAdd={addDestOption}
               allowMulti={destAllowMulti}
               onAllowMultiChange={setDestAllowMulti}
+              accentColor={accentColor}
             />
           )}
 
@@ -592,6 +596,7 @@ export default function NewPollScreen() {
               customDurationUnit={customDurationUnit}
               onCustomDurationUnitChange={setCustomDurationUnit}
               onCustomDurationAdd={addCustomDuration}
+              accentColor={accentColor}
             />
           )}
 
@@ -606,6 +611,7 @@ export default function NewPollScreen() {
               onLabelUpdate={updateRangeLabel}
               onTierAdd={addBudgetTier}
               onTierRemove={removeBudgetTier}
+              accentColor={accentColor}
             />
           )}
 
@@ -620,6 +626,7 @@ export default function NewPollScreen() {
               onOptionChange={updateCustomOption}
               onOptionRemove={removeCustomOption}
               onMultiToggle={toggleCustomMulti}
+              accentColor={accentColor}
             />
           )}
 
@@ -636,13 +643,14 @@ export default function NewPollScreen() {
               >
                 Save as draft
               </Button>
-              <Button
+              <Pressable
                 onPress={() => handleSave('live')}
-                loading={createPoll.isPending || updateCustomPoll.isPending}
-                className="flex-1"
+                disabled={createPoll.isPending || updateCustomPoll.isPending}
+                className="flex-1 items-center justify-center rounded-2xl min-h-[48px] px-6 py-3"
+                style={{ backgroundColor: accentColor, opacity: (createPoll.isPending || updateCustomPoll.isPending) ? 0.5 : 1 }}
               >
-                Go live
-              </Button>
+                <Text className="text-base font-semibold text-white">Send it!</Text>
+              </Pressable>
             </View>
           )}
         </View>
@@ -661,32 +669,33 @@ export default function NewPollScreen() {
         >
           <View className="mx-6 rounded-2xl bg-white p-6">
             <Text className="mb-2 text-lg font-bold text-neutral-800">
-              Incomplete sections
+              Not quite done, mate
             </Text>
             <Text className="mb-4 text-sm text-neutral-500">
-              These sections haven't been filled in yet:
+              These sections still need filling in:
             </Text>
             {incompleteSections.map((s) => (
               <View key={s} className="mb-1.5 flex-row items-center gap-2">
-                <Ionicons name="alert-circle-outline" size={16} color="#FF6B5B" />
+                <Ionicons name="alert-circle-outline" size={16} color="#D85A30" />
                 <Text className="text-base text-neutral-700">{s}</Text>
               </View>
             ))}
             <Text className="mt-4 text-sm text-neutral-400">
-              Only completed sections will go live. Continue anyway?
+              Only the completed ones will go live. Send it anyway?
             </Text>
             <View className="mt-5 flex-row gap-3">
               <Pressable
                 onPress={() => setShowIncompleteModal(false)}
                 className="flex-1 items-center rounded-xl border border-neutral-200 bg-white py-3"
               >
-                <Text className="text-base font-medium text-neutral-700">Review</Text>
+                <Text className="text-base font-medium text-neutral-700">Go back</Text>
               </Pressable>
               <Pressable
                 onPress={() => { setShowIncompleteModal(false); doSave('live'); }}
-                className="flex-1 items-center rounded-xl bg-coral-500 py-3"
+                className="flex-1 items-center rounded-xl py-3"
+                style={{ backgroundColor: accentColor }}
               >
-                <Text className="text-base font-semibold text-white">Go live anyway</Text>
+                <Text className="text-base font-semibold text-white">Send it anyway</Text>
               </Pressable>
             </View>
           </View>
