@@ -214,7 +214,7 @@ function CalendarPicker({ ranges, onRangesChange }: { ranges: DateRange[]; onRan
             <View key={i} className="flex-row items-center gap-1 rounded-full border border-coral-200 bg-coral-50 px-3 py-1.5">
               <Text className="text-sm text-coral-700">{fmtRange(r)}</Text>
               <Pressable onPress={() => onRangesChange(ranges.filter((_, j) => j !== i))} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
-                <Ionicons name="close" size={13} color="#FF6B5B" />
+                <Ionicons name="close" size={13} color="#D85A30" />
               </Pressable>
             </View>
           ))}
@@ -318,6 +318,8 @@ export default function EditPollScreen() {
   }, [poll, initialized]);
 
   if (!poll) return null;
+  // Reassign with narrowed type so closures below don't require null checks
+  const p = poll;
 
   // ── Destination helpers ──
   function addDestOption() {
@@ -403,28 +405,28 @@ export default function EditPollScreen() {
 
   // ── Build save payload ──
   function buildOptions(): { label: string; position: number }[] {
-    if (poll.type === 'destination') {
+    if (p.type === 'destination') {
       return destOptions.filter((o) => o.trim()).map((o, i) => ({ label: o.trim(), position: i }));
     }
-    if (poll.type === 'dates') {
+    if (p.type === 'dates') {
       if (isDatesAvailability) {
         return dateRanges.map((r, i) => ({ label: fmtRange(r), position: i }));
       }
       return selectedDurations.map((d, i) => ({ label: d, position: i }));
     }
-    if (poll.type === 'budget') {
+    if (p.type === 'budget') {
       return budgetRanges.filter((r) => r.selected).map((r, i) => ({ label: r.label, position: i }));
     }
-    if (poll.type === 'custom') {
+    if (p.type === 'custom') {
       return customOptions.filter((o) => o.trim()).map((o, i) => ({ label: o.trim(), position: i }));
     }
     return [];
   }
 
   function getTitle(): string {
-    if (poll.type === 'destination') return destTitle;
-    if (poll.type === 'dates') return datesTitle;
-    if (poll.type === 'custom') return customTitle;
+    if (p.type === 'destination') return destTitle;
+    if (p.type === 'dates') return datesTitle;
+    if (p.type === 'custom') return customTitle;
     return budgetTitle;
   }
 
@@ -437,15 +439,15 @@ export default function EditPollScreen() {
 
     setSaving(true);
     try {
-      await updatePoll(poll.id, {
+      await updatePoll(p.id, {
         title: titleVal,
         allow_multi_select:
-          poll.type === 'destination' ? destAllowMulti :
-          poll.type === 'custom' ? customAllowMulti :
-          poll.allow_multi_select,
+          p.type === 'destination' ? destAllowMulti :
+          p.type === 'custom' ? customAllowMulti :
+          p.allow_multi_select,
       });
-      await updatePollOptions(poll.id, opts);
-      capture(Events.POLL_UPDATED, { poll_type: poll.type, trip_id: tripId });
+      await updatePollOptions(p.id, opts);
+      capture(Events.POLL_UPDATED, { poll_type: p.type, trip_id: tripId });
       qc.invalidateQueries({ queryKey: pollKeys.forTrip(tripId) });
       router.back();
     } catch {
@@ -512,7 +514,7 @@ export default function EditPollScreen() {
                 ))}
                 {destOptions.length < 6 ? (
                   <Pressable onPress={addDestOption} className="flex-row items-center gap-2 py-2" accessibilityRole="button">
-                    <Ionicons name="add-circle-outline" size={20} color="#FF6B5B" />
+                    <Ionicons name="add-circle-outline" size={20} color="#D85A30" />
                     <Text className="text-base text-coral-500">Add option</Text>
                   </Pressable>
                 ) : null}
@@ -523,7 +525,7 @@ export default function EditPollScreen() {
                   <Text className="text-base font-medium text-neutral-800">Allow multiple choices</Text>
                   <Text className="text-sm text-neutral-400">Group members can select more than one</Text>
                 </View>
-                <Switch value={destAllowMulti} onValueChange={setDestAllowMulti} trackColor={{ false: '#E8E8E8', true: '#FF6B5B' }} thumbColor="white" />
+                <Switch value={destAllowMulti} onValueChange={setDestAllowMulti} trackColor={{ false: '#E8E8E8', true: '#D85A30' }} thumbColor="white" />
               </View>
             </>
           )}
@@ -656,7 +658,7 @@ export default function EditPollScreen() {
                 })}
                 {budgetRanges.length < 6 ? (
                   <Pressable onPress={addBudgetTier} className="flex-row items-center gap-2 py-2" accessibilityRole="button">
-                    <Ionicons name="add-circle-outline" size={20} color="#FF6B5B" />
+                    <Ionicons name="add-circle-outline" size={20} color="#D85A30" />
                     <Text className="text-base text-coral-500">Add tier</Text>
                   </Pressable>
                 ) : null}
@@ -701,7 +703,7 @@ export default function EditPollScreen() {
                 ))}
                 {customOptions.length < 6 ? (
                   <Pressable onPress={addCustomOption} className="flex-row items-center gap-2 py-2" accessibilityRole="button">
-                    <Ionicons name="add-circle-outline" size={20} color="#FF6B5B" />
+                    <Ionicons name="add-circle-outline" size={20} color="#D85A30" />
                     <Text className="text-base text-coral-500">Add option</Text>
                   </Pressable>
                 ) : null}
@@ -712,7 +714,7 @@ export default function EditPollScreen() {
                   <Text className="text-base font-medium text-neutral-800">Allow multiple choices</Text>
                   <Text className="text-sm text-neutral-400">Group members can select more than one</Text>
                 </View>
-                <Switch value={customAllowMulti} onValueChange={setCustomAllowMulti} trackColor={{ false: '#E8E8E8', true: '#FF6B5B' }} thumbColor="white" />
+                <Switch value={customAllowMulti} onValueChange={setCustomAllowMulti} trackColor={{ false: '#E8E8E8', true: '#D85A30' }} thumbColor="white" />
               </View>
             </>
           )}

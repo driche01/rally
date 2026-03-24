@@ -87,7 +87,7 @@ export default function SignupScreen() {
         <View className="mb-10">
           <Text className="text-4xl font-bold text-coral-500">rally</Text>
           <Text className="mt-1 text-base text-neutral-500">
-            Create your account to start planning.
+            Join the crew. Big rallies incoming.
           </Text>
         </View>
 
@@ -170,7 +170,7 @@ export default function SignupScreen() {
           />
 
           <Button onPress={handleSignup} loading={loading} fullWidth className="mt-2">
-            Create account
+            I'm in, let's go
           </Button>
         </View>
 

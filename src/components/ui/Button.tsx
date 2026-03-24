@@ -77,7 +77,7 @@ export function Button({
       {loading ? (
         <ActivityIndicator
           size="small"
-          color={variant === 'primary' || variant === 'destructive' ? '#fff' : '#FF6B5B'}
+          color={variant === 'primary' || variant === 'destructive' ? '#fff' : '#D85A30'}
         />
       ) : (
         <Text className={[v.text, s.text].join(' ')}>{children}</Text>

@@ -19,10 +19,10 @@ export const STAGES: TripStage[] = [
 
 export const STAGE_LABEL: Record<TripStage, string> = {
   deciding:     'Deciding',
-  confirmed:    'Confirmed',
+  confirmed:    "It's On!",
   planning:     'Planning',
-  experiencing: 'Experiencing',
-  reconciling:  'Reconciling',
+  experiencing: "We're Here",
+  reconciling:  'Wrapping Up',
   done:         'Done',
 };
 
@@ -56,10 +56,10 @@ export function getStageIndex(stage: TripStage): number {
 
 /** Primary accent color for each stage — use for nav elements, CTAs, progress fills. */
 export const STAGE_ACCENT: Record<TripStage, string> = {
-  deciding:     '#D85A30',
-  confirmed:    '#235C38',
-  planning:     '#1A4060',
-  experiencing: '#085041',
-  reconciling:  '#666666',
+  deciding:     '#E05A28',
+  confirmed:    '#1A9E5A',
+  planning:     '#1563B0',
+  experiencing: '#0A8A6A',
+  reconciling:  '#888888',
   done:         '#2C2C2A',
 };

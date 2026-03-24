@@ -171,7 +171,7 @@ export function PreciseGroupSizeModal({ visible, current, onSave, onClose }: Pro
                     flex: 1,
                     paddingVertical: 14,
                     borderRadius: 14,
-                    backgroundColor: isValid ? '#FF6B5B' : '#FCA99F',
+                    backgroundColor: isValid ? '#D85A30' : '#FCA99F',
                     alignItems: 'center',
                   }}
                 >

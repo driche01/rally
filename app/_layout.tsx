@@ -1,4 +1,5 @@
 import '../global.css';
+import * as Sentry from '@sentry/react-native';
 import { QueryClientProvider } from '@tanstack/react-query';
 import {
   Inter_400Regular,
@@ -7,6 +8,10 @@ import {
   Inter_700Bold,
   useFonts,
 } from '@expo-google-fonts/inter';
+import {
+  SpaceGrotesk_600SemiBold,
+  SpaceGrotesk_700Bold,
+} from '@expo-google-fonts/space-grotesk';
 import * as Notifications from 'expo-notifications';
 import { SplashScreen, Stack, useRouter } from 'expo-router';
 import { useEffect, useRef } from 'react';
@@ -14,11 +19,15 @@ import { Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { queryClient } from '@/lib/queryClient';
 import { initAnalytics } from '@/lib/analytics';
+import { initSentry, setUser, clearUser } from '@/lib/sentry';
 import { useAuthListener } from '@/hooks/useAuth';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { getInitialNotificationUrl } from '@/lib/notifications';
 
 if (Platform.OS !== 'web') SplashScreen.preventAutoHideAsync();
+
+// Init Sentry as early as possible (before any React rendering)
+initSentry();
 
 function AppInitializer({ children }: { children: React.ReactNode }) {
   useAuthListener();
@@ -56,6 +65,8 @@ export default function RootLayout() {
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
+    SpaceGrotesk_600SemiBold,
+    SpaceGrotesk_700Bold,
   });
 
   useEffect(() => {
