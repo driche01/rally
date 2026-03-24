@@ -54,7 +54,7 @@ export default function AccountScreen() {
           <View
             className="h-20 w-20 items-center justify-center rounded-full bg-coral-500"
             style={{
-              shadowColor: '#FF6B5B',
+              shadowColor: '#D85A30',
               shadowOffset: { width: 0, height: 4 },
               shadowOpacity: 0.25,
               shadowRadius: 10,

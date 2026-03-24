@@ -14,11 +14,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Card, Badge, Button } from '@/components/ui';
+import { Card, Badge, Button, useCelebration } from '@/components/ui';
 import { usePolls, useUpdatePollStatus, useDecidePoll, useUndecidePoll, useDeletePoll, useDuplicatePoll } from '@/hooks/usePolls';
 import { useRespondents } from '@/hooks/useRespondents';
 import { useResponseCounts } from '@/hooks/useResponseCounts';
 import { useTrip } from '@/hooks/useTrips';
+import { getTripStage, STAGE_ACCENT } from '@/lib/tripStage';
 import { getParticipationRate, type PollWithOptions, type GroupSizeBucket } from '@/types/database';
 import { useState, useMemo, useCallback } from 'react';
 import { capture, Events } from '@/lib/analytics';
@@ -153,7 +154,7 @@ function PollCalendarView({
           <Text style={{ fontSize: 11, color: '#9CA3AF' }}>No votes</Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#FF6B5B' }} />
+          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#D85A30' }} />
           <Text style={{ fontSize: 11, color: '#9CA3AF' }}>Popular</Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -214,6 +215,7 @@ const PollCard = memo(function PollCard({
   groupSizeBucket,
   groupSizePrecise,
   router,
+  onDecide,
 }: {
   poll: PollWithOptions;
   tripId: string;
@@ -221,6 +223,7 @@ const PollCard = memo(function PollCard({
   groupSizeBucket?: GroupSizeBucket;
   groupSizePrecise?: number | null;
   router: ReturnType<typeof useRouter>;
+  onDecide?: () => void;
 }) {
   const updateStatus = useUpdatePollStatus(tripId);
   const decide = useDecidePoll(tripId);
@@ -260,7 +263,10 @@ const PollCard = memo(function PollCard({
         {
           text: isChanging ? 'Change' : 'Decide',
           onPress: () => {
-            decide.mutate({ pollId: poll.id, optionId }, { onError: mutationError('save decision') });
+            decide.mutate({ pollId: poll.id, optionId }, {
+              onError: mutationError('save decision'),
+              onSuccess: () => onDecide?.(),
+            });
             capture(Events.POLL_DECIDED, { poll_type: poll.type, trip_id: tripId });
           },
         },
@@ -388,10 +394,12 @@ const PollCard = memo(function PollCard({
 export function PollsTab({ tripId, isPlanner = true }: { tripId: string; isPlanner?: boolean }) {
   const router = useRouter();
   const { data: trip } = useTrip(tripId);
+  const accentColor = STAGE_ACCENT[trip ? getTripStage(trip) : 'deciding'];
   const { data: polls = [], refetch: refetchPolls } = usePolls(tripId);
   const { data: responseCounts = {}, refetch: refetchCounts } = useResponseCounts(tripId);
   const [refreshing, setRefreshing] = useState(false);
   const [sortNewest, setSortNewest] = useState(true);
+  const { celebrate, CelebrationOverlay } = useCelebration();
 
   const sortedPolls = useMemo(
     () => [...polls].sort((a, b) => {
@@ -413,11 +421,13 @@ export function PollsTab({ tripId, isPlanner = true }: { tripId: string; isPlann
   const decidedPolls = useMemo(() => sortedPolls.filter((p) => p.status === 'decided'), [sortedPolls]);
 
   return (
+    <View style={{ flex: 1 }}>
+    {CelebrationOverlay}
     <ScrollView
       contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 16 }}
       keyboardDismissMode="on-drag"
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#FF6B5B" />
+        <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={accentColor} />
       }
     >
       <View className="flex-row items-center justify-between pt-4 pb-2">
@@ -433,7 +443,8 @@ export function PollsTab({ tripId, isPlanner = true }: { tripId: string; isPlann
           {isPlanner ? (
             <Pressable
               onPress={() => router.push(`/(app)/trips/${tripId}/polls/new`)}
-              className="flex-row items-center gap-1 rounded-xl bg-coral-500 px-3 py-1.5"
+              className="flex-row items-center gap-1 rounded-xl px-3 py-1.5"
+              style={{ backgroundColor: accentColor }}
             >
               <Ionicons name="add" size={14} color="white" />
               <Text className="text-xs font-semibold text-white">Add poll</Text>
@@ -475,6 +486,7 @@ export function PollsTab({ tripId, isPlanner = true }: { tripId: string; isPlann
                 groupSizeBucket={trip?.group_size_bucket}
                 groupSizePrecise={trip?.group_size_precise}
                 router={router}
+                onDecide={celebrate}
               />
             ))}
           </View>
@@ -485,7 +497,7 @@ export function PollsTab({ tripId, isPlanner = true }: { tripId: string; isPlann
         <View className="mt-2">
           <View className="mb-2 flex-row items-center gap-2">
             <View className="h-px flex-1 bg-neutral-200" />
-            <Text className="text-xs font-semibold uppercase tracking-wider text-coral-500">Decided</Text>
+            <Text className="text-xs font-semibold uppercase tracking-wider" style={{ color: accentColor }}>Decided</Text>
             <View className="h-px flex-1 bg-neutral-200" />
           </View>
           {decidedPolls.map((poll) => (
@@ -497,10 +509,12 @@ export function PollsTab({ tripId, isPlanner = true }: { tripId: string; isPlann
               groupSizeBucket={trip?.group_size_bucket}
               groupSizePrecise={trip?.group_size_precise}
               router={router}
+              onDecide={celebrate}
             />
           ))}
         </View>
       ) : null}
     </ScrollView>
+    </View>
   );
 }

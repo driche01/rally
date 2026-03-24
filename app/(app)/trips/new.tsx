@@ -13,21 +13,22 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Input, PlacesAutocompleteInput } from '@/components/ui';
+import { Button, Input, PlacesAutocompleteInput, useCelebration } from '@/components/ui';
 import { DateRangePicker } from '@/components/DateRangePicker';
 import { useCreateTrip } from '@/hooks/useTrips';
+import * as Notifications from 'expo-notifications';
 import { capture, Events } from '@/lib/analytics';
-import { requestNotificationPermission } from '@/lib/notifications';
+import { log } from '@/lib/logger';
 import type { GroupSizeBucket } from '@/types/database';
 
 const EXACT_SIZES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 const TRIP_TYPES = [
-  'Bachelorette / bachelor',
-  'Birthday trip',
-  'Friend group getaway',
+  'Hens / bucks party',
+  'Birthday ripper',
+  "Mates' getaway",
   'Family trip',
-  'Alumni / reunion',
+  'Catch-up / reunion',
   'Other',
 ];
 
@@ -45,6 +46,7 @@ export default function NewTripScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const createTrip = useCreateTrip();
+  const { celebrate, CelebrationOverlay } = useCelebration();
 
   const [name, setName] = useState('');
   const [exactSize, setExactSize] = useState<number | null>(null);
@@ -102,9 +104,15 @@ export default function NewTripScreen() {
         destination_address: destinationAddress.trim() || null,
       });
       capture(Events.TRIP_CREATED, { group_size_bucket: bucket });
-      router.replace(`/(app)/trips/${trip.id}`);
-      setTimeout(() => {
-        requestNotificationPermission().catch(() => {});
+      log.action(Events.TRIP_CREATED, { tripId: trip.id, group_size_bucket: bucket });
+      celebrate();
+      setTimeout(() => router.replace(`/(app)/trips/${trip.id}`), 900);
+      // Show notification primer if permission not yet determined
+      setTimeout(async () => {
+        const { status } = await Notifications.getPermissionsAsync();
+        if (status === 'undetermined') {
+          router.push('/(app)/notification-primer');
+        }
       }, 1500);
     } catch {
       Alert.alert('Error', 'Could not create trip. Please try again.');
@@ -113,6 +121,7 @@ export default function NewTripScreen() {
 
   return (
     <>
+    {CelebrationOverlay}
     <DateRangePicker
       visible={datePickerVisible}
       startDate={startDate}
@@ -144,7 +153,7 @@ export default function NewTripScreen() {
           {/* Trip name */}
           <Input
             label="Trip name"
-            placeholder="e.g. Cabo 2026, Jake's Birthday, Ski Weekend"
+            placeholder="e.g. Bali 2026, Jake's 30th, Ski Weekend"
             value={name}
             onChangeText={(t) => { if (t.length <= 60) setName(t); }}
             maxLength={60}
@@ -155,7 +164,7 @@ export default function NewTripScreen() {
 
           {/* Group size — exact pills */}
           <View className="gap-2">
-            <Text className="text-sm font-medium text-[#404040]">How many people?</Text>
+            <Text className="text-sm font-medium text-[#404040]">How big's the crew?</Text>
             <View className="flex-row flex-wrap gap-2">
               {EXACT_SIZES.map((n) => {
                 const sel = exactSize === n && !isCustom;
@@ -201,7 +210,7 @@ export default function NewTripScreen() {
 
           {/* Trip type (required, single-select) */}
           <View className="gap-2">
-            <Text className="text-sm font-medium text-[#404040]">Trip type</Text>
+            <Text className="text-sm font-medium text-[#404040]">What's the occasion?</Text>
             <View className="flex-row flex-wrap gap-2">
               {TRIP_TYPES.map((type) => {
                 const sel = tripType === type;
@@ -271,7 +280,7 @@ export default function NewTripScreen() {
           {/* Budget per person (optional) */}
           <View className="gap-2">
             <Text className="text-sm font-medium text-[#404040]">
-              Budget per person{' '}
+              Spend per person{' '}
               <Text className="font-normal text-[#a3a3a3]">(optional)</Text>
             </Text>
             <View className="flex-row flex-wrap gap-2">
@@ -294,7 +303,7 @@ export default function NewTripScreen() {
           </View>
 
           <Button onPress={handleCreate} loading={createTrip.isPending} fullWidth>
-            Create rally
+            Lock it in!
           </Button>
         </View>
       </ScrollView>

@@ -189,12 +189,12 @@ function LegForm({
                 paddingVertical: 7,
                 borderRadius: 999,
                 borderWidth: 1.5,
-                borderColor: sel ? '#FF6B5B' : '#E5E5E5',
+                borderColor: sel ? '#D85A30' : '#E5E5E5',
                 backgroundColor: sel ? '#fff5f2' : '#fff',
               }}
             >
-              <Ionicons name={MODE_CONFIG[m].icon} size={14} color={sel ? '#FF6B5B' : '#888'} />
-              <Text style={{ fontSize: 13, fontWeight: '500', color: sel ? '#FF6B5B' : '#555' }}>
+              <Ionicons name={MODE_CONFIG[m].icon} size={14} color={sel ? '#D85A30' : '#888'} />
+              <Text style={{ fontSize: 13, fontWeight: '500', color: sel ? '#D85A30' : '#555' }}>
                 {MODE_CONFIG[m].label}
               </Text>
             </Pressable>
@@ -458,7 +458,7 @@ function LegForm({
             flex: 2,
             height: 50,
             borderRadius: 14,
-            backgroundColor: saving ? '#FFAA9F' : '#FF6B5B',
+            backgroundColor: saving ? '#FFAA9F' : '#D85A30',
             alignItems: 'center',
             justifyContent: 'center',
           }}
@@ -514,7 +514,7 @@ function LegFormSheet({
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' }}>
               <Pressable onPress={onClose}>
-                <Text style={{ fontSize: 15, color: '#FF6B5B' }}>Cancel</Text>
+                <Text style={{ fontSize: 15, color: '#D85A30' }}>Cancel</Text>
               </Pressable>
               <Text style={{ fontSize: 17, fontWeight: '700', color: '#1C1C1C' }}>
                 {isEditing ? 'Edit leg' : 'Add leg'}
