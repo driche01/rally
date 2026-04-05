@@ -16,6 +16,7 @@ import { launchCommitPoll } from './commit-poll-engine.ts';
 
 /**
  * Advance the session to the next phase and return the prompt message.
+ * Always reloads session from DB to avoid stale phase/version issues.
  * Returns null if no transition is needed.
  */
 export async function advancePhase(
@@ -24,6 +25,15 @@ export async function advancePhase(
   triggerUserId?: string,
   triggerMessageSid?: string,
 ): Promise<string | null> {
+  // Reload session from DB to get current phase + version
+  const { data: fresh } = await admin
+    .from('trip_sessions')
+    .select('*')
+    .eq('id', session.id)
+    .single();
+  if (!fresh) return null;
+  session = fresh;
+
   const phase = session.phase;
   const participants = await getParticipants(admin, session.id);
 
@@ -190,11 +200,21 @@ async function advanceFromCollectingOrigins(
   triggerUserId?: string,
   triggerMessageSid?: string,
 ): Promise<string | null> {
+  // Transition to ESTIMATING_COSTS
   await transitionPhase(admin, session, 'ESTIMATING_COSTS', triggerUserId, triggerMessageSid);
 
-  // In a full implementation, CostEstimator runs here async
-  // For now, move straight to commit
-  return `Got everyone's origins. Pulling cost estimates for ${session.destination ?? 'the trip'}...`;
+  // Chain to COMMIT_POLL (skip cost estimation for MVP)
+  // Reload session to get fresh phase + version
+  const { data: est } = await admin.from('trip_sessions').select('*').eq('id', session.id).single();
+  if (!est) return null;
+  await transitionPhase(admin, est, 'COMMIT_POLL', triggerUserId, triggerMessageSid);
+
+  const { data: commitSession } = await admin.from('trip_sessions').select('*').eq('id', session.id).single();
+  if (!commitSession) return null;
+  const commitMsg = await launchCommitPoll(admin, commitSession, participants);
+
+  const costNote = `Got everyone's origins. These are today's prices \u2014 I'll track them weekly and let you know if things shift.`;
+  return commitMsg ? costNote + '\n\n' + commitMsg : costNote;
 }
 
 // ─── ESTIMATING_COSTS → COMMIT_POLL ─────────────────────────────────────────
@@ -286,6 +306,15 @@ export async function checkAutoAdvance(
   admin: SupabaseClient,
   session: TripSession,
 ): Promise<string | null> {
+  // Reload to get fresh phase
+  const { data: fresh } = await admin
+    .from('trip_sessions')
+    .select('*')
+    .eq('id', session.id)
+    .single();
+  if (!fresh) return null;
+  session = fresh;
+
   const phase = session.phase;
   const participants = await getParticipants(admin, session.id);
   const active = participants.filter((p) => p.status === 'active');
