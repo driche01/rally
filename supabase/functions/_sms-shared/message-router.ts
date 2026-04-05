@@ -405,6 +405,35 @@ async function handlePhaseMessage(
       }
       return `Got it, ${name} \u2014 ${destinationIdea} is on the list!`;
     }
+
+    // #1 — Destination buried in natural language ("Tulum would be sick but idk")
+    // If message is >3 words and contains alphabetic chars but didn't match the
+    // "Name - Destination" pattern, check for destination mentions via simple keyword scan
+    if (body.trim().split(/\s+/).length > 3 && /[a-zA-Z]/.test(body)) {
+      const knownDestinations = [
+        'tulum', 'cancun', 'cabo', 'paris', 'london', 'tokyo', 'bali',
+        'hawaii', 'aspen', 'park city', 'miami', 'barcelona', 'rome',
+        'amsterdam', 'lisbon', 'mexico city', 'cdmx', 'costa rica',
+        'puerto rico', 'nashville', 'scottsdale', 'vegas', 'las vegas',
+      ];
+      const bodyLower = body.toLowerCase();
+      for (const dest of knownDestinations) {
+        if (bodyLower.includes(dest)) {
+          const properDest = dest.split(' ').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+          const existingCandidates = ((session as Record<string, unknown>).destination_candidates as Array<{ label: string; votes: number }>) ?? [];
+          if (!existingCandidates.some((c) => c.label.toLowerCase() === dest)) {
+            existingCandidates.push({ label: properDest, votes: 1 });
+            await admin
+              .from('trip_sessions')
+              .update({ destination_candidates: existingCandidates })
+              .eq('id', session.id);
+            return `Heard ${properDest} \u2014 adding it to the list!`;
+          }
+          break;
+        }
+      }
+    }
+
     return null;
   }
 
