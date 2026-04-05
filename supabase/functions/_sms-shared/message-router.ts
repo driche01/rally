@@ -358,6 +358,21 @@ async function handlePhaseMessage(
           .eq('trip_id', session.trip_id)
           .eq('phone', fromUser.phone);
       }
+
+      // Add destination to candidates
+      const existingCandidates = ((session as Record<string, unknown>).destination_candidates as Array<{ label: string; votes: number }>) ?? [];
+      const alreadyListed = existingCandidates.some(
+        (c) => c.label.toLowerCase() === destinationIdea.toLowerCase(),
+      );
+      if (!alreadyListed) {
+        existingCandidates.push({ label: destinationIdea, votes: 1 });
+        await admin
+          .from('trip_sessions')
+          .update({ destination_candidates: existingCandidates })
+          .eq('id', session.id);
+      }
+
+      return `Got it, ${name} \u2014 ${destinationIdea} is on the list!`;
     }
     return null;
   }
