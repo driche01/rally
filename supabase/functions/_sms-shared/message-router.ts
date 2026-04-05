@@ -62,8 +62,24 @@ export interface RoutedMessage {
   is1to1: boolean;
 }
 
+// Common typo mappings for fuzzy keyword matching
+const TYPO_MAP: Record<string, string> = {
+  STAUS: 'STATUS', STAUTS: 'STATUS', SATUS: 'STATUS', STATU: 'STATUS',
+  STATS: 'STATUS', STATSU: 'STATUS',
+  HLEP: 'HELP', HEPL: 'HELP', HALP: 'HELP',
+  REUSME: 'RESUME', RESME: 'RESUME', RESMUE: 'RESUME',
+  PASE: 'PAUSE', PASUE: 'PAUSE', PUASE: 'PAUSE',
+  RSEET: 'RESET', RESTE: 'RESET',
+  FOCSU: 'FOCUS', FOUCS: 'FOCUS',
+  BOOOKD: 'BOOKED', BOKKED: 'BOOKED', BOOKD: 'BOOKED',
+  STPO: 'STOP', SOTP: 'STOP',
+  REJION: 'REJOIN', REJON: 'REJOIN',
+  NXET: 'NEXT', NETX: 'NEXT',
+};
+
 /**
  * Detect if the message is a keyword command.
+ * Supports exact match + common typo fuzzy matching.
  * Returns the keyword and any arguments, or null.
  */
 function detectKeyword(body: string): { keyword: string; args: string } | null {
@@ -81,6 +97,10 @@ function detectKeyword(body: string): { keyword: string; args: string } | null {
       return { keyword: kw, args };
     }
   }
+
+  // Fuzzy match common typos
+  const corrected = TYPO_MAP[upper];
+  if (corrected) return { keyword: corrected, args: '' };
 
   return null;
 }
@@ -338,7 +358,7 @@ async function handlePhaseMessage(
   // During INTRO, collect names and destination ideas
   if (phase === 'INTRO') {
     // Extract name from "Name — destination" pattern
-    const nameMatch = body.match(/^([A-Za-z]+)\s*[—–-]\s*(.+)/);
+    const nameMatch = body.match(/^([\p{L}][\p{L}'\-]{0,30})\s*[—–\-]\s*(.+)/u);
     if (nameMatch) {
       const name = nameMatch[1].trim();
       const destinationIdea = nameMatch[2].trim();
@@ -409,8 +429,8 @@ async function handlePhaseMessage(
   }
 
   // Date collection during DECIDING_DATES — only when no poll is open
-  // (if a date vote poll is active, the poll handler below will catch votes)
-  if (phase === 'DECIDING_DATES' && message.participant && !(session as Record<string,unknown>).current_poll_id) {
+  // Skip emoji-only and very short messages
+  if (phase === 'DECIDING_DATES' && message.participant && !(session as Record<string,unknown>).current_poll_id && /[a-zA-Z0-9]/.test(body)) {
     // Store this participant's date preference as budget_raw (reuse field for date input tracking)
     await admin
       .from('trip_session_participants')

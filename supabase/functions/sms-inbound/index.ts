@@ -104,24 +104,38 @@ Deno.serve(async (req: Request) => {
     // ─── Resolve user (Component 2: PhoneUserLinker) ───────────────────────
     const user = await findOrCreateUser(admin, senderPhone);
 
-    // ─── Handle non-text MMS ───────────────────────────────────────────────
+    // ─── Handle non-text MMS + detect URLs in body ─────────────────────────
     let body = msg.Body.trim();
     const hasMedia = parseInt(msg.NumMedia) > 0;
+    const bookingPatterns = [
+      'google.com/flights', 'airbnb.com', 'vrbo.com',
+      'delta.com', 'united.com', 'southwest.com', 'jetblue.com',
+      'booking.com', 'expedia.com',
+    ];
+
     if (hasMedia && !body) {
-      // Check for booking URL patterns in media
-      const bookingPatterns = [
-        'google.com/flights', 'airbnb.com', 'vrbo.com',
-        'delta.com', 'united.com', 'southwest.com', 'jetblue.com',
-        'booking.com', 'expedia.com',
-      ];
       const mediaUrl = msg.MediaUrl0 ?? '';
       const isBooking = bookingPatterns.some((p) => mediaUrl.includes(p));
-
       if (isBooking) {
         body = 'YES'; // Treat as booking confirmation
       } else {
-        body = '[image]'; // Acknowledge but don't parse
+        // Check if it's audio/voice memo
+      const contentType = (msg as Record<string, string>).MediaContentType0 ?? '';
+      if (contentType.startsWith('audio/')) {
+        body = '[voice memo]';
+      } else {
+        body = '[image]';
       }
+      }
+    }
+
+    // Detect Airbnb/VRBO wishlist or listing URLs in message body
+    const wishlistMatch = body.match(/(https?:\/\/[^\s]*(airbnb\.com|vrbo\.com)[^\s]*)/i);
+    if (wishlistMatch && session) {
+      await admin.from('trip_sessions').update({
+        wishlist_url: wishlistMatch[1],
+        wishlist_shared_by_user_id: user.id,
+      }).eq('id', session.id);
     }
 
     // ─── Derive thread_id and find/create session ──────────────────────────
@@ -186,7 +200,7 @@ Deno.serve(async (req: Request) => {
           await touchSession(admin, session.id);
 
           // Extract name + destination from merge participant's message
-          const mergeNameMatch = body.match(/^([A-Za-z]+)\s*[—–-]\s*(.+)/);
+          const mergeNameMatch = body.match(/^([\p{L}][\p{L}'\-]{0,30})\s*[—–\-]\s*(.+)/u);
           if (mergeNameMatch) {
             const mName = mergeNameMatch[1].trim();
             const mDest = mergeNameMatch[2].trim();
@@ -219,10 +233,11 @@ Deno.serve(async (req: Request) => {
           }
 
           // Extract planner name + destination from first message ("Jake — Tulum")
-          const nameMatch = body.match(/^([A-Za-z]+)\s*[—–-]\s*(.+)/);
+          // Also detect dates and budget if included ("Jake — Tulum, Nov 8-12, $1250pp")
+          const nameMatch = body.match(/^([\p{L}][\p{L}'\-]{0,30})\s*[—–\-]\s*(.+)/u);
           if (nameMatch) {
             const plannerName = nameMatch[1].trim();
-            const plannerDest = nameMatch[2].trim();
+            const remainder = nameMatch[2].trim();
             await admin.from('users').update({ display_name: plannerName }).eq('id', user.id);
             await admin
               .from('trip_session_participants')
@@ -236,11 +251,47 @@ Deno.serve(async (req: Request) => {
                 .eq('trip_id', session.trip_id)
                 .eq('phone', user.phone);
             }
-            // Store destination as first candidate
-            await admin
-              .from('trip_sessions')
-              .update({ destination_candidates: [{ label: plannerDest, votes: 1 }] })
-              .eq('id', session.id);
+
+            // Parse remainder for destination, dates, budget
+            // Split on commas to separate components
+            const parts = remainder.split(',').map((p) => p.trim());
+            const plannerDest = parts[0]; // First part is always destination
+            const sessionUpdates: Record<string, unknown> = {
+              destination_candidates: [{ label: plannerDest, votes: 1 }],
+            };
+
+            // Check remaining parts for dates and budget
+            for (const part of parts.slice(1)) {
+              // Date pattern: "Nov 8-12", "November 8 to 12"
+              const dateMatch = part.match(/(\w+)\s+(\d{1,2})\s*[-–to]+\s*(\d{1,2})/i);
+              if (dateMatch) {
+                const months: Record<string, number> = {
+                  jan:0,january:0,feb:1,february:1,mar:2,march:2,apr:3,april:3,
+                  may:4,jun:5,june:5,jul:6,july:6,aug:7,august:7,sep:8,september:8,
+                  oct:9,october:9,nov:10,november:10,dec:11,december:11,
+                };
+                const month = months[dateMatch[1].toLowerCase()];
+                if (month !== undefined) {
+                  const year = new Date().getFullYear();
+                  const start = new Date(year, month, parseInt(dateMatch[2]));
+                  const end = new Date(year, month, parseInt(dateMatch[3]));
+                  if (start < new Date()) { start.setFullYear(year + 1); end.setFullYear(year + 1); }
+                  const nights = Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
+                  sessionUpdates.dates = { start: start.toISOString().split('T')[0], end: end.toISOString().split('T')[0], nights };
+                }
+              }
+              // Budget pattern: "$1250", "$1,250/person", "around $1250pp"
+              const budgetMatch = part.match(/\$\s*([\d,]+)/);
+              if (budgetMatch) {
+                const amount = parseFloat(budgetMatch[1].replace(',', ''));
+                if (!isNaN(amount) && amount > 0) {
+                  sessionUpdates.budget_median = amount;
+                  sessionUpdates.budget_status = 'ALIGNED';
+                }
+              }
+            }
+
+            await admin.from('trip_sessions').update(sessionUpdates).eq('id', session.id);
           }
 
           // Build intro response

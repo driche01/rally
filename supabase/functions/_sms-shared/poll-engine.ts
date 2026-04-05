@@ -420,7 +420,18 @@ export async function handlePollResponse(
   // Try to match the message to a poll option
   const optionId = await matchVoteToOption(admin, poll.id, body);
 
-  if (!optionId) return null; // Not a vote — let it pass through
+  if (!optionId) {
+    // Check if it looks like a vote attempt (single number) but out of range
+    const num = parseInt(body.trim());
+    if (!isNaN(num) && num > 0) {
+      const { data: opts } = await admin.from('poll_options').select('id').eq('poll_id', poll.id);
+      const count = opts?.length ?? 0;
+      if (num > count) {
+        return `Reply 1\u2013${count} to vote.`;
+      }
+    }
+    return null; // Not a vote — let it pass through
+  }
 
   // Record the vote
   await recordVote(admin, poll, respondentId, optionId);
