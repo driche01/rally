@@ -189,14 +189,23 @@ async function bootstrapSession({ phones, plannerPhone, phase, destination, date
 
   const plannerUserId = userMap[plannerPhone]?.id ?? null;
 
-  // Build thread_id from sorted participant phones
+  // Build unique thread_id
   const sortedPhones = [...phones].sort();
-  const threadId = sortedPhones.join(',');
+  const threadId = sortedPhones.join(',') + '_' + Date.now();
+
+  // Create trip first (needed for poll FK)
+  const { data: trip, error: tripErr } = await admin
+    .from('trips')
+    .insert({ name: 'Test Trip', status: 'active', group_size_bucket: '5-8' })
+    .select()
+    .single();
+  if (tripErr) throw new Error(`bootstrapSession trip insert failed: ${tripErr.message}`);
 
   // Create session
-  const { data: session } = await admin
+  const { data: session, error: sessErr } = await admin
     .from('trip_sessions')
     .insert({
+      trip_id: trip.id,
       thread_id: threadId,
       planner_user_id: plannerUserId,
       phase: phase || 'INTRO',
@@ -206,6 +215,7 @@ async function bootstrapSession({ phones, plannerPhone, phase, destination, date
     })
     .select()
     .single();
+  if (sessErr) throw new Error(`bootstrapSession session insert failed: ${sessErr.message}`);
 
   // Add participants
   const participants = [];
@@ -497,28 +507,17 @@ TESTS.vote_out_of_range = async () => {
     phase: 'DECIDING_DESTINATION',
   });
 
-  // Create a trip for the session so poll_responses can link to respondents
-  const { data: trip } = await admin
-    .from('trips')
-    .insert({
-      name: 'Edge Case Trip 7',
-      status: 'deciding',
-      created_by: userMap[phones[0]].id,
-    })
-    .select()
-    .single();
-
-  await admin
-    .from('trip_sessions')
-    .update({ trip_id: trip.id })
-    .eq('id', session.id);
+  const tripId = session.trip_id;
 
   // Create respondents for each user
   for (const phone of phones) {
     await admin.from('respondents').insert({
-      trip_id: trip.id,
+      trip_id: tripId,
       phone,
       name: phone.slice(-4),
+      session_token: 'test_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+      is_planner: phone === phones[0],
+      user_id: userMap[phone]?.id,
     });
   }
 
@@ -526,13 +525,15 @@ TESTS.vote_out_of_range = async () => {
   const { data: poll } = await admin
     .from('polls')
     .insert({
-      trip_id: trip.id,
+      trip_id: tripId,
       trip_session_id: session.id,
       type: 'destination',
       title: 'Where to?',
-      status: 'open',
+      status: 'live',
       phase: 'DECIDING_DESTINATION',
       opened_at: new Date().toISOString(),
+      allow_multi_select: false,
+      position: 0,
     })
     .select()
     .single();
@@ -583,18 +584,18 @@ TESTS.budget_tier_with_period = async () => {
   // Check participant's budget_raw was stored
   const { data: part } = await admin
     .from('trip_session_participants')
-    .select('budget_raw, budget_amount')
+    .select('budget_raw, budget_normalized')
     .eq('trip_session_id', session.id)
     .eq('phone', phones[0])
     .maybeSingle();
 
   // The budget amount should be 1500 (tier 3)
-  const amountCorrect = part?.budget_amount === 1500;
+  const amountCorrect = part?.budget_normalized === 1500;
   const gotReply = r.status === 200;
 
   await cleanupPhones(prefix);
 
-  console.log(`    ${amountCorrect ? 'PASS' : 'FAIL'}: budget_amount=${part?.budget_amount} (expected 1500)`);
+  console.log(`    ${amountCorrect ? 'PASS' : 'FAIL'}: budget_normalized=${part?.budget_normalized} (expected 1500)`);
   console.log(`    ${gotReply ? 'PASS' : 'FAIL'}: HTTP ${r.status}, reply=${(r.reply ?? '(null)').slice(0, 120)}`);
   return amountCorrect && gotReply;
 };
@@ -663,22 +664,6 @@ TESTS.commit_split = async () => {
     destination: 'Bali',
     dates: { start: '2026-12-10', end: '2026-12-17', nights: 7 },
   });
-
-  // Create trip for the session
-  const { data: trip } = await admin
-    .from('trips')
-    .insert({
-      name: 'Edge Case Trip 10',
-      status: 'deciding',
-      created_by: userMap[phones[0]].id,
-    })
-    .select()
-    .single();
-
-  await admin
-    .from('trip_sessions')
-    .update({ trip_id: trip.id })
-    .eq('id', session.id);
 
   await sleep(500);
 
