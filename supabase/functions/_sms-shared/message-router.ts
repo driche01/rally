@@ -408,6 +408,25 @@ async function handlePhaseMessage(
     return null;
   }
 
+  // ─── Personality intercepts (no LLM needed) ─────────────────────────────
+  const lower = body.trim().toLowerCase();
+  const wordCount = body.trim().split(/\s+/).length;
+
+  // #32 — Dismissive / "shut up" messages (short, directed at Rally)
+  if (wordCount <= 6 && /\b(shut\s*up|stop\s*talking|be\s*quiet|stfu|you'?re\s*annoying|go\s*away)\b/i.test(body)) {
+    return "Noted. I'll keep it tight. Hit STATUS when you need me.";
+  }
+
+  // #38 — Bot-identity questions
+  if (/\b(are\s*you\s*(a\s*)?bot|are\s*you\s*(an?\s*)?ai|are\s*you\s*real|are\s*you\s*human)\b/i.test(body)) {
+    return "I'm Rally \u2014 part bot, part trip-planning legend. What do you need?";
+  }
+
+  // #39 — Casual / off-topic conversation
+  if (/\b(how\s*are\s*you|what'?s\s*your\s*fav(ou?rite)?|tell\s*me\s*about\s*yourself|what\s*do\s*you\s*do|who\s*are\s*you|what\s*are\s*you)\b/i.test(body) && wordCount <= 10) {
+    return "I'm great when groups are booking trips! What's next for yours?";
+  }
+
   // Commit poll — YES/NO during COMMIT_POLL phase
   if (phase === 'COMMIT_POLL' && message.participant) {
     const upper = body.trim().toUpperCase();
