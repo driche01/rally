@@ -275,7 +275,16 @@ Deno.serve(async (req: Request) => {
       is1to1,
     };
 
-    let response = introResponse ?? (await routeMessage(admin, routed));
+    // Route the message — skip if we already have an intro (new session just created)
+    let response: string | null = null;
+    if (introResponse) {
+      // New session — return the intro. The name+destination were already
+      // extracted during session creation. Don't call routeMessage which
+      // would try to process the message again against the fresh session.
+      response = introResponse;
+    } else {
+      response = await routeMessage(admin, routed);
+    }
 
     // ─── Store outbound message if we have a response ──────────────────────
     if (response) {
@@ -305,10 +314,9 @@ Deno.serve(async (req: Request) => {
     );
   } catch (err) {
     console.error('[sms-inbound] Error:', err);
-    // Return a valid TwiML response even on error — Twilio needs 200 + valid XML
-    // to avoid 11200 errors
+    const errMsg = err instanceof Error ? err.message : String(err);
     return new Response(
-      '<?xml version="1.0" encoding="UTF-8"?><Response><Message>Got it — give me a moment.</Message></Response>',
+      `<?xml version="1.0" encoding="UTF-8"?><Response><Message>Error: ${escapeXml(errMsg.slice(0, 200))}</Message></Response>`,
       { status: 200, headers: { ...CORS_HEADERS, 'Content-Type': 'text/xml' } },
     );
   }

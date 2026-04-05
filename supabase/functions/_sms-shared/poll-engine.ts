@@ -53,12 +53,19 @@ export function normalizeBudget(raw: string): { amount: number | null; skipped: 
 
   if (trimmed === 'SKIP') return { amount: null, skipped: true };
 
-  // Tier number
-  if (BUDGET_TIER_MAP[trimmed]) return { amount: BUDGET_TIER_MAP[trimmed], skipped: false };
+  // Strip trailing punctuation (handles "3.", "2!", etc.)
+  const cleaned = trimmed.replace(/[.\s!]+$/, '');
+
+  // Tier number (1-4)
+  if (BUDGET_TIER_MAP[cleaned]) return { amount: BUDGET_TIER_MAP[cleaned], skipped: false };
 
   // Raw dollar amount: strip $, commas
-  const parsed = parseFloat(trimmed.replace(/[$,]/g, ''));
-  if (!isNaN(parsed) && parsed > 0) return { amount: parsed, skipped: false };
+  const parsed = parseFloat(cleaned.replace(/[$,]/g, ''));
+  if (!isNaN(parsed) && parsed > 0) {
+    // If someone typed just "3" or "4" without $, it's a tier not $3
+    if (BUDGET_TIER_MAP[String(parsed)]) return { amount: BUDGET_TIER_MAP[String(parsed)], skipped: false };
+    return { amount: parsed, skipped: false };
+  }
 
   return { amount: null, skipped: false };
 }
@@ -433,6 +440,18 @@ export async function handlePollResponse(
       const pollType = poll.type;
       if (pollType === 'destination_vote' || pollType === 'destination') {
         await admin.from('trip_sessions').update({ destination: winner }).eq('id', session.id);
+      } else if (pollType === 'dates') {
+        // Look up the winning date option from stored deadlines (temp storage)
+        const { data: sess } = await admin.from('trip_sessions').select('deadlines').eq('id', session.id).single();
+        const dateOptions = (sess?.deadlines ?? []) as Array<{ start: string; end: string; label: string }>;
+        const winningDate = dateOptions.find((o) => o.label === winner);
+        if (winningDate) {
+          const nights = Math.round((new Date(winningDate.end).getTime() - new Date(winningDate.start).getTime()) / (24 * 60 * 60 * 1000));
+          await admin.from('trip_sessions').update({
+            dates: { start: winningDate.start, end: winningDate.end, nights },
+            deadlines: '[]', // clear temp storage
+          }).eq('id', session.id);
+        }
       } else if (pollType === 'lodging_type') {
         const typeMap: Record<string, string> = {
           'Staying together (group rental)': 'GROUP',
