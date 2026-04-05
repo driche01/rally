@@ -23,6 +23,7 @@ import {
   handleProposePaid,
 } from './venmo-split-link.ts';
 import { handleReEngagementYes } from './post-trip-reengager.ts';
+import { advancePhase, checkAutoAdvance } from './phase-flow.ts';
 
 // ─── Keyword detection ───────────────────────────────────────────────────────
 
@@ -34,6 +35,7 @@ const KEYWORDS: Record<string, { plannerOnly: boolean }> = {
   FOCUS: { plannerOnly: false },
   BOOKED: { plannerOnly: false },
   'PAID STATUS': { plannerOnly: false },
+  NEXT: { plannerOnly: true },
   RESET: { plannerOnly: true },
   PAUSE: { plannerOnly: true },
   RESUME: { plannerOnly: true },
@@ -182,6 +184,8 @@ async function handleKeyword(
       return handleBooked(admin, session, fromUser);
     case 'PAID STATUS':
       return handlePaidStatus(admin, session);
+    case 'NEXT':
+      return handleNext(admin, session, fromUser);
     case 'RESET':
       return 'Reset everything? I\u2019ll keep the group but clear all decisions. Reply YES to confirm.';
     case 'SPLIT':
@@ -372,6 +376,11 @@ async function handlePhaseMessage(
           .eq('id', session.id);
       }
 
+      // Check if all participants now have names — auto-advance
+      const autoMsg = await checkAutoAdvance(admin, session);
+      if (autoMsg) {
+        return `Got it, ${name} \u2014 ${destinationIdea} is on the list!\n\n${autoMsg}`;
+      }
       return `Got it, ${name} \u2014 ${destinationIdea} is on the list!`;
     }
     return null;
@@ -397,6 +406,70 @@ async function handlePhaseMessage(
     }
   }
 
+  // Date collection during DECIDING_DATES
+  if (phase === 'DECIDING_DATES' && message.participant) {
+    // Try to parse date range from message (e.g. "Nov 8-12", "November 8 to 12")
+    const dateMatch = body.match(/(\w+)\s+(\d{1,2})\s*[-–to]+\s*(\d{1,2})/i);
+    if (dateMatch) {
+      const monthStr = dateMatch[1];
+      const startDay = parseInt(dateMatch[2]);
+      const endDay = parseInt(dateMatch[3]);
+
+      // Parse month
+      const months: Record<string, number> = {
+        jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2,
+        apr: 3, april: 3, may: 4, jun: 5, june: 5, jul: 6, july: 6,
+        aug: 7, august: 7, sep: 8, september: 8, oct: 9, october: 9,
+        nov: 10, november: 10, dec: 11, december: 11,
+      };
+      const month = months[monthStr.toLowerCase()];
+
+      if (month !== undefined && startDay > 0 && endDay > 0) {
+        const year = new Date().getFullYear();
+        const start = new Date(year, month, startDay);
+        const end = new Date(year, month, endDay);
+        // If dates are in the past, assume next year
+        if (start < new Date()) { start.setFullYear(year + 1); end.setFullYear(year + 1); }
+
+        const startStr = start.toISOString().split('T')[0];
+        const endStr = end.toISOString().split('T')[0];
+        const nights = Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
+
+        await admin.from('trip_sessions').update({
+          dates: { start: startStr, end: endStr, nights },
+          updated_at: new Date().toISOString(),
+        }).eq('id', session.id);
+
+        // Auto-advance after dates are set
+        const updatedSession = { ...session, dates: { start: startStr, end: endStr, nights } };
+        const nextMsg = await advancePhase(admin, updatedSession as any);
+        const dateMsg = `Got it \u2014 ${monthStr} ${startDay}\u2013${endDay} (${nights} nights).`;
+        return nextMsg ? dateMsg + '\n\n' + nextMsg : dateMsg + ' Moving on.';
+      }
+    }
+  }
+
+  // Origin collection during COLLECTING_ORIGINS
+  if (phase === 'COLLECTING_ORIGINS' && message.participant) {
+    // Store the origin (city or airport code)
+    const origin = body.trim();
+    if (origin.length >= 2 && origin.length <= 50) {
+      const isAirportCode = /^[A-Z]{3}$/i.test(origin);
+      await admin
+        .from('trip_session_participants')
+        .update({
+          origin_city: isAirportCode ? null : origin,
+          origin_airport: isAirportCode ? origin.toUpperCase() : null,
+        })
+        .eq('id', message.participant.id);
+
+      const name = fromUser.display_name ?? 'Got it';
+      const autoMsg = await checkAutoAdvance(admin, session);
+      if (autoMsg) return `${name} \u2014 ${origin}. ${autoMsg}`;
+      return `${name} \u2014 ${origin}. Waiting on the rest.`;
+    }
+  }
+
   // Flight status collection during AWAITING_FLIGHTS
   if (phase === 'AWAITING_FLIGHTS' && message.participant) {
     const upper = body.trim().toUpperCase();
@@ -419,16 +492,25 @@ async function handlePhaseMessage(
     }
   }
 
+  // Budget poll phase — handle budget responses even without a polls row
+  if (phase === 'BUDGET_POLL' && message.participant) {
+    const budgetResult = await handleBudgetResponse(admin, session, message.participant, body);
+    if (budgetResult) {
+      // Budget resolved — advance phase
+      const { data: updatedSession } = await admin.from('trip_sessions').select('*').eq('id', session.id).single();
+      if (updatedSession) {
+        const nextMsg = await advancePhase(admin, updatedSession);
+        if (nextMsg) return budgetResult + '\n\n' + nextMsg;
+      }
+      return budgetResult;
+    }
+  }
+
   // Check for active poll first — if one is open, try to match as a vote
   const participants = await getParticipants(admin, session.id);
   const openPoll = await getOpenPoll(admin, session.id);
 
   if (openPoll) {
-    // Budget poll has special handling
-    if (openPoll.type === 'budget' && message.participant) {
-      const budgetResult = await handleBudgetResponse(admin, session, message.participant, body);
-      if (budgetResult) return budgetResult;
-    }
 
     // Standard vote poll — match response to option
     if (session.trip_id) {
@@ -439,7 +521,20 @@ async function handlePhaseMessage(
       const pollResult = await handlePollResponse(
         admin, session, openPoll, respondentId, name, body, activeCount,
       );
-      if (pollResult) return pollResult;
+      if (pollResult) {
+        // Poll resolved — advance to next phase
+        // Reload session to get updated state (winner applied by poll-engine)
+        const { data: updatedSession } = await admin
+          .from('trip_sessions')
+          .select('*')
+          .eq('id', session.id)
+          .single();
+        if (updatedSession) {
+          const advanceMsg = await advancePhase(admin, updatedSession);
+          if (advanceMsg) return pollResult + '\n\n' + advanceMsg;
+        }
+        return pollResult;
+      }
     }
   }
 
@@ -464,7 +559,22 @@ async function handlePhaseMessage(
     }
   }
 
+  // Check if the phase should auto-advance based on collected data
+  const autoMsg = await checkAutoAdvance(admin, session);
+  if (autoMsg) return autoMsg;
+
   return null;
+}
+
+// ─── NEXT handler (planner manually advances phase) ──────────────────────────
+
+async function handleNext(
+  admin: SupabaseClient,
+  session: TripSession,
+  user: SmsUser,
+): Promise<string> {
+  const result = await advancePhase(admin, session, user.id);
+  return result ?? `Can't advance from ${session.phase} right now.`;
 }
 
 // ─── SPLIT / PROPOSE handlers ────────────────────────────────────────────────

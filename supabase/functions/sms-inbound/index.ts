@@ -165,17 +165,14 @@ Deno.serve(async (req: Request) => {
         participant = foundParticipant;
         await touchSession(admin, session.id);
       } else {
-        // ─── No session for this sender — check for a recent session to join ─
+        // ─── No session for this sender — check for a session to join ─────
         // Twilio sends each group member's message as a separate webhook with
-        // no group identifier. If another participant created a session in the
-        // last 5 minutes, this is likely the same group thread — join it.
-        const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        // no group identifier. Join the most recent active session — in practice,
+        // there's typically only one active planning session at a time.
         const { data: recentSessions } = await admin
           .from('trip_sessions')
           .select('*')
           .eq('status', 'ACTIVE')
-          .eq('phase', 'INTRO')
-          .gte('created_at', fiveMinAgo)
           .order('created_at', { ascending: false })
           .limit(1);
 
@@ -187,7 +184,21 @@ Deno.serve(async (req: Request) => {
             await ensureRespondent(admin, session.trip_id, user);
           }
           await touchSession(admin, session.id);
-          // Don't send intro again — just process the message
+
+          // Extract name + destination from merge participant's message
+          const mergeNameMatch = body.match(/^([A-Za-z]+)\s*[—–-]\s*(.+)/);
+          if (mergeNameMatch) {
+            const mName = mergeNameMatch[1].trim();
+            const mDest = mergeNameMatch[2].trim();
+            await admin.from('users').update({ display_name: mName }).eq('id', user.id);
+            await admin.from('trip_session_participants')
+              .update({ display_name: mName })
+              .eq('trip_session_id', session.id).eq('user_id', user.id);
+            if (session.trip_id) {
+              await admin.from('respondents').update({ name: mName })
+                .eq('trip_id', session.trip_id).eq('phone', user.phone);
+            }
+          }
         } else {
           // ─── Truly new session ─────────────────────────────────────────
           const threadId = await deriveThreadId([senderPhone, `group_${Date.now()}`]);
@@ -207,10 +218,11 @@ Deno.serve(async (req: Request) => {
             await ensureRespondent(admin, session.trip_id, user);
           }
 
-          // Extract planner name from first message ("Jake — Tulum")
+          // Extract planner name + destination from first message ("Jake — Tulum")
           const nameMatch = body.match(/^([A-Za-z]+)\s*[—–-]\s*(.+)/);
           if (nameMatch) {
             const plannerName = nameMatch[1].trim();
+            const plannerDest = nameMatch[2].trim();
             await admin.from('users').update({ display_name: plannerName }).eq('id', user.id);
             await admin
               .from('trip_session_participants')
@@ -224,6 +236,11 @@ Deno.serve(async (req: Request) => {
                 .eq('trip_id', session.trip_id)
                 .eq('phone', user.phone);
             }
+            // Store destination as first candidate
+            await admin
+              .from('trip_sessions')
+              .update({ destination_candidates: [{ label: plannerDest, votes: 1 }] })
+              .eq('id', session.id);
           }
 
           // Build intro response
