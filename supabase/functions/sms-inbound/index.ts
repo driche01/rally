@@ -40,6 +40,8 @@ Deno.serve(async (req: Request) => {
 
   const admin = getAdmin();
   const rallyPhone = Deno.env.get('TWILIO_PHONE_NUMBER') ?? '';
+  // Support both toll-free and local numbers during transition
+  const allRallyPhones = [rallyPhone, '+18559310010', '+16624283059'].filter(Boolean);
   const twilioAuthToken = Deno.env.get('TWILIO_AUTH_TOKEN') ?? '';
 
   try {
@@ -53,16 +55,16 @@ Deno.serve(async (req: Request) => {
     }
 
     // ─── Validate Twilio signature ─────────────────────────────────────────
+    // Twilio signs against the exact webhook URL configured on the phone number.
+    // req.url reflects the internal Supabase proxy URL (different host/port),
+    // so we must use the public URL for validation.
     const signature = req.headers.get('X-Twilio-Signature') ?? '';
-    const requestUrl = Deno.env.get('RALLY_BASE_URL')
-      ? `${Deno.env.get('RALLY_BASE_URL')}/functions/v1/sms-inbound`
-      : req.url;
-
+    const publicUrl = 'https://qxpbnixvjtwckuedlrfj.supabase.co/functions/v1/sms-inbound';
     if (twilioAuthToken && signature) {
       const paramsObj: Record<string, string> = {};
       params.forEach((v, k) => { paramsObj[k] = v; });
 
-      const valid = await validateTwilioSignature(twilioAuthToken, signature, requestUrl, paramsObj);
+      const valid = await validateTwilioSignature(twilioAuthToken, signature, publicUrl, paramsObj);
       if (!valid) {
         console.error('[sms-inbound] Invalid Twilio signature');
         return jsonResponse({ error: 'Invalid signature' }, 403);
@@ -87,10 +89,17 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: 'Invalid sender phone' }, 400);
     }
 
-    const participantPhones = parseParticipantPhones(msg.To, msg.From, rallyPhone);
+    // Parse participants, excluding all Rally phone numbers
+    const allToPhones = msg.To.split(',').map((p) => normalizePhone(p.trim())).filter((p): p is string => p !== null);
+    const allPhones = [...new Set([...allToPhones, senderPhone])];
+    const rallySet = new Set(allRallyPhones.map((p) => normalizePhone(p)).filter(Boolean));
+    const participantPhones = allPhones.filter((p) => !rallySet.has(p)).sort();
 
     // ─── 1:1 vs group thread detection ─────────────────────────────────────
-    const is1to1 = participantPhones.length === 1; // Only sender (no other participants)
+    // Twilio long codes don't expose group participants in the To field.
+    // Group MMS messages have SIDs starting with "MM", 1:1 SMS starts with "SM".
+    const isGroupMms = msg.MessageSid.startsWith('MM');
+    const is1to1 = !isGroupMms;
 
     // ─── Resolve user (Component 2: PhoneUserLinker) ───────────────────────
     const user = await findOrCreateUser(admin, senderPhone);
@@ -116,100 +125,115 @@ Deno.serve(async (req: Request) => {
     }
 
     // ─── Derive thread_id and find/create session ──────────────────────────
+    // Twilio long codes don't expose group MMS participant lists.
+    // For group MMS: we look up sessions where this sender is a participant.
+    // For new group threads: the first sender's message creates the session,
+    // and other participants are added as they send messages.
     let session = null;
     let participant = null;
     let introResponse: string | null = null;
 
     if (!is1to1) {
-      const threadId = await deriveThreadId(participantPhones);
-      session = await findSession(admin, threadId);
+      // Look for an active session where this sender is already a participant.
+      // Two-step: find participant rows, then load the session.
+      const { data: participantRows } = await admin
+        .from('trip_session_participants')
+        .select('id, trip_session_id, phone, display_name, status, committed, flight_status, is_planner, user_id, joined_at, updated_at')
+        .eq('phone', senderPhone)
+        .eq('status', 'active')
+        .order('joined_at', { ascending: false });
 
-      if (!session) {
-        // ─── New group thread — create session ───────────────────────────
-        // Check pending_planners for any participant
-        let plannerUser = user; // Default: first message sender
-        const { data: pendingPlanners } = await admin
-          .from('pending_planners')
-          .select('phone')
-          .in('phone', participantPhones)
-          .order('registered_at', { ascending: false })
+      // Check each participant row for an active session
+      let foundSession = null;
+      let foundParticipant = null;
+      for (const pRow of participantRows ?? []) {
+        const { data: sess } = await admin
+          .from('trip_sessions')
+          .select('*')
+          .eq('id', pRow.trip_session_id)
+          .in('status', ['ACTIVE', 'PAUSED', 'RE_ENGAGEMENT_PENDING'])
+          .maybeSingle();
+        if (sess) {
+          foundSession = sess;
+          foundParticipant = pRow;
+          break;
+        }
+      }
+
+      if (foundSession) {
+        session = foundSession;
+        participant = foundParticipant;
+        await touchSession(admin, session.id);
+      } else {
+        // ─── No session for this sender — check for a recent session to join ─
+        // Twilio sends each group member's message as a separate webhook with
+        // no group identifier. If another participant created a session in the
+        // last 5 minutes, this is likely the same group thread — join it.
+        const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        const { data: recentSessions } = await admin
+          .from('trip_sessions')
+          .select('*')
+          .eq('status', 'ACTIVE')
+          .eq('phase', 'INTRO')
+          .gte('created_at', fiveMinAgo)
+          .order('created_at', { ascending: false })
           .limit(1);
 
-        if (pendingPlanners && pendingPlanners.length > 0) {
-          const plannerPhone = pendingPlanners[0].phone;
-          if (plannerPhone !== senderPhone) {
-            plannerUser = await findOrCreateUser(admin, plannerPhone);
-          }
-        }
-
-        session = await createSession(admin, threadId, plannerUser, msg.FriendlyName ?? null);
-
-        // Add all participants
-        for (const phone of participantPhones) {
-          const pUser = phone === senderPhone ? user : await findOrCreateUser(admin, phone);
-          const isPlanner = pUser.id === plannerUser.id;
-          await addParticipant(admin, session.id, pUser, isPlanner);
-          // Ensure respondent row exists on the linked trip
-          if (session.trip_id) {
-            await ensureRespondent(admin, session.trip_id, pUser);
-          }
-        }
-
-        // Extract planner name from first message ("Jake — Tulum")
-        const nameMatch = body.match(/^([A-Za-z]+)\s*[—–-]\s*(.+)/);
-        if (nameMatch) {
-          const plannerName = nameMatch[1].trim();
-          await admin.from('users').update({ display_name: plannerName }).eq('id', plannerUser.id);
-          await admin
-            .from('trip_session_participants')
-            .update({ display_name: plannerName })
-            .eq('trip_session_id', session.id)
-            .eq('user_id', plannerUser.id);
-          if (session.trip_id) {
-            await admin
-              .from('respondents')
-              .update({ name: plannerName })
-              .eq('trip_id', session.trip_id)
-              .eq('phone', plannerUser.phone);
-          }
-        }
-
-        // Build intro response
-        if (user.returning && user.display_name) {
-          introResponse =
-            `Hey everyone \u2014 I'm Rally, here to help plan the trip. ` +
-            `${user.display_name}, good to have you back. ` +
-            `Everyone else: drop your name and your destination ideas and let's get going. ` +
-            `Reply STOP anytime to opt out.`;
-        } else {
-          introResponse =
-            `Hey! I'm Rally \ud83d\udc4b I'll get this group to first booking as fast as possible. ` +
-            `Drop your name and where you're thinking for this trip \u2014 ` +
-            `I'll take it from there. Reply STOP anytime to opt out.`;
-        }
-      } else {
-        // ─── Existing session ────────────────────────────────────────────
-        // Find or add participant
-        const { data: existingP } = await admin
-          .from('trip_session_participants')
-          .select('*')
-          .eq('trip_session_id', session.id)
-          .eq('phone', senderPhone)
-          .maybeSingle();
-
-        if (existingP) {
-          participant = existingP;
-        } else {
-          // New participant joining mid-session
+        if (recentSessions && recentSessions.length > 0) {
+          // Join the existing recent session
+          session = recentSessions[0];
           participant = await addParticipant(admin, session.id, user, false);
           if (session.trip_id) {
             await ensureRespondent(admin, session.trip_id, user);
           }
-        }
+          await touchSession(admin, session.id);
+          // Don't send intro again — just process the message
+        } else {
+          // ─── Truly new session ─────────────────────────────────────────
+          const threadId = await deriveThreadId([senderPhone, `group_${Date.now()}`]);
 
-        await touchSession(admin, session.id);
-      }
-    }
+          // Check if sender is a pending planner
+          const { data: pendingPlanners } = await admin
+            .from('pending_planners')
+            .select('phone')
+            .eq('phone', senderPhone)
+            .limit(1);
+
+          session = await createSession(admin, threadId, user, msg.FriendlyName ?? null);
+
+          // Add sender as first participant (and planner)
+          await addParticipant(admin, session.id, user, true);
+          if (session.trip_id) {
+            await ensureRespondent(admin, session.trip_id, user);
+          }
+
+          // Extract planner name from first message ("Jake — Tulum")
+          const nameMatch = body.match(/^([A-Za-z]+)\s*[—–-]\s*(.+)/);
+          if (nameMatch) {
+            const plannerName = nameMatch[1].trim();
+            await admin.from('users').update({ display_name: plannerName }).eq('id', user.id);
+            await admin
+              .from('trip_session_participants')
+              .update({ display_name: plannerName })
+              .eq('trip_session_id', session.id)
+              .eq('user_id', user.id);
+            if (session.trip_id) {
+              await admin
+                .from('respondents')
+                .update({ name: plannerName })
+                .eq('trip_id', session.trip_id)
+                .eq('phone', user.phone);
+            }
+          }
+
+          // Build intro response
+          introResponse =
+            `Hey! I'm Rally \ud83d\udc4b I'll get this group to first booking as fast as possible. ` +
+            `Drop your name and where you're thinking for this trip \u2014 ` +
+            `I'll take it from there. Reply STOP anytime to opt out.`;
+        } // end truly new session
+      } // end no existing session for sender
+    } // end group MMS
 
     // ─── Store inbound message ─────────────────────────────────────────────
     const threadId = is1to1 ? `1to1_${senderPhone}` : session?.thread_id ?? 'unknown';
@@ -264,8 +288,10 @@ Deno.serve(async (req: Request) => {
     );
   } catch (err) {
     console.error('[sms-inbound] Error:', err);
+    // Return a valid TwiML response even on error — Twilio needs 200 + valid XML
+    // to avoid 11200 errors
     return new Response(
-      '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
+      '<?xml version="1.0" encoding="UTF-8"?><Response><Message>Got it — give me a moment.</Message></Response>',
       { status: 200, headers: { ...CORS_HEADERS, 'Content-Type': 'text/xml' } },
     );
   }
