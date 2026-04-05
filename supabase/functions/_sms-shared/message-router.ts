@@ -122,7 +122,9 @@ export async function routeMessage(
     const plannerOnly =
       KEYWORDS[kw.keyword]?.plannerOnly ?? PREFIX_KEYWORDS[kw.keyword]?.plannerOnly ?? false;
 
-    if (plannerOnly && !isPlanner) {
+    // Check planner status via session.planner_user_id (more reliable than participant flag)
+    const isSessionPlanner = message.fromUser.id === session.planner_user_id || isPlanner;
+    if (plannerOnly && !isSessionPlanner) {
       const plannerName = await getPlannerName(admin, session);
       return `Only ${plannerName} can do that.`;
     }
@@ -484,11 +486,91 @@ async function handlePhaseMessage(
         .update({ flight_status: statusMap[upper] })
         .eq('id', message.participant.id);
 
+      // Check if all have responded → auto-advance to lodging
+      const allP = await getParticipants(admin, session.id);
+      const activeP = allP.filter((p) => p.status === 'active');
+      const allResponded = activeP.every(
+        (p) => p.flight_status !== 'unknown' || p.user_id === fromUser.id,
+      );
+      // Re-check with updated data
+      const { data: freshP } = await admin
+        .from('trip_session_participants')
+        .select('flight_status')
+        .eq('trip_session_id', session.id)
+        .eq('status', 'active');
+      const allDone = (freshP ?? []).every((p) => p.flight_status !== 'unknown');
+
+      if (allDone) {
+        const advMsg = await advancePhase(admin, session);
+        const name = fromUser.display_name ?? 'Someone';
+        const ack = upper === 'YES' ? `${name}'s flights are locked in \u{1F512}` : '';
+        return ack ? (advMsg ? ack + '\n\n' + advMsg : ack) : advMsg;
+      }
+
       if (upper === 'YES') {
         const name = fromUser.display_name ?? 'Someone';
         return `${name}'s flights are locked in \u{1F512}`;
       }
       return null;
+    }
+  }
+
+  // Group lodging booking confirmation during AWAITING_GROUP_BOOKING
+  if (phase === 'AWAITING_GROUP_BOOKING') {
+    // Parse "Booked [property] for $[amount]"
+    const bookMatch = body.match(/booked?\s+(.+?)\s+for\s+\$?([\d,]+(?:\.\d{2})?)/i);
+    if (bookMatch) {
+      const property = bookMatch[1].trim();
+      const cost = parseFloat(bookMatch[2].replace(',', ''));
+
+      await admin.from('trip_sessions').update({
+        lodging_property: property,
+        lodging_cost: cost,
+        status: 'FIRST_BOOKING_REACHED',
+        updated_at: new Date().toISOString(),
+      }).eq('id', session.id);
+
+      // Also update the linked trip
+      if (session.trip_id) {
+        await admin.from('trips').update({ status: 'active' }).eq('id', session.trip_id);
+      }
+
+      const allP = await getParticipants(admin, session.id);
+      const committed = allP.filter((p) => p.committed || p.status === 'active');
+      const perPerson = committed.length > 0 ? Math.round(cost / committed.length) : cost;
+
+      return `You're booked! \u{1F389} ${property} for $${cost} total ($${perPerson}/person for ${committed.length}).`;
+    }
+  }
+
+  // Individual lodging/flights confirmation during AWAITING_INDIVIDUAL_*
+  if ((phase === 'AWAITING_INDIVIDUAL_LODGING' || phase === 'AWAITING_INDIVIDUAL_FLIGHTS') && message.participant) {
+    const upper = body.trim().toUpperCase();
+    if (upper === 'BOOKED' || upper === 'YES' || upper === 'DONE') {
+      await admin
+        .from('trip_session_participants')
+        .update({ committed: true })
+        .eq('id', message.participant.id);
+
+      // Check if all have confirmed
+      const { data: freshP } = await admin
+        .from('trip_session_participants')
+        .select('committed')
+        .eq('trip_session_id', session.id)
+        .eq('status', 'active');
+      const allBooked = (freshP ?? []).every((p) => p.committed);
+
+      if (allBooked) {
+        await admin.from('trip_sessions').update({
+          status: 'FIRST_BOOKING_REACHED',
+          updated_at: new Date().toISOString(),
+        }).eq('id', session.id);
+
+        return "Everyone's booked! \u{1F389} First booking is locked. Trip is happening!";
+      }
+
+      const name = fromUser.display_name ?? 'Someone';
+      return `${name} is sorted \u{2705}`;
     }
   }
 

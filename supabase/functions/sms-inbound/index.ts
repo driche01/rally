@@ -151,7 +151,7 @@ Deno.serve(async (req: Request) => {
           .from('trip_sessions')
           .select('*')
           .eq('id', pRow.trip_session_id)
-          .in('status', ['ACTIVE', 'PAUSED', 'RE_ENGAGEMENT_PENDING'])
+          .in('status', ['ACTIVE', 'PAUSED', 'RE_ENGAGEMENT_PENDING', 'FIRST_BOOKING_REACHED'])
           .maybeSingle();
         if (sess) {
           foundSession = sess;
