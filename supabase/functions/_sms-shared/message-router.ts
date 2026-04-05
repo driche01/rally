@@ -408,16 +408,21 @@ async function handlePhaseMessage(
     }
   }
 
-  // Date collection during DECIDING_DATES
-  if (phase === 'DECIDING_DATES' && message.participant) {
-    // Try to parse date range from message (e.g. "Nov 8-12", "November 8 to 12")
+  // Date collection during DECIDING_DATES — only when no poll is open
+  // (if a date vote poll is active, the poll handler below will catch votes)
+  if (phase === 'DECIDING_DATES' && message.participant && !(session as Record<string,unknown>).current_poll_id) {
+    // Store this participant's date preference as budget_raw (reuse field for date input tracking)
+    await admin
+      .from('trip_session_participants')
+      .update({ budget_raw: body.trim() })
+      .eq('id', message.participant.id);
+
+    // Try regex first for exact dates (e.g. "Nov 8-12", "Jan 15-19")
     const dateMatch = body.match(/(\w+)\s+(\d{1,2})\s*[-–to]+\s*(\d{1,2})/i);
     if (dateMatch) {
       const monthStr = dateMatch[1];
       const startDay = parseInt(dateMatch[2]);
       const endDay = parseInt(dateMatch[3]);
-
-      // Parse month
       const months: Record<string, number> = {
         jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2,
         apr: 3, april: 3, may: 4, jun: 5, june: 5, jul: 6, july: 6,
@@ -425,30 +430,98 @@ async function handlePhaseMessage(
         nov: 10, november: 10, dec: 11, december: 11,
       };
       const month = months[monthStr.toLowerCase()];
-
       if (month !== undefined && startDay > 0 && endDay > 0) {
         const year = new Date().getFullYear();
         const start = new Date(year, month, startDay);
         const end = new Date(year, month, endDay);
-        // If dates are in the past, assume next year
         if (start < new Date()) { start.setFullYear(year + 1); end.setFullYear(year + 1); }
-
         const startStr = start.toISOString().split('T')[0];
         const endStr = end.toISOString().split('T')[0];
         const nights = Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
-
         await admin.from('trip_sessions').update({
           dates: { start: startStr, end: endStr, nights },
           updated_at: new Date().toISOString(),
         }).eq('id', session.id);
-
-        // Auto-advance after dates are set
-        const updatedSession = { ...session, dates: { start: startStr, end: endStr, nights } };
-        const nextMsg = await advancePhase(admin, updatedSession as any);
+        const nextMsg = await advancePhase(admin, session);
         const dateMsg = `Got it \u2014 ${monthStr} ${startDay}\u2013${endDay} (${nights} nights).`;
-        return nextMsg ? dateMsg + '\n\n' + nextMsg : dateMsg + ' Moving on.';
+        return nextMsg ? dateMsg + '\n\n' + nextMsg : dateMsg;
       }
     }
+
+    // Check if all participants have responded with date preferences
+    const { data: allP } = await admin
+      .from('trip_session_participants')
+      .select('budget_raw')
+      .eq('trip_session_id', session.id)
+      .eq('status', 'active');
+    const allResponded = (allP ?? []).every((p) => p.budget_raw);
+
+    if (allResponded && !session.dates) {
+      // Everyone responded but no exact date parsed — use Haiku to extract
+      const { data: dateMessages } = await admin
+        .from('thread_messages')
+        .select('sender_phone, body')
+        .eq('trip_session_id', session.id)
+        .eq('direction', 'inbound')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
+      if (apiKey) {
+        const history = (dateMessages ?? []).reverse().map((m) => m.body).join('\n');
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 200,
+            messages: [{ role: 'user', content: `The group is deciding trip dates. Here are their messages:\n${history}\n\nExtract ALL possible date windows that could work for the group. Use the current year (${new Date().getFullYear()}) or next year if dates are in the past. Return ONLY a JSON object: { "options": [{ "start": "YYYY-MM-DD", "end": "YYYY-MM-DD", "label": "short label like Apr 17-20" }], "summary": "one sentence about what the group said" }. If you can't determine any specific dates, return { "options": [], "summary": "what they said" }.` }],
+          }),
+        });
+        if (res.ok) {
+          const result = await res.json();
+          const text = result.content?.[0]?.text ?? '';
+          try {
+            const parsed = JSON.parse(text.replace(/```json\s*/i, '').replace(/```\s*$/i, '').trim());
+            const options = parsed.options ?? [];
+
+            if (options.length === 1) {
+              // One clear option — lock it in
+              const opt = options[0];
+              const nights = Math.round((new Date(opt.end).getTime() - new Date(opt.start).getTime()) / (24 * 60 * 60 * 1000));
+              await admin.from('trip_sessions').update({
+                dates: { start: opt.start, end: opt.end, nights },
+                updated_at: new Date().toISOString(),
+              }).eq('id', session.id);
+              const nextMsg = await advancePhase(admin, session);
+              const dateMsg = `Got it \u2014 ${opt.label ?? opt.start + ' to ' + opt.end} (${nights} nights).`;
+              return nextMsg ? dateMsg + '\n\n' + nextMsg : dateMsg;
+            } else if (options.length > 1) {
+              // Multiple options — create a date vote poll
+              const { data: freshS } = await admin.from('trip_sessions').select('*').eq('id', session.id).single();
+              if (freshS) {
+                const labels = options.map((o: { label: string }) => o.label);
+                // Store options metadata on session for later lookup
+                await admin.from('trip_sessions').update({
+                  deadlines: options, // temporarily store date options here
+                }).eq('id', session.id);
+                const { createPoll, formatPollMessage } = await import('./poll-engine.ts');
+                await createPoll(admin, freshS, 'dates', 'Which dates work best?', labels);
+                return `${parsed.summary ?? 'A few options came up.'}\n\n` + formatPollMessage('Vote on dates:', labels);
+              }
+            } else {
+              return `Hearing ${parsed.summary ?? 'some ideas'}. Can someone nail down specific dates? Like "Apr 17-20"`;
+            }
+          } catch { /* fall through */ }
+        }
+      }
+
+      return "Got everyone's input on dates. Can someone nail down the exact dates? Like \"Apr 17-20\"";
+    }
+
+    // Not all responded yet — acknowledge
+    const name = fromUser.display_name ?? 'Got it';
+    return `${name} \u2014 noted.`;
   }
 
   // Origin collection during COLLECTING_ORIGINS
@@ -574,8 +647,8 @@ async function handlePhaseMessage(
     }
   }
 
-  // Budget poll phase — handle budget responses even without a polls row
-  if (phase === 'BUDGET_POLL' && message.participant) {
+  // Budget poll phase — handle budget responses (only when no vote poll is open)
+  if (phase === 'BUDGET_POLL' && message.participant && !(session as Record<string,unknown>).current_poll_id) {
     const budgetResult = await handleBudgetResponse(admin, session, message.participant, body);
     if (budgetResult) {
       // Budget resolved — advance phase

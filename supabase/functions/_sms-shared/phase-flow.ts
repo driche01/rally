@@ -13,6 +13,7 @@ import type { TripSession, TripSessionParticipant } from './trip-session.ts';
 import { transitionPhase, getParticipants } from './trip-session.ts';
 import { createPoll, formatPollMessage, formatBudgetPollMessage } from './poll-engine.ts';
 import { launchCommitPoll } from './commit-poll-engine.ts';
+import { estimateFlightCost, formatCostSummary, type FlightEstimate } from './cost-estimator.ts';
 
 /**
  * Advance the session to the next phase and return the prompt message.
@@ -91,7 +92,18 @@ async function advanceFromIntro(
 
   await transitionPhase(admin, session, 'COLLECTING_DESTINATIONS', triggerUserId, triggerMessageSid);
 
-  const candidates = ((session as Record<string, unknown>).destination_candidates as Array<{ label: string }>) ?? [];
+  // Reload to get fresh state
+  const { data: freshSession } = await admin.from('trip_sessions').select('*').eq('id', session.id).single();
+  const candidates = (freshSession?.destination_candidates as Array<{ label: string }>) ?? [];
+
+  // If all participants already contributed destinations during INTRO,
+  // auto-chain straight to dates
+  if (candidates.length > 0 && named.length >= active.length) {
+    const list = candidates.map((c) => c.label).join(', ');
+    const datesMsg = await advanceFromCollectingDestinations(admin, freshSession!, participants, triggerUserId, triggerMessageSid);
+    return `${list} on the table.\n\n${datesMsg}`;
+  }
+
   if (candidates.length > 0) {
     const list = candidates.map((c) => c.label).join(', ');
     return `Great \u2014 so far I'm hearing: ${list}. Anyone else have ideas? Drop them now or I'll move to dates in a bit.`;
@@ -111,7 +123,7 @@ async function advanceFromCollectingDestinations(
 ): Promise<string | null> {
   await transitionPhase(admin, session, 'DECIDING_DATES', triggerUserId, triggerMessageSid);
 
-  return "Destinations locked. When are you thinking? Drop your dates \u2014 exact or rough both work.";
+  return "When are you thinking? Drop your dates \u2014 exact or rough both work.";
 }
 
 // ─── DECIDING_DATES → BUDGET_POLL or DECIDING_DESTINATION ───────────────────
@@ -203,8 +215,46 @@ async function advanceFromCollectingOrigins(
   // Transition to ESTIMATING_COSTS
   await transitionPhase(admin, session, 'ESTIMATING_COSTS', triggerUserId, triggerMessageSid);
 
-  // Chain to COMMIT_POLL (skip cost estimation for MVP)
-  // Reload session to get fresh phase + version
+  // Fetch real flight estimates via Gemini
+  const destination = session.destination ?? 'the destination';
+  const dates = session.dates;
+  const startDate = dates?.start ?? '';
+  const endDate = dates?.end ?? '';
+
+  // Group participants by origin
+  const originGroups = new Map<string, string[]>();
+  for (const p of participants) {
+    const origin = p.origin_airport || p.origin_city || 'unknown';
+    if (origin === 'unknown') continue;
+    const existing = originGroups.get(origin) ?? [];
+    existing.push(p.display_name ?? p.phone);
+    originGroups.set(origin, existing);
+  }
+
+  // Fetch flight estimates per origin
+  const flightLines: string[] = [];
+  for (const [origin, names] of originGroups) {
+    if (startDate && endDate) {
+      const { estimate, example } = await estimateFlightCost(origin, destination, startDate, endDate);
+      if (example) {
+        const nameStr = names.join(', ');
+        flightLines.push(`\u2708\uFE0F ${nameStr} from ${origin}: ${example.airline} ~$${example.price}/person rt`);
+        if (example.booking_url) flightLines.push(example.booking_url);
+      } else if (estimate) {
+        const nameStr = names.join(', ');
+        flightLines.push(`\u2708\uFE0F ${nameStr} from ${origin}: ~$${estimate.mid}/person rt`);
+        if (estimate.google_flights_url) flightLines.push(estimate.google_flights_url);
+      }
+    }
+  }
+
+  // Store estimates on session
+  await admin.from('trip_sessions').update({
+    cost_estimates: flightLines,
+    updated_at: new Date().toISOString(),
+  }).eq('id', session.id);
+
+  // Chain to COMMIT_POLL
   const { data: est } = await admin.from('trip_sessions').select('*').eq('id', session.id).single();
   if (!est) return null;
   await transitionPhase(admin, est, 'COMMIT_POLL', triggerUserId, triggerMessageSid);
@@ -213,7 +263,13 @@ async function advanceFromCollectingOrigins(
   if (!commitSession) return null;
   const commitMsg = await launchCommitPoll(admin, commitSession, participants);
 
-  const costNote = `Got everyone's origins. These are today's prices \u2014 I'll track them weekly and let you know if things shift.`;
+  let costNote: string;
+  if (flightLines.length > 0) {
+    costNote = `Here's what flights look like:\n\n${flightLines.join('\n')}\n\nThese are today's prices \u2014 I'll track them weekly and let you know if things shift.`;
+  } else {
+    costNote = `Couldn't pull live prices right now \u2014 check Google Flights for ${destination}. I'll keep trying.`;
+  }
+
   return commitMsg ? costNote + '\n\n' + commitMsg : costNote;
 }
 
@@ -324,6 +380,16 @@ export async function checkAutoAdvance(
       // Auto-advance when all active participants have names
       const allNamed = active.every((p) => p.display_name);
       if (allNamed && active.length >= 2) {
+        return advancePhase(admin, session);
+      }
+      return null;
+    }
+
+    case 'COLLECTING_DESTINATIONS': {
+      // Auto-advance when all participants have suggested a destination
+      const candidates = ((session as Record<string, unknown>).destination_candidates as Array<{ label: string }>) ?? [];
+      const allContributed = active.every((p) => p.display_name);
+      if (candidates.length > 0 && allContributed && active.length >= 2) {
         return advancePhase(admin, session);
       }
       return null;
