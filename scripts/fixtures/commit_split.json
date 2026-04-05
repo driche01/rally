@@ -1,0 +1,21 @@
+{
+  "script_name": "commit_split",
+  "phones": {
+    "planner": "+15551130001",
+    "p2": "+15551130002",
+    "p3": "+15551130003",
+    "rally": "+18559310010"
+  },
+  "assert_outbound_contains": [
+    "Reply STOP anytime",
+    "sitting this one out"
+  ],
+  "messages": [
+    { "from": "+15551130001", "body": "Jake — Tulum Nov 8-12", "delay_ms": 0, "_note": "Create group" },
+    { "from": "+15551130002", "body": "Sarah — in!", "delay_ms": 1000 },
+    { "from": "+15551130003", "body": "Mike — maybe", "delay_ms": 1000 },
+    { "from": "+15551130001", "body": "YES", "delay_ms": 2000, "_note": "Commit vote (session set to COMMIT_POLL in test)" },
+    { "from": "+15551130002", "body": "YES", "delay_ms": 500 },
+    { "from": "+15551130003", "body": "NO", "delay_ms": 500 }
+  ]
+}
