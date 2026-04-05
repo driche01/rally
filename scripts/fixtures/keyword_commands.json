@@ -1,0 +1,25 @@
+{
+  "script_name": "keyword_commands",
+  "phones": {
+    "planner": "+15551120001",
+    "p2": "+15551120002",
+    "p3": "+15551120003",
+    "rally": "+18559310010"
+  },
+  "assert_outbound_contains": [
+    "Reply STOP anytime",
+    "won't message you",
+    "Welcome back",
+    "Splitting",
+    "/person"
+  ],
+  "messages": [
+    { "from": "+15551120001", "body": "Alice — trip planning", "delay_ms": 0, "_note": "Create group" },
+    { "from": "+15551120002", "body": "STOP", "delay_ms": 1000 },
+    { "from": "+15551120002", "body": "REJOIN", "delay_ms": 1000 },
+    { "from": "+15551120001", "body": "SPLIT $150 3 ways dinner", "delay_ms": 1000 },
+    { "from": "+15551120003", "body": "HELP", "delay_ms": 500 },
+    { "from": "+15551120001", "body": "PAUSE", "delay_ms": 500 },
+    { "from": "+15551120001", "body": "RESUME", "delay_ms": 500 }
+  ]
+}

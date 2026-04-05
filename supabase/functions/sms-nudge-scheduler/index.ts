@@ -42,6 +42,7 @@ Deno.serve(async (req: Request) => {
     paymentReminders: 0,
     reEngagements: 0,
     scheduledActions: 0,
+    outboundSent: 0,
     errors: 0,
   };
 
@@ -63,6 +64,9 @@ Deno.serve(async (req: Request) => {
 
     // ─── Process scheduled_actions ─────────────────────────────────────
     await processScheduledActions(admin, now, results);
+
+    // ─── Process outbound message queue ────────────────────────────────
+    results.outboundSent = await processOutboundQueueJob(admin);
 
     console.log('[sms-nudge] Results:', JSON.stringify(results));
 
@@ -530,4 +534,90 @@ async function runReEngagementJob(
 
     results.reEngagements++;
   }
+}
+
+// ─── Outbound queue processor ────────────────────────────────────────────────
+
+async function processOutboundQueueJob(
+  admin: ReturnType<typeof createClient>,
+): Promise<number> {
+  const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID') ?? '';
+  const authToken = Deno.env.get('TWILIO_AUTH_TOKEN') ?? '';
+  const fromPhone = Deno.env.get('TWILIO_PHONE_NUMBER') ?? '';
+
+  if (!accountSid || !authToken || !fromPhone) {
+    console.error('[outbound-queue] Missing Twilio credentials');
+    return 0;
+  }
+
+  const now = new Date();
+
+  // Get pending messages ordered by priority then time
+  const { data: pending } = await admin
+    .from('outbound_message_queue')
+    .select('id, trip_session_id, thread_id, priority, job_type, body, messages')
+    .is('sent_at', null)
+    .lte('send_at', now.toISOString())
+    .order('priority')
+    .order('send_at')
+    .limit(20);
+
+  if (!pending || pending.length === 0) return 0;
+
+  const auth = btoa(`${accountSid}:${authToken}`);
+  const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
+  let sent = 0;
+
+  for (const msg of pending) {
+    // Get participant phones for the thread
+    const { data: participants } = await admin
+      .from('trip_session_participants')
+      .select('phone')
+      .eq('trip_session_id', msg.trip_session_id)
+      .eq('status', 'active');
+
+    const phones = (participants ?? []).map((p: { phone: string }) => p.phone);
+    if (phones.length === 0) {
+      await admin.from('outbound_message_queue').update({ sent_at: now.toISOString() }).eq('id', msg.id);
+      continue;
+    }
+
+    const messageBodies: string[] = [];
+    if (msg.job_type === 'batch' && msg.messages) {
+      const batch = (typeof msg.messages === 'string' ? JSON.parse(msg.messages) : msg.messages) as Array<{ body: string }>;
+      for (const m of batch) messageBodies.push(m.body);
+    } else if (msg.body) {
+      messageBodies.push(msg.body);
+    }
+
+    for (const body of messageBodies) {
+      try {
+        const params = new URLSearchParams({
+          From: fromPhone,
+          To: phones.join(','),
+          Body: body,
+        });
+
+        await fetch(twilioUrl, {
+          method: 'POST',
+          headers: {
+            Authorization: `Basic ${auth}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: params.toString(),
+        });
+
+        sent++;
+      } catch (err) {
+        console.error(`[outbound-queue] Send error:`, err);
+      }
+
+      // Rate limit: 1 msg/sec globally
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+
+    await admin.from('outbound_message_queue').update({ sent_at: now.toISOString() }).eq('id', msg.id);
+  }
+
+  return sent;
 }
