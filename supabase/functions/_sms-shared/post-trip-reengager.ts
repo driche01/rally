@@ -94,6 +94,8 @@ export async function handleReEngagementYes(
     .eq('id', originalSessionId)
     .single();
 
+  // #91 — First YES changes status to COMPLETE; subsequent YES messages won't
+  // match RE_ENGAGEMENT_PENDING, so they fall through to the new active session.
   if (!original || original.status !== 'RE_ENGAGEMENT_PENDING') return null;
 
   // Get original participants
@@ -125,6 +127,7 @@ export async function handleReEngagementYes(
   }
 
   // Add all original participants (all start uncommitted)
+  const originalUserIds = new Set(participants.map((p) => p.user_id));
   for (const p of participants) {
     await admin.from('trip_session_participants').insert({
       trip_session_id: newSession!.id,
@@ -135,6 +138,27 @@ export async function handleReEngagementYes(
       committed: false,
       is_planner: p.user_id === responderUserId,
     });
+  }
+
+  // #89 — If responder wasn't in the original participants, add them too
+  if (!originalUserIds.has(responderUserId)) {
+    const { data: responderUser } = await admin
+      .from('users')
+      .select('phone, display_name')
+      .eq('id', responderUserId)
+      .maybeSingle();
+
+    if (responderUser) {
+      await admin.from('trip_session_participants').insert({
+        trip_session_id: newSession!.id,
+        user_id: responderUserId,
+        phone: responderUser.phone,
+        display_name: responderUser.display_name,
+        status: 'active',
+        committed: false,
+        is_planner: true,
+      });
+    }
   }
 
   // Mark original session as COMPLETE

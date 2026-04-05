@@ -21,6 +21,7 @@ import {
   launchPropose,
   handleProposeResponse,
   handleProposePaid,
+  handleProposeCancel,
 } from './venmo-split-link.ts';
 import { handleReEngagementYes } from './post-trip-reengager.ts';
 import { advancePhase, checkAutoAdvance } from './phase-flow.ts';
@@ -35,6 +36,7 @@ const KEYWORDS: Record<string, { plannerOnly: boolean }> = {
   FOCUS: { plannerOnly: false },
   BOOKED: { plannerOnly: false },
   'PAID STATUS': { plannerOnly: false },
+  CANCEL: { plannerOnly: false },
   NEXT: { plannerOnly: true },
   RESET: { plannerOnly: true },
   PAUSE: { plannerOnly: true },
@@ -214,6 +216,8 @@ async function handleKeyword(
       return handleSplitKeyword(admin, session, fromUser, args);
     case 'PROPOSE':
       return handleProposeKeyword(admin, session, fromUser, args);
+    case 'CANCEL':
+      return handleProposeCancel(admin, session, fromUser.id);
     default:
       return `Got it \u2014 ${keyword} ${args}.`;
   }
@@ -456,6 +460,11 @@ async function handlePhaseMessage(
     return "I'm great when groups are booking trips! What's next for yours?";
   }
 
+  // #46 — Participant calls out confusing message ("wait what does that mean")
+  if (wordCount <= 8 && /\b(what\s*does\s*that\s*mean|i\s*don'?t\s*understand|what\??$|huh\??$|confused)\b/i.test(lower)) {
+    return "My bad \u2014 text STATUS for a summary of where we're at.";
+  }
+
   // Commit poll — YES/NO during COMMIT_POLL phase
   if (phase === 'COMMIT_POLL' && message.participant) {
     const upper = body.trim().toUpperCase();
@@ -656,6 +665,13 @@ async function handlePhaseMessage(
     }
   }
 
+  // #34: Sub-group booking detection — Rally only splits for the whole group
+  if (/\b(just\s+me\s+and\s+\w+|only\s+\d+\s+of\s+us|just\s+us\s+two|just\s+the\s+two\s+of\s+us)\b/i.test(body)) {
+    const subNameMatch = body.match(/just\s+me\s+and\s+(\w+)/i);
+    const subName = subNameMatch ? subNameMatch[1] : 'them';
+    return `I can only split for the whole group \u2014 you and ${subName} can sort that one between yourselves.`;
+  }
+
   // Group lodging booking confirmation during AWAITING_GROUP_BOOKING
   if (phase === 'AWAITING_GROUP_BOOKING') {
     // Parse "Booked [property] for $[amount]"
@@ -825,6 +841,7 @@ async function handleProposeKeyword(
   args: string,
 ): Promise<string> {
   // Parse: PROPOSE $[amount] [reason]
+  // #64 — "PROPOSE dinner" (no dollar amount) fails parse, returns usage message
   const match = args.match(/\$?([\d,]+(?:\.\d{2})?)\s+(.+)/);
   if (!match) {
     return 'Usage: PROPOSE $[amount] [reason]\nExample: PROPOSE $110 Gitano Beach dinner';
@@ -835,9 +852,15 @@ async function handleProposeKeyword(
 
   if (isNaN(amount)) return 'Could not parse amount. Try: PROPOSE $110 dinner';
 
-  return launchPropose(
+  // #65 — Warn on implausibly high amounts (don't block)
+  let result = await launchPropose(
     admin, session, user.id, user.display_name ?? user.phone, amount, reason,
   );
+  if (amount > 10000) {
+    result += `\n\nHeads up — that's $${amount} total. Make sure the amount is right.`;
+  }
+
+  return result;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

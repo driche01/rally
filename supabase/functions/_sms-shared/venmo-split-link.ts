@@ -51,6 +51,8 @@ function venmoWebLink(recipientPhone: string, amount: number, note: string): str
 
 // ─── Split calculation ───────────────────────────────────────────────────────
 
+// #73 — Handles odd splits (e.g. $307/8): rounds down per person, adds penny
+// discrepancy to first participant so total is exact.
 function calculateSplit(
   totalCost: number,
   participantCount: number,
@@ -125,6 +127,7 @@ export async function sendLodgingSplit(
 
 /**
  * Handle a SPLIT command from any participant.
+ * #68 — Works in any phase; not tied to lodging. Any group expense can be split.
  * Returns the response message.
  */
 export async function handleSplitCommand(
@@ -307,7 +310,8 @@ export async function handleProposePaid(
     .limit(1)
     .maybeSingle();
 
-  if (!proposal) return null;
+  // #69 — If no matching proposal for this user, they're not the proposer
+  if (!proposal) return 'Only the person who proposed can confirm payment.';
 
   await admin
     .from('propose_requests')
@@ -320,4 +324,40 @@ export async function handleProposePaid(
     ways: proposal.participant_count,
     reason: proposal.reason ?? 'group expense',
   });
+}
+
+/**
+ * Handle CANCEL on a PROPOSE request.
+ * #74 — Blocks cancel after payment, allows cancel of confirmed proposals.
+ */
+export async function handleProposeCancel(
+  admin: SupabaseClient,
+  session: TripSession,
+  proposerUserId: string,
+): Promise<string | null> {
+  const { data: proposal } = await admin
+    .from('propose_requests')
+    .select('*')
+    .eq('trip_session_id', session.id)
+    .eq('proposer_user_id', proposerUserId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!proposal) return null;
+
+  if (proposal.status === 'paid') {
+    return "That's already been paid \u2014 you'll need to sort refunds directly.";
+  }
+
+  if (proposal.status === 'confirmed' || proposal.status === 'collecting') {
+    await admin
+      .from('propose_requests')
+      .update({ status: 'cancelled' })
+      .eq('id', proposal.id);
+
+    return `Proposal for ${proposal.reason ?? 'group expense'} has been cancelled.`;
+  }
+
+  return null;
 }

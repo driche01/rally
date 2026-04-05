@@ -148,13 +148,15 @@ export async function generateResponse(
       }),
     });
 
+    // #76 — Claude API 500/error: graceful degradation to templated fallback
     if (!response.ok) {
       console.error('[bot-response] Sonnet API error:', response.status);
       return generateFallback(context);
     }
 
     const result = await response.json();
-    return result.content?.[0]?.text ?? generateFallback(context);
+    const raw = result.content?.[0]?.text ?? null;
+    return raw ? stripAiDisclaimer(raw, context) : generateFallback(context);
   } catch (err) {
     console.error('[bot-response] Error calling Sonnet:', err);
     return generateFallback(context);
@@ -221,6 +223,17 @@ export async function generateCelebration(
   } catch {
     return getCelebrationFallback(milestone, milestoneDetail);
   }
+}
+
+// ─── AI disclaimer filter (#86) ─────────────────────────────────────────────
+
+function stripAiDisclaimer(text: string, context: string): string {
+  if (/^(As an AI|I'm an AI|As a language model)/i.test(text.trim())) {
+    // Strip the first sentence
+    const rest = text.replace(/^[^.!?]*[.!?]\s*/, '').trim();
+    return rest.length > 0 ? rest : generateFallback(context);
+  }
+  return text;
 }
 
 // ─── Graceful degradation (API down fallbacks) ───────────────────────────────

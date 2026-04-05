@@ -165,7 +165,14 @@ async function advanceToDestinationVote(
   triggerUserId?: string,
   triggerMessageSid?: string,
 ): Promise<string | null> {
-  const candidates = ((session as Record<string, unknown>).destination_candidates as Array<{ label: string }>) ?? [];
+  let candidates = ((session as Record<string, unknown>).destination_candidates as Array<{ label: string; votes?: number }>) ?? [];
+
+  // #21: Cap at 4 candidates — take the ones with the most mentions (votes)
+  if (candidates.length > 4) {
+    candidates = [...candidates]
+      .sort((a, b) => (b.votes ?? 1) - (a.votes ?? 1))
+      .slice(0, 4);
+  }
 
   // If only one candidate, lock it in directly
   if (candidates.length === 1) {
@@ -177,6 +184,7 @@ async function advanceToDestinationVote(
     return `Only one destination on the table \u2014 ${candidates[0].label} it is! Where is everyone flying from? Reply with your city or airport code.`;
   }
 
+  // #62 — Zero destinations suggested: don't close brainstorm, prompt for ideas
   if (candidates.length === 0) {
     return "No destinations suggested yet \u2014 drop your ideas!";
   }
@@ -324,7 +332,10 @@ async function advanceFromAwaitingFlights(
   const lodgingOptions = ['Staying together (group rental)', 'Booking separately', 'Flights only (skip lodging)'];
   await createPoll(admin, session, 'lodging_type', 'How are we handling lodging?', lodgingOptions);
 
-  return summary + '\n\nMoving to lodging \u2014 how are we handling it?\n\n1. Staying together (group rental)\n2. Booking separately\n3. Flights only (skip lodging)';
+  // #55 — Urgency note if trip is within 7 days
+  const urgency = getUrgencyNote(session);
+
+  return summary + '\n\nMoving to lodging \u2014 how are we handling it?\n\n1. Staying together (group rental)\n2. Booking separately\n3. Flights only (skip lodging)' + (urgency ? '\n\n' + urgency : '');
 }
 
 // ─── DECIDING_LODGING_TYPE → next phase based on choice ─────────────────────
@@ -338,25 +349,54 @@ async function advanceFromDecidingLodgingType(
 ): Promise<string | null> {
   const lodgingType = (session as Record<string, unknown>).lodging_type as string | null;
 
+  // #55 — Urgency note if trip is within 7 days
+  const urgency = getUrgencyNote(session);
+
   if (lodgingType === 'GROUP') {
     await transitionPhase(admin, session, 'AWAITING_GROUP_BOOKING', triggerUserId, triggerMessageSid);
     const planner = participants.find((p) => p.is_planner);
-    return `Group rental it is! ${planner?.display_name ?? 'Planner'} \u2014 book when you're ready and text "Booked [property] for $[total]" when it's done.`;
+    const msg = `Group rental it is! ${planner?.display_name ?? 'Planner'} \u2014 book when you're ready and text "Booked [property] for $[total]" when it's done.`;
+    return urgency ? msg + '\n\n' + urgency : msg;
   }
 
   if (lodgingType === 'INDIVIDUAL') {
     await transitionPhase(admin, session, 'AWAITING_INDIVIDUAL_LODGING', triggerUserId, triggerMessageSid);
-    return 'Everyone booking their own \u2014 text BOOKED when you\'ve sorted yours.';
+    const msg = 'Everyone booking their own \u2014 text BOOKED when you\'ve sorted yours.';
+    return urgency ? msg + '\n\n' + urgency : msg;
   }
 
   // Flights only
   await transitionPhase(admin, session, 'AWAITING_INDIVIDUAL_FLIGHTS', triggerUserId, triggerMessageSid);
-  return 'Flights only \u2014 text BOOKED when you\'ve got yours sorted.';
+  const msg = 'Flights only \u2014 text BOOKED when you\'ve got yours sorted.';
+  return urgency ? msg + '\n\n' + urgency : msg;
+}
+
+// ─── #55 Helper: urgency note for trips starting within 7 days ──────────────
+
+function getUrgencyNote(session: TripSession): string | null {
+  const dates = session.dates as { start?: string } | null;
+  if (!dates?.start) return null;
+  const daysUntil = Math.round(
+    (new Date(dates.start).getTime() - Date.now()) / (24 * 60 * 60 * 1000),
+  );
+  if (daysUntil > 0 && daysUntil <= 7) {
+    return `Trip is in ${daysUntil} day${daysUntil === 1 ? '' : 's'} \u2014 time to lock this in.`;
+  }
+  return null;
 }
 
 /**
  * Check if the current phase is ready to advance based on collected data.
  * Called after every message to see if we should auto-advance.
+ *
+ * Note: For poll phases (DECIDING_DESTINATION, DECIDING_DATES, BUDGET_POLL,
+ * DECIDING_LODGING_TYPE), timeouts are handled by NudgeScheduler which sends
+ * 24h/48h nudges and auto-closes polls after 48h with available votes.
+ *
+ * For non-poll collection phases (INTRO, COLLECTING_ORIGINS, AWAITING_FLIGHTS),
+ * there is currently no automatic timeout for silent participants.
+ * TODO: Add 48h auto-close for non-poll collection phases — after 48h with no
+ * new responses, advance with whoever has responded (similar to poll nudge logic).
  */
 export async function checkAutoAdvance(
   admin: SupabaseClient,
