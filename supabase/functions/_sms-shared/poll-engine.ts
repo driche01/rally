@@ -428,6 +428,22 @@ export async function handlePollResponse(
 
     await closePoll(admin, session, poll.id, winner);
 
+    // Apply the winner to the session based on poll type
+    if (winner) {
+      const pollType = poll.type;
+      if (pollType === 'destination_vote' || pollType === 'destination') {
+        await admin.from('trip_sessions').update({ destination: winner }).eq('id', session.id);
+      } else if (pollType === 'lodging_type') {
+        const typeMap: Record<string, string> = {
+          'Staying together (group rental)': 'GROUP',
+          'Booking separately': 'INDIVIDUAL',
+          'Flights only (skip lodging)': 'FLIGHTS_ONLY',
+        };
+        const mappedType = typeMap[winner] ?? winner;
+        await admin.from('trip_sessions').update({ lodging_type: mappedType }).eq('id', session.id);
+      }
+    }
+
     // Format results
     const resultLines = results
       .sort((a, b) => b.count - a.count)
