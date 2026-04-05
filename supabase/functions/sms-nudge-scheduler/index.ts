@@ -16,6 +16,11 @@
  * Invoke via pg_cron hourly:
  *   SELECT cron.schedule('sms-nudge-hourly', '0 * * * *',
  *     $$SELECT net.http_post(url, ...) $$);
+ *
+ * #49 — No timezone awareness yet. Cron runs on UTC schedule, so flight
+ * price updates or nudges may arrive at odd local hours (e.g. 3am).
+ * Future enhancement: store participant timezone and gate sends to
+ * local 8am–9pm window.
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -237,7 +242,7 @@ async function runMomentumChecks(
 
   const { data: staleSessions } = await admin
     .from('trip_sessions')
-    .select('id, thread_id, destination, momentum_check_sent_at')
+    .select('id, thread_id, destination, dates, momentum_check_sent_at')
     .eq('status', 'ACTIVE')
     .eq('paused', false)
     .is('phase_sub_state', null)
@@ -249,6 +254,19 @@ async function runMomentumChecks(
     if (session.momentum_check_sent_at) {
       const lastCheck = new Date(session.momentum_check_sent_at);
       if (now.getTime() - lastCheck.getTime() < 7 * 24 * 60 * 60 * 1000) continue;
+    }
+
+    // #56 — Trip dates already passed but session still ACTIVE
+    const dates = session.dates as { start?: string } | null;
+    if (dates?.start && new Date(dates.start) < now) {
+      const msg = "Looks like the trip dates have passed \u2014 text RESET to plan a new one or CANCEL to close this out.";
+      await storeOutbound(admin, session, msg);
+      await admin
+        .from('trip_sessions')
+        .update({ momentum_check_sent_at: now.toISOString() })
+        .eq('id', session.id);
+      results.momentumChecks++;
+      continue;
     }
 
     const dest = session.destination ?? 'the trip';
@@ -461,6 +479,17 @@ async function storeOutbound(
   session: { id: string; thread_id: string },
   body: string,
 ) {
+  // #42 — Hold proactive messages if 3+ messages arrived in last 5 minutes
+  // Prevents Rally from talking over active conversations
+  const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const { count: recentCount } = await admin
+    .from('thread_messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('trip_session_id', session.id)
+    .gte('created_at', fiveMinAgo);
+
+  const delay = (recentCount ?? 0) >= 3;
+
   // Store in thread_messages
   await admin.from('thread_messages').insert({
     thread_id: session.thread_id,
@@ -471,11 +500,13 @@ async function storeOutbound(
   });
 
   // Queue in outbound_message_queue for rate-limited sending
+  // If conversation is active (3+ msgs in 5min), delay send by 5 minutes
   await admin.from('outbound_message_queue').insert({
     trip_session_id: session.id,
     thread_id: session.thread_id,
     priority: 4, // cron-triggered = lowest priority
     body,
+    ...(delay ? { send_at: new Date(Date.now() + 5 * 60 * 1000).toISOString() } : {}),
   });
 }
 

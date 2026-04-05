@@ -13,6 +13,8 @@
 
 // ─── Gemini JSON parsing ─────────────────────────────────────────────────────
 
+// #77 — Strips markdown fences before JSON.parse. callGeminiWithRetry retries
+// once on failure. On final failure, returns null (marks estimate unavailable).
 function parseGeminiJson(raw: string): unknown {
   const stripped = raw
     .trim()
@@ -106,6 +108,8 @@ export async function estimateFlightCost(
     callGeminiWithRetry(examplePrompt),
   ]);
 
+  // #82 — If Gemini returns no data (e.g. "no flights found"), estimate is null.
+  // phase-flow.ts shows a fallback message when CostEstimator returns null.
   const estimate = estimateResult
     ? { origin, destination, ...(estimateResult as Omit<FlightEstimate, 'origin' | 'destination'>) }
     : null;

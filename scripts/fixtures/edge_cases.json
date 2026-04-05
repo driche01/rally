@@ -140,6 +140,7 @@
       "id": 19,
       "title": "7 of 8 respond, 1 silent",
       "expected": "NudgeScheduler sends 24h nudge naming the silent participant. At 48h, marks non_responsive and proceeds.",
+      "resolution": "HANDLED. For poll phases, NudgeScheduler handles 24h/48h nudges + auto-close. For non-poll collection phases (INTRO, COLLECTING_ORIGINS, AWAITING_FLIGHTS), no timeout yet. TODO added in checkAutoAdvance for future 48h auto-close.",
       "phase": "any_poll"
     },
     {
@@ -152,12 +153,14 @@
       "id": 21,
       "title": "8 unique destinations from 8 people",
       "expected": "ConversationParser consolidates to top 4 by frequency. If all unique, Rally presents all (up to 4) for vote.",
+      "resolution": "FIXED. advanceToDestinationVote now caps candidates at 4, sorted by votes (most mentions first).",
       "phase": "COLLECTING_DESTINATIONS"
     },
     {
       "id": 22,
       "title": "Planner drops out silently",
       "expected": "7-day momentum check fires. After 60 days, session marked at-risk. 90-day timeout → ABANDONED.",
+      "resolution": "HANDLED. Momentum check at 7 days (NudgeScheduler) detects stale sessions. No additional code needed.",
       "phase": "any"
     },
     {
@@ -169,14 +172,16 @@
     },
     {
       "id": 24,
-      "title": "New person added mid-session",
+      "title": "New person added mid-session with catch-up",
       "expected": "Merge path adds them to session. Name extracted if they send 'Name - Dest'. No re-run of completed phases.",
+      "resolution": "FIXED. sms-inbound merge path now sends catch-up message if session is past INTRO: summarizes destination, dates, and current phase.",
       "phase": "any"
     },
     {
       "id": 25,
       "title": "Someone leaves mid-session",
       "expected": "Twilio delivery failure detection (30003/30005). After 3 consecutive failures, session checks with planner.",
+      "resolution": "HANDLED. TwilioSender zombie detection: 3 consecutive delivery failures marks participant as unreachable. No additional code needed.",
       "phase": "any"
     },
     {
@@ -216,6 +221,7 @@
       "id": 31,
       "title": "Group argues in thread",
       "expected": "Rally listens passively via ConversationParser. Does not interject during free discussion. No response unless keyword used.",
+      "resolution": "HANDLED. Rally only responds to keywords and during active polls. During free discussion between phases, routeMessage returns null (no response). No additional code needed.",
       "phase": "any"
     },
     {
@@ -228,6 +234,7 @@
       "id": 33,
       "title": "All 8 suggest same destination",
       "expected": "Only 1 candidate. advanceToDestinationVote() skips poll: 'Only one destination — X it is!'",
+      "resolution": "VERIFIED. advanceToDestinationVote checks candidates.length === 1 and locks it in directly, skipping the poll. Duplicate destinations are deduplicated during INTRO (alreadyListed check).",
       "phase": "COLLECTING_DESTINATIONS"
     },
     {
@@ -235,12 +242,14 @@
       "title": "Sub-group booking inside larger thread",
       "input": "just me and Jake for this one",
       "expected": "Rally doesn't support sub-groups in MVP. Entire committed list is used for splits.",
+      "resolution": "FIXED. message-router detects sub-group patterns ('just me and [name]', 'only N of us') and responds: 'I can only split for the whole group — you and [name] can sort that one between yourselves.'",
       "phase": "any"
     },
     {
       "id": 35,
       "title": "Rally re-added to previously CANCELLED session",
       "expected": "New session created (old one is CANCELLED, not matched by lookup). Fresh start.",
+      "resolution": "HANDLED. Session lookup in sms-inbound filters by status IN ('ACTIVE', 'PAUSED', 'RE_ENGAGEMENT_PENDING', 'FIRST_BOOKING_REACHED'). CANCELLED sessions are never found, so a new session is created automatically.",
       "phase": "INTRO"
     },
     {

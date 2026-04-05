@@ -213,6 +213,16 @@ Deno.serve(async (req: Request) => {
                 .eq('trip_id', session.trip_id).eq('phone', user.phone);
             }
           }
+
+          // #24: Catch-up message if session is past INTRO phase
+          if (session.phase !== 'INTRO') {
+            const catchUpParts: string[] = ['Welcome to the group! Here\'s where we\'re at:'];
+            if (session.destination) catchUpParts.push(`Destination: ${session.destination}`);
+            if (session.dates) catchUpParts.push(`Dates: ${session.dates.start}\u2013${session.dates.end}`);
+            catchUpParts.push(`Current phase: ${session.phase.replace(/_/g, ' ').toLowerCase()}`);
+            catchUpParts.push('Jump in anytime \u2014 reply HELP if you need commands.');
+            introResponse = catchUpParts.join('\n');
+          }
         } else {
           // ─── Truly new session ─────────────────────────────────────────
           const threadId = await deriveThreadId([senderPhone, `group_${Date.now()}`]);
