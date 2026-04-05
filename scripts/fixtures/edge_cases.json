@@ -1,0 +1,614 @@
+{
+  "description": "95 edge case test scenarios for Rally SMS Agent",
+  "categories": {
+    "message_format": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+    "group_dynamics": [19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35],
+    "persona_and_tone": [36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48],
+    "timing_and_nudges": [49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60],
+    "data_integrity": [61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75],
+    "system_failures": [76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87],
+    "re_engagement": [88, 89, 90, 91, 92, 93, 94, 95]
+  },
+  "cases": [
+    {
+      "id": 1,
+      "title": "Destination buried in full sentence",
+      "input": "I mean honestly Tulum would be sick but idk",
+      "expected": "Rally extracts 'Tulum' as a destination candidate via ConversationParser",
+      "phase": "INTRO"
+    },
+    {
+      "id": 2,
+      "title": "Simultaneous messages (200ms apart)",
+      "input": ["msg1 at T+0ms", "msg2 at T+200ms"],
+      "expected": "Both messages processed, no race condition on session state",
+      "phase": "any"
+    },
+    {
+      "id": 3,
+      "title": "Voice memo (MMS audio)",
+      "input": "MMS with NumMedia=1, no Body text, MediaContentType=audio/amr",
+      "expected": "Rally acknowledges: 'Got the audio! If you've got destination ideas, just text them.'",
+      "phase": "any"
+    },
+    {
+      "id": 4,
+      "title": "Emoji-only message",
+      "input": "🌴🇲🇽",
+      "expected": "Pre-filter skips ConversationParser. No response during passive phases.",
+      "phase": "any"
+    },
+    {
+      "id": 5,
+      "title": "Image with no caption",
+      "input": "MMS with NumMedia=1, empty Body",
+      "expected": "Rally: 'Got the image! If you've booked your flights, just reply YES.'",
+      "phase": "any"
+    },
+    {
+      "id": 6,
+      "title": "Link with no text",
+      "input": "https://www.airbnb.com/rooms/12345",
+      "expected": "Rally detects Airbnb URL, stores as wishlist_url on session",
+      "phase": "any"
+    },
+    {
+      "id": 7,
+      "title": "Profanity mid-conversation",
+      "input": "this shit is taking forever can we just pick tulum",
+      "expected": "Rally ignores profanity, extracts destination preference 'Tulum'",
+      "phase": "COLLECTING_DESTINATIONS"
+    },
+    {
+      "id": 8,
+      "title": "Non-English language",
+      "input": "Yo quiero ir a Cancún, me encanta la playa",
+      "expected": "ConversationParser (Haiku) extracts 'Cancún' regardless of language",
+      "phase": "INTRO"
+    },
+    {
+      "id": 9,
+      "title": "1000+ character wall of text",
+      "input": "So I've been thinking about this trip and honestly I think we should consider a few options. First, there's Tulum which is great for beach vibes and cenotes...[continues for 1000+ chars]",
+      "expected": "ConversationParser processes it. Message not pre-filtered (>3 words). Haiku extracts decisions.",
+      "phase": "COLLECTING_DESTINATIONS"
+    },
+    {
+      "id": 10,
+      "title": "Command typo",
+      "input": "STAUS",
+      "expected": "Not matched as keyword. Falls through to phase handler. Ideally fuzzy-matched to STATUS.",
+      "phase": "any"
+    },
+    {
+      "id": 11,
+      "title": "Number during non-vote phase",
+      "input": "1",
+      "expected": "Pre-filter catches single digit, skips ConversationParser. No response if no poll open.",
+      "phase": "INTRO"
+    },
+    {
+      "id": 12,
+      "title": "Threaded reply (quote reply)",
+      "input": "Standard MMS — Twilio delivers threaded replies as normal messages. No special handling needed.",
+      "expected": "Processed normally. Twilio strips threading context.",
+      "phase": "any"
+    },
+    {
+      "id": 13,
+      "title": "Planner sends dest+dates+budget in one message",
+      "input": "Jake — Tulum, Nov 8-12, around $1250pp flights + Airbnb",
+      "expected": "ConversationParser extracts all three. Pre-fills TripSession. Skips polls for resolved fields.",
+      "phase": "INTRO"
+    },
+    {
+      "id": 14,
+      "title": "Duplicate message within 5 seconds",
+      "input": "Same MessageSid sent twice",
+      "expected": "Idempotency check on thread_messages.message_sid. Second request returns 200 immediately.",
+      "phase": "any"
+    },
+    {
+      "id": 15,
+      "title": "Ambiguous destination — Paris",
+      "input": "Paris",
+      "expected": "Rally stores 'Paris' as candidate. Does not disambiguate (France vs Texas) unless group discusses.",
+      "phase": "INTRO"
+    },
+    {
+      "id": 16,
+      "title": "Vote out of range",
+      "input": "5 (when options are 1-3)",
+      "expected": "matchVoteToOption returns null. Message falls through. No vote recorded.",
+      "phase": "DECIDING_DESTINATION"
+    },
+    {
+      "id": 17,
+      "title": "Case sensitivity — yes vs YES",
+      "input": "yes",
+      "expected": "Commit handler uppercases before matching. Both 'yes' and 'YES' work.",
+      "phase": "COMMIT_POLL"
+    },
+    {
+      "id": 18,
+      "title": "Command mid-thread from planner",
+      "input": "PAUSE (sent while others are actively chatting)",
+      "expected": "Keyword detected first, before phase routing. Session paused immediately.",
+      "phase": "any"
+    },
+    {
+      "id": 19,
+      "title": "7 of 8 respond, 1 silent",
+      "expected": "NudgeScheduler sends 24h nudge naming the silent participant. At 48h, marks non_responsive and proceeds.",
+      "phase": "any_poll"
+    },
+    {
+      "id": 20,
+      "title": "Tied vote 4-4",
+      "expected": "resolveWinner() does Math.random() coin flip. Announces: 'It's a tie — flipping a coin... X wins.'",
+      "phase": "DECIDING_DESTINATION"
+    },
+    {
+      "id": 21,
+      "title": "8 unique destinations from 8 people",
+      "expected": "ConversationParser consolidates to top 4 by frequency. If all unique, Rally presents all (up to 4) for vote.",
+      "phase": "COLLECTING_DESTINATIONS"
+    },
+    {
+      "id": 22,
+      "title": "Planner drops out silently",
+      "expected": "7-day momentum check fires. After 60 days, session marked at-risk. 90-day timeout → ABANDONED.",
+      "phase": "any"
+    },
+    {
+      "id": 23,
+      "title": "Non-planner tries planner command",
+      "input": "PAUSE (from non-planner)",
+      "expected": "Rally responds: 'Only [PlannerName] can do that.' Does not execute.",
+      "phase": "any"
+    },
+    {
+      "id": 24,
+      "title": "New person added mid-session",
+      "expected": "Merge path adds them to session. Name extracted if they send 'Name - Dest'. No re-run of completed phases.",
+      "phase": "any"
+    },
+    {
+      "id": 25,
+      "title": "Someone leaves mid-session",
+      "expected": "Twilio delivery failure detection (30003/30005). After 3 consecutive failures, session checks with planner.",
+      "phase": "any"
+    },
+    {
+      "id": 26,
+      "title": "Everyone sends STOP",
+      "expected": "All participants marked opted_out. Rally stops sending. Session effectively dead but not formally CANCELLED.",
+      "phase": "any"
+    },
+    {
+      "id": 27,
+      "title": "Commit poll: exactly half commit",
+      "input": "4 YES, 4 NO in 8-person group",
+      "expected": "Session SPLIT. New thread created with 4 committed members. Original thread closed.",
+      "phase": "COMMIT_POLL"
+    },
+    {
+      "id": 28,
+      "title": "Vote change after submitting",
+      "input": "Sends '1' then sends '2'",
+      "expected": "recordVote() updates existing response. Latest vote wins.",
+      "phase": "DECIDING_DESTINATION"
+    },
+    {
+      "id": 29,
+      "title": "Two people claim planner",
+      "input": "Person A sends 'PLANNER Me', Person B sends 'PLANNER Me'",
+      "expected": "Only current planner can use PLANNER command. Second person gets 'Only X can do that.'",
+      "phase": "any"
+    },
+    {
+      "id": 30,
+      "title": "Massive budget spread $400 vs $4000",
+      "expected": "analyzeBudget() detects spread ratio >2.0. budget_status = 'DISPUTED'. Rally prompts group discussion.",
+      "phase": "BUDGET_POLL"
+    },
+    {
+      "id": 31,
+      "title": "Group argues in thread",
+      "expected": "Rally listens passively via ConversationParser. Does not interject during free discussion. No response unless keyword used.",
+      "phase": "any"
+    },
+    {
+      "id": 32,
+      "title": "Someone tells Rally to stop — 'shut up'",
+      "expected": "Not a keyword match. Falls through to phase handler. Rally does not respond to non-keyword messages in passive phases.",
+      "phase": "any"
+    },
+    {
+      "id": 33,
+      "title": "All 8 suggest same destination",
+      "expected": "Only 1 candidate. advanceToDestinationVote() skips poll: 'Only one destination — X it is!'",
+      "phase": "COLLECTING_DESTINATIONS"
+    },
+    {
+      "id": 34,
+      "title": "Sub-group booking inside larger thread",
+      "input": "just me and Jake for this one",
+      "expected": "Rally doesn't support sub-groups in MVP. Entire committed list is used for splits.",
+      "phase": "any"
+    },
+    {
+      "id": 35,
+      "title": "Rally re-added to previously CANCELLED session",
+      "expected": "New session created (old one is CANCELLED, not matched by lookup). Fresh start.",
+      "phase": "INTRO"
+    },
+    {
+      "id": 36,
+      "title": "Minor in group",
+      "expected": "Rally has no age verification. All participants treated equally. No age-restricted content in trip planning.",
+      "phase": "any"
+    },
+    {
+      "id": 37,
+      "title": "Repetitive opener across sessions",
+      "expected": "BotResponseGenerator uses Claude Sonnet, generates fresh each time. Should vary naturally.",
+      "phase": "INTRO"
+    },
+    {
+      "id": 38,
+      "title": "Are you a bot?",
+      "input": "are you a bot?",
+      "expected": "Rally should respond honestly but on-brand: 'I'm Rally — part bot, part trip-planning legend.'",
+      "phase": "any"
+    },
+    {
+      "id": 39,
+      "title": "Casual conversation with Rally",
+      "input": "how are you? what's your favorite beach?",
+      "expected": "Rally deflects gracefully: 'I'm great when groups are booking trips! Let's focus on yours.'",
+      "phase": "any"
+    },
+    {
+      "id": 40,
+      "title": "Grieving participant",
+      "expected": "Rally has no sentiment detection. Continues normally. Edge case for future emotional intelligence.",
+      "phase": "any"
+    },
+    {
+      "id": 41,
+      "title": "Enthusiastic participant",
+      "input": "OMG YESSS LETS GOOOO 🔥🔥🔥",
+      "expected": "Tone profiling in BotResponseGenerator detects high energy. Celebration messages match.",
+      "phase": "any"
+    },
+    {
+      "id": 42,
+      "title": "Back-to-back Rally messages within 30s",
+      "expected": "Active conversation check in PRD: hold proactive messages if 3+ messages in 5 min. Not yet implemented.",
+      "phase": "any"
+    },
+    {
+      "id": 43,
+      "title": "Name collision — two Jakes",
+      "expected": "Both stored with same display_name. Rally uses phone suffix for disambiguation if needed.",
+      "phase": "INTRO"
+    },
+    {
+      "id": 44,
+      "title": "Unusual name spelling",
+      "input": "Siobhán - Tulum",
+      "expected": "Regex captures first word before dash. Stores 'Siobhán' correctly (Unicode-safe).",
+      "phase": "INTRO"
+    },
+    {
+      "id": 45,
+      "title": "Rally message too long",
+      "expected": "Most messages under 300 chars by design. Auto-chained messages can be longer. MMS limit is 1600 chars.",
+      "phase": "any"
+    },
+    {
+      "id": 46,
+      "title": "Participant calls out confusing message",
+      "input": "wait what does that mean",
+      "expected": "Falls through to ConversationParser. If in active phase, no response. Could add HELP-like handling.",
+      "phase": "any"
+    },
+    {
+      "id": 47,
+      "title": "Rally refers to someone who left",
+      "expected": "STATUS checks participant.status. Opted-out participants excluded from status summary.",
+      "phase": "any"
+    },
+    {
+      "id": 48,
+      "title": "Group inside joke or nickname",
+      "expected": "Rally doesn't detect or use nicknames. Uses stored display_name only.",
+      "phase": "any"
+    },
+    {
+      "id": 49,
+      "title": "Flight price update at 3am",
+      "expected": "NudgeScheduler runs on UTC cron. No timezone-aware quiet hours implemented yet.",
+      "phase": "cron"
+    },
+    {
+      "id": 50,
+      "title": "Premature celebration — 2 of 8 booked",
+      "expected": "Social proof fires per-participant: 'X's flights are locked in.' Not a group celebration.",
+      "phase": "AWAITING_FLIGHTS"
+    },
+    {
+      "id": 51,
+      "title": "23 hours silent — just under nudge threshold",
+      "expected": "No nudge fires. Poll nudge threshold is 24h from poll open, not from last message.",
+      "phase": "any_poll"
+    },
+    {
+      "id": 52,
+      "title": "Multiple nudge jobs fire simultaneously",
+      "expected": "scheduled_actions processed sequentially. Each action checks phase_sub_state before executing (idempotent).",
+      "phase": "cron"
+    },
+    {
+      "id": 53,
+      "title": "Nudge fires during PAUSE",
+      "expected": "PAUSE cancels all pending scheduled_actions. NudgeScheduler queries filter paused=false.",
+      "phase": "cron"
+    },
+    {
+      "id": 54,
+      "title": "RESUME same second as scheduled nudge",
+      "expected": "Race condition possible. Nudge checks session.paused before sending. RESUME resets nudge schedule.",
+      "phase": "cron"
+    },
+    {
+      "id": 55,
+      "title": "Trip in 3 days — no urgency in tone",
+      "expected": "No urgency detection implemented. Rally treats all trips equally regardless of proximity.",
+      "phase": "any"
+    },
+    {
+      "id": 56,
+      "title": "Trip dates already passed",
+      "expected": "RESUME handler checks dates.start < now(). Asks planner for new dates or RESET.",
+      "phase": "PAUSED"
+    },
+    {
+      "id": 57,
+      "title": "Vote closes with 3 of 8 missing",
+      "expected": "48h nudge marks non-responders as non_responsive. Poll resolves with available votes.",
+      "phase": "any_poll"
+    },
+    {
+      "id": 58,
+      "title": "Books flight right after 'wait' advice",
+      "expected": "BOOKED keyword always accepted. No conflict with price advice. Rally acknowledges booking.",
+      "phase": "AWAITING_FLIGHTS"
+    },
+    {
+      "id": 59,
+      "title": "Nudge on public holiday",
+      "expected": "No holiday awareness. Cron fires regardless. Future enhancement.",
+      "phase": "cron"
+    },
+    {
+      "id": 60,
+      "title": "Session PAUSED for 6 months",
+      "expected": "Paused sessions don't timeout. RESUME checks if dates passed. Session fully recoverable.",
+      "phase": "PAUSED"
+    },
+    {
+      "id": 61,
+      "title": "Two sessions for same thread_id",
+      "expected": "thread_id has UNIQUE constraint. Second insert fails. Lookup returns existing session.",
+      "phase": "INTRO"
+    },
+    {
+      "id": 62,
+      "title": "Zero destinations suggested",
+      "expected": "advanceToDestinationVote returns 'No destinations suggested yet — drop your ideas!'",
+      "phase": "COLLECTING_DESTINATIONS"
+    },
+    {
+      "id": 63,
+      "title": "Weekly flight check 4 days before trip",
+      "expected": "NudgeScheduler Job 3 fires regardless. Message is still useful ('book now').",
+      "phase": "cron"
+    },
+    {
+      "id": 64,
+      "title": "PROPOSE with no amount",
+      "input": "PROPOSE dinner",
+      "expected": "Parse fails. Rally responds: 'Usage: PROPOSE $[amount] [reason]'",
+      "phase": "any"
+    },
+    {
+      "id": 65,
+      "title": "PROPOSE $50,000",
+      "expected": "No upper bound check. Rally distributes normally. Group votes decide.",
+      "phase": "any"
+    },
+    {
+      "id": 66,
+      "title": "Proposer goes silent after confirmation",
+      "expected": "NudgeScheduler Job 6: 24h nudge to proposer. After 48h (pay_by), auto-cancel.",
+      "phase": "any"
+    },
+    {
+      "id": 67,
+      "title": "Two simultaneous PROPOSE requests",
+      "expected": "Queued commands: second PROPOSE queued until first resolves. 'There's an open vote right now.'",
+      "phase": "any"
+    },
+    {
+      "id": 68,
+      "title": "SPLIT before lodging booked",
+      "expected": "SPLIT works anytime — it's for any group expense, not just lodging.",
+      "phase": "any"
+    },
+    {
+      "id": 69,
+      "title": "PAID sent by non-proposer",
+      "expected": "handleProposePaid checks proposer_user_id. Non-match returns null (no action).",
+      "phase": "any"
+    },
+    {
+      "id": 70,
+      "title": "PROPOSE YES from opted-out participant",
+      "expected": "Opted-out participants excluded from PROPOSE distribution and threshold calculation.",
+      "phase": "any"
+    },
+    {
+      "id": 71,
+      "title": "PROPOSE threshold unreachable (5 needed, 3 in thread)",
+      "expected": "80% threshold applied to actual committed count. 3 people → need 3 (ceil(3*0.8)=3).",
+      "phase": "any"
+    },
+    {
+      "id": 72,
+      "title": "PROPOSE during wrong phase",
+      "expected": "PROPOSE is a keyword command — works in any phase. Queued if a collection flow is open.",
+      "phase": "any"
+    },
+    {
+      "id": 73,
+      "title": "Odd number split — $307 / 8 people",
+      "expected": "calculateSplit rounds to 2 decimals. Penny discrepancy added to first participant.",
+      "phase": "any"
+    },
+    {
+      "id": 74,
+      "title": "CANCEL after PAID",
+      "expected": "PROPOSE status is 'paid'. CANCEL after PAID has no handler — could add refund messaging.",
+      "phase": "any"
+    },
+    {
+      "id": 75,
+      "title": "PROPOSE with URL pasted in",
+      "input": "PROPOSE $200 https://airbnb.com/listing/123",
+      "expected": "Regex captures amount and reason (including URL). URL stored in reason string.",
+      "phase": "any"
+    },
+    {
+      "id": 76,
+      "title": "Claude API returns 500",
+      "expected": "BotResponseGenerator has graceful degradation. Sends templated fallback: 'Got it — give me a moment.'",
+      "phase": "any"
+    },
+    {
+      "id": 77,
+      "title": "Gemini returns malformed JSON",
+      "expected": "parseGeminiJson strips markdown fences. On parse failure, retries once. Then marks as 'unavailable'.",
+      "phase": "ESTIMATING_COSTS"
+    },
+    {
+      "id": 78,
+      "title": "Duplicate Twilio webhook delivery",
+      "expected": "Idempotency check on thread_messages.message_sid (UNIQUE). Second delivery returns 200 immediately.",
+      "phase": "any"
+    },
+    {
+      "id": 79,
+      "title": "Twilio rate limit — 20+ pending outbound",
+      "expected": "outbound_message_queue with priority ordering. Processes at 1 msg/sec. Lower priority messages wait.",
+      "phase": "cron"
+    },
+    {
+      "id": 80,
+      "title": "Supabase connection drops mid-transaction",
+      "expected": "Optimistic locking on trip_sessions.version. Failed writes detected on next attempt. Partial state possible.",
+      "phase": "any"
+    },
+    {
+      "id": 81,
+      "title": "Claude context window exceeded",
+      "expected": "serializeForPrompt keeps context under 2000 tokens. ConversationParser caps at 30 messages.",
+      "phase": "any"
+    },
+    {
+      "id": 82,
+      "title": "Gemini returns 'no flights found'",
+      "expected": "CostEstimator returns null. Fallback: 'Couldn't pull live prices — check Google Flights.'",
+      "phase": "ESTIMATING_COSTS"
+    },
+    {
+      "id": 83,
+      "title": "Webhook takes 10+ seconds, Twilio retries",
+      "expected": "Retry creates second webhook. Idempotency check catches duplicate MessageSid.",
+      "phase": "any"
+    },
+    {
+      "id": 84,
+      "title": "TripWebView token expires mid-session",
+      "expected": "Server returns 'This link has expired — text STATUS to get a fresh one.'",
+      "phase": "web_view"
+    },
+    {
+      "id": 85,
+      "title": "Outbound delivery failure (carrier error)",
+      "expected": "TwilioSender tracks consecutive_failures. After 3 within 48h, session marked ABANDONED.",
+      "phase": "any"
+    },
+    {
+      "id": 86,
+      "title": "Claude returns 'As an AI...'",
+      "expected": "No stripping implemented. BotResponseGenerator persona prompt instructs against this but doesn't enforce.",
+      "phase": "any"
+    },
+    {
+      "id": 87,
+      "title": "Two simultaneous webhooks for same session",
+      "expected": "Optimistic locking on trip_sessions.version prevents concurrent writes. One succeeds, one retries.",
+      "phase": "any"
+    },
+    {
+      "id": 88,
+      "title": "Re-engagement after bad trip",
+      "expected": "No sentiment detection. Re-engagement fires based on dates only. One message, no follow-up.",
+      "phase": "RE_ENGAGEMENT"
+    },
+    {
+      "id": 89,
+      "title": "YES from phone not in original session",
+      "expected": "MessageRouter checks RE_ENGAGEMENT_PENDING status. Any reply triggers new session with all original participants.",
+      "phase": "RE_ENGAGEMENT"
+    },
+    {
+      "id": 90,
+      "title": "Re-engagement for trip that never happened",
+      "expected": "PRD: trip_likely_cancelled flag suppresses re-engagement if pre-departure message got no response.",
+      "phase": "RE_ENGAGEMENT"
+    },
+    {
+      "id": 91,
+      "title": "Multiple YES replies to re-engagement",
+      "expected": "First YES creates new session. Subsequent YES messages route to the new active session.",
+      "phase": "RE_ENGAGEMENT"
+    },
+    {
+      "id": 92,
+      "title": "YES then CANCEL for re-engagement",
+      "expected": "YES creates new session. CANCEL (if planner) sets new session to CANCELLED.",
+      "phase": "RE_ENGAGEMENT"
+    },
+    {
+      "id": 93,
+      "title": "Original thread no longer exists",
+      "expected": "Twilio delivery failure. TwilioSender detects consecutive failures → session ABANDONED.",
+      "phase": "RE_ENGAGEMENT"
+    },
+    {
+      "id": 94,
+      "title": "Re-engagement references wrong destination",
+      "expected": "Message uses session.destination which is the confirmed destination. If null, uses 'that trip'.",
+      "phase": "RE_ENGAGEMENT"
+    },
+    {
+      "id": 95,
+      "title": "Third session via re-engagement",
+      "expected": "New TripSession created normally. parent chain: session3 ← session2 ← session1 (via parent_session_id).",
+      "phase": "RE_ENGAGEMENT"
+    }
+  ]
+}
