@@ -195,21 +195,10 @@ export async function routeMessage(
 
 // ─── 1:1 handler ─────────────────────────────────────────────────────────────
 
-async function handle1to1(admin: SupabaseClient, user: SmsUser): Promise<string> {
-  // Register as pending planner
-  await admin.from('pending_planners').upsert(
-    {
-      phone: user.phone,
-      registered_at: new Date().toISOString(),
-      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-    },
-    { onConflict: 'phone' },
-  );
-
+async function handle1to1(_admin: SupabaseClient, _user: SmsUser): Promise<string> {
   return (
     "Hey! I'm Rally \u2014 I help groups plan trips fast. " +
-    "You're registered as the trip organizer. " +
-    'Now add me to a group thread with your crew and I\u2019ll take it from there. ' +
+    'Add me to a group thread with your crew and I\u2019ll take it from there. ' +
     'Reply STOP anytime to opt out.'
   );
 }
@@ -253,9 +242,46 @@ async function handleKeyword(
       return handleProposeKeyword(admin, session, fromUser, args);
     case 'CANCEL':
       return handleProposeCancel(admin, session, fromUser.id);
+    case 'PLANNER':
+      return handlePlannerTransfer(admin, session, fromUser, args);
     default:
       return `Got it \u2014 ${keyword} ${args}.`;
   }
+}
+
+async function handlePlannerTransfer(
+  admin: SupabaseClient,
+  session: TripSession,
+  _user: SmsUser,
+  args: string,
+): Promise<string> {
+  const targetName = args.trim();
+  if (!targetName) return 'Usage: PLANNER [name]\nExample: PLANNER Sarah';
+
+  const participants = await getParticipants(admin, session.id);
+  const target = participants.find((p) =>
+    p.display_name?.toLowerCase().includes(targetName.toLowerCase()) && p.status === 'active',
+  );
+
+  if (!target) return `Can't find "${targetName}" in the group.`;
+  if (target.user_id === session.planner_user_id) return `${target.display_name} is already the planner.`;
+
+  // Remove is_planner from current planner
+  await admin.from('trip_session_participants')
+    .update({ is_planner: false })
+    .eq('trip_session_id', session.id)
+    .eq('is_planner', true);
+
+  // Set new planner
+  await admin.from('trip_session_participants')
+    .update({ is_planner: true })
+    .eq('id', target.id);
+
+  await admin.from('trip_sessions')
+    .update({ planner_user_id: target.user_id })
+    .eq('id', session.id);
+
+  return `${target.display_name} is now the trip planner.`;
 }
 
 async function handleStop(
@@ -553,6 +579,38 @@ async function handlePhaseMessage(
       updated_at: new Date().toISOString(),
     }).eq('id', session.id);
     return 'Reset cancelled \u2014 carrying on.';
+  }
+
+  // ─── Pre-fill confirmation (must check before phase handlers) ──────────
+  if (resetSubState === 'PREFILL_CONFIRMATION' && message.participant) {
+    const isConfirm = /^(y(a+|e+)?s+|yep|yup|yeah+|works?|good|perfect|down|sounds?\s*good|i.?m\s*good|i.?m\s*down|let.?s\s*do\s*it|bet|same|locked|confirmed?)$/i.test(body.trim());
+    if (isConfirm) {
+      await admin.from('trip_session_participants')
+        .update({ budget_raw: 'PREFILL_CONFIRMED' })
+        .eq('id', message.participant.id);
+
+      const { data: allP } = await admin
+        .from('trip_session_participants')
+        .select('budget_raw')
+        .eq('trip_session_id', session.id)
+        .eq('status', 'active');
+      const confirmed = (allP ?? []).filter((p: { budget_raw?: string }) => p.budget_raw === 'PREFILL_CONFIRMED').length;
+      const total = (allP ?? []).length;
+
+      if (confirmed >= total) {
+        await admin.from('trip_sessions').update({ phase_sub_state: null }).eq('id', session.id);
+        await admin.from('trip_session_participants').update({ budget_raw: null }).eq('trip_session_id', session.id);
+        const { data: freshS } = await admin.from('trip_sessions').select('*').eq('id', session.id).single();
+        if (freshS) {
+          const nextMsg = await advancePhase(admin, freshS);
+          return nextMsg ? `Confirmed! ${nextMsg}` : 'Confirmed! Moving on.';
+        }
+      }
+      return `${message.participant.display_name ?? 'Got it'} \u2014 ${confirmed}/${total} confirmed.`;
+    }
+    // Non-confirmation — could be a suggestion or disagreement. Stay silent and let them discuss.
+    // Planner can NEXT to skip.
+    return null;
   }
 
   // ─── Personality intercepts (no LLM needed) ─────────────────────────────
@@ -1125,7 +1183,12 @@ async function handlePhaseMessage(
       const name = fromUser.display_name ?? 'Got it';
       const autoMsg = await checkAutoAdvance(admin, session);
       if (autoMsg) return `${name} \u2014 ${origin}. ${autoMsg}`;
-      return `${name} \u2014 ${origin}. Waiting on the rest.`;
+      // Show X/Y progress like dates confirmation does
+      const allOriginP = await getParticipants(admin, session.id);
+      const activeOriginP = allOriginP.filter((p) => p.status === 'active');
+      const submittedCount = activeOriginP.filter((p) => p.origin_airport || p.origin_city || p.user_id === fromUser.id).length;
+      const totalCount = activeOriginP.length;
+      return `${name} \u2014 ${origin}. ${submittedCount}/${totalCount} replied. Waiting on the rest.`;
     }
   }
 
@@ -1263,6 +1326,68 @@ async function handlePhaseMessage(
 
   // Budget poll phase — handle budget responses (only when no vote poll is open)
   if (phase === 'BUDGET_POLL' && message.participant && !(session as Record<string,unknown>).current_poll_id) {
+    const budgetUpper = body.trim().toUpperCase();
+
+    // READY — resolve disputed budget by finding lowest amount from discussion
+    if (budgetUpper === 'READY') {
+      const { data: freshS } = await admin.from('trip_sessions').select('budget_status').eq('id', session.id).single();
+      if (freshS?.budget_status === 'DISPUTED') {
+        const { data: recentMsgs } = await admin
+          .from('thread_messages')
+          .select('body')
+          .eq('trip_session_id', session.id)
+          .eq('direction', 'inbound')
+          .order('created_at', { ascending: false })
+          .limit(20);
+
+        const amounts: number[] = [];
+        for (const m of recentMsgs ?? []) {
+          for (const match of m.body.matchAll(/\$\s*([\d,]+(?:\.\d{2})?)/g)) {
+            const val = parseFloat(match[1].replace(',', ''));
+            if (!isNaN(val) && val > 0 && val < 100000) amounts.push(val);
+          }
+        }
+
+        if (amounts.length > 0) {
+          const lowest = Math.min(...amounts);
+          await admin.from('trip_sessions').update({
+            budget_median: lowest,
+            budget_status: 'ALIGNED',
+            updated_at: new Date().toISOString(),
+          }).eq('id', session.id);
+
+          const { data: updS } = await admin.from('trip_sessions').select('*').eq('id', session.id).single();
+          const nextMsg = updS ? await advancePhase(admin, updS) : null;
+          const readyMsg = `Budget set to $${lowest}/person. Moving on.`;
+          return nextMsg ? readyMsg + '\n\n' + nextMsg : readyMsg;
+        }
+        return "I didn't catch a specific number from the discussion. Planner can text BUDGET SET $[amount] to lock it in.";
+      }
+    }
+
+    // BUDGET SET $[amount] — planner override
+    const budgetSetMatch = body.match(/^budget\s+set\s+\$?([\d,]+(?:\.\d{2})?)/i);
+    if (budgetSetMatch) {
+      const isPlanner = fromUser.id === session.planner_user_id || message.participant?.is_planner;
+      if (!isPlanner) {
+        const plannerName = await getPlannerName(admin, session);
+        return `Only the planner (${plannerName}) can set the budget.`;
+      }
+      const bAmount = parseFloat(budgetSetMatch[1].replace(',', ''));
+      if (isNaN(bAmount) || bAmount <= 0) return 'Invalid amount. Try: BUDGET SET $1000';
+
+      await admin.from('trip_sessions').update({
+        budget_median: bAmount,
+        budget_status: 'ALIGNED',
+        updated_at: new Date().toISOString(),
+      }).eq('id', session.id);
+
+      const { data: updS } = await admin.from('trip_sessions').select('*').eq('id', session.id).single();
+      const nextMsg = updS ? await advancePhase(admin, updS) : null;
+      const setMsg = `Budget locked at $${bAmount}/person.`;
+      return nextMsg ? setMsg + '\n\n' + nextMsg : setMsg;
+    }
+
     const budgetResult = await handleBudgetResponse(admin, session, message.participant, body);
     if (budgetResult) {
       // Budget resolved — advance phase
@@ -1356,8 +1481,17 @@ async function handleNext(
   session: TripSession,
   user: SmsUser,
 ): Promise<string> {
-  // If in DECIDING_DATES with proposed dates, clear sub_state and budget_raw before advancing
+  // If in DECIDING_DATES with proposed dates or pre-fill confirmation, clear sub_state
   const subState = (session as Record<string, unknown>).phase_sub_state as string | null;
+  if (subState === 'PREFILL_CONFIRMATION') {
+    await admin.from('trip_sessions').update({
+      phase_sub_state: null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', session.id);
+    await admin.from('trip_session_participants')
+      .update({ budget_raw: null })
+      .eq('trip_session_id', session.id);
+  }
   if (session.phase === 'DECIDING_DATES' && subState === 'DATES_PROPOSED') {
     await admin.from('trip_sessions').update({
       phase_sub_state: null,

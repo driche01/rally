@@ -285,8 +285,8 @@ export async function processInboundMessage(
         }
 
         introResponse =
-          `Hey! I'm Rally \ud83d\udc4b I'll get this group to first booking as fast as possible. ` +
-          `Drop your name and where you're thinking for this trip \u2014 ` +
+          `Hey! I'm Rally \ud83d\udc4b I help groups plan trips fast. ` +
+          `Everyone drop your name so I know who's here \u2014 ` +
           `I'll take it from there. Reply STOP anytime to opt out.`;
       }
     }
