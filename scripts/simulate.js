@@ -61,6 +61,8 @@ async function sendMessage(from, body, phones, opts = {}) {
   let lastErr;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 60_000); // 60s timeout
       const res = await fetch(`${BASE_URL}/sms-inbound`, {
         method: 'POST',
         headers: {
@@ -68,7 +70,9 @@ async function sendMessage(from, body, phones, opts = {}) {
           Authorization: `Bearer ${SERVICE_KEY}`,
         },
         body: params.toString(),
+        signal: controller.signal,
       });
+      clearTimeout(timer);
 
       if (!res.ok) {
         console.error(`  FAIL: ${body} → HTTP ${res.status}`);
@@ -110,7 +114,7 @@ async function run() {
 
     const tag = msg.from.slice(-4);
     console.log(`  [${tag}] ${msg.body}`);
-    if (reply) console.log(`    → ${reply.slice(0, 200)}`);
+    if (reply) console.log(`    → ${reply}`);
   }
 
   console.log(`\n--- Outbound messages collected: ${outboundMessages.length} ---\n`);
