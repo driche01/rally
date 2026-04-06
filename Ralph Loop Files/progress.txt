@@ -1,19 +1,72 @@
 # Rally SMS Agent — Ralph Loop Progress
 
-## Status: IN PROGRESS
+## Status: ALL 7 SCENARIOS PASSING
 
 ## Completed Tasks:
 
-### Phase 1: Large Group & Attrition (scenario 8) — ALL PASSING
-- [x] P1-1: Handle 10+ participant groups — 10 participants registered, STATUS works correctly
-- [x] P1-2: Graceful self-removal — "Won't be able to make it" / "Have to remove myself" detected, marks opted_out with warm farewell ("{name} — got it, we'll miss you!") instead of harsh STOP response
-- [x] P1-3: Track alternative dates — "Also flexible weekend of 9/5" stored as alternative via deadlines field, acknowledged separately
-- [x] P1-4: Partial availability — "out for the first two wks of sept" stored as CONSTRAINT in budget_raw, acknowledged with "we'll work around that"
-- [x] P1-5: Filter compliments — "Bless you for being an organizer" / "thank you for planning" → silent (null response)
-- [x] P1-6: Off-topic detection — "Are you at Dolores for the protest?" / "out of town at the river this weekend" → silent
-- [x] P1-7: Slang/abbreviations — "A Bri bday boat I c u" → silent (not parsed as date/trip decision)
+### Phase 1: Large Group & Attrition (scenario 8) — PASSING
+- [x] P1-1: Handle 10+ participant groups
+- [x] P1-2: Graceful self-removal (warm farewell instead of harsh STOP)
+- [x] P1-3: Track alternative dates
+- [x] P1-4: Partial availability as date constraint
+- [x] P1-5: Filter compliments to organizer
+- [x] P1-6: Off-topic detection
+- [x] P1-7: Slang/abbreviations
 
-Key code changes:
-- message-router.ts: Added graceful opt-out detection, compliment filter, off-topic filter, farewell filter, partial availability handler, weekend-of-M/D date parser, alternative date tracking
-- inbound-processor.ts: Fixed opted-out participant re-add bug (was creating new participant on next message; now recognizes existing opted_out participant)
-- Added "lake shasta" to KNOWN_DESTINATIONS
+### Phase 2: Planner Drops Out (scenario 9) — PASSING
+- [x] P2-1: Planner drops out, trip continues
+- [x] P2-2: Non-planner adds people mid-conversation
+- [x] P2-3: Third-party status reports ignored
+- [x] P2-4: Image/media messages (handled pre-existing)
+- [x] P2-5: Unanswerable logistics questions — silent
+- [x] P2-6: Long off-topic bonding threads — all 10+ messages silent
+
+### Phase 3: Destination Pivot (scenario 10) — PASSING
+- [x] P3-1: Multiple date ranges in one message create vote options
+- [x] P3-2: Budget info extracted and stored, skip budget poll
+- [x] P3-3: Out-of-order questions handled
+- [x] P3-4: Destination mentions tracked at any phase
+- [x] P3-5: Flexible votes accepted
+- [x] P3-6: Person removed by others (pre-existing REMOVE)
+- [x] P3-7: Gaps between messages handled
+
+### Phase 4: Flight Booking Chaos (scenario 11) — PASSING
+- [x] P4-1: Different origin cities tracked
+- [x] P4-2: Media ignored
+- [x] P4-3: Varied booking confirmations detected
+- [x] P4-4: Deadline announcements handled
+- [x] P4-5: Info requests stay silent
+- [x] P4-6: Async booking states handled
+- [x] P4-7: Off-topic ignored
+
+### Phase 5: During-Trip Noise (scenario 12) — PASSING
+- [x] P5-1: Grocery coordination — silent
+- [x] P5-2: Property logistics — silent
+- [x] P5-3: Activity coordination — silent
+- [x] P5-4: Last-minute addition onboarded
+- [x] P5-5: Asterisk corrections ignored
+
+### Phase 6: Ambiguous Commitments (scenario 13) — PASSING
+- [x] P6-1: "I might be in" → asks for firm answer
+- [x] P6-2: Conditional availability accepted
+- [x] P6-3: Future intent not marked as booked
+- [x] P6-4: Budget-as-decline triggers opt-out
+- [x] P6-5: Sarcastic third-party answers ignored
+- [x] P6-6: Contextless words ("Levinsky") ignored
+
+### Phase 7: Post-Booking & Payment (scenario 14) — PASSING
+- [x] P7-1: Booking confirmation detected
+- [x] P7-2: Uncertain headcount accepted
+- [x] P7-3: Late opt-out detected
+- [x] P7-4: Per-person cost detected
+- [x] P7-5: Payment reminders stay silent
+- [x] P7-6: Payment status questions stay silent (peer-to-peer)
+- [x] P7-7: Restaurant coordination not mistaken for trip decisions
+- [x] P7-8: Venmo setup chatter ignored
+- [x] P7-9: Payment jokes ignored
+- [x] P7-10: Pure banter in payment threads silent
+
+## Key Code Changes:
+- **message-router.ts**: Graceful opt-out detection, compliment/off-topic/emotional/social filters, during-trip logistics silence, booking phrase detection in AWAITING_FLIGHTS, ambiguous COMMIT_POLL handling, partial availability, weekend-of-M/D dates, multi-date range parsing, budget extraction, destination tracking at any phase, asterisk corrections
+- **inbound-processor.ts**: Fixed opted-out participant re-add bug
+- **KNOWN_DESTINATIONS**: Added lake shasta, nassau, dominican republic, santo domingo
