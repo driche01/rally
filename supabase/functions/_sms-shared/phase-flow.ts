@@ -122,6 +122,19 @@ async function advanceFromCollectingDestinations(
 ): Promise<string | null> {
   await transitionPhase(admin, session, 'DECIDING_DATES', triggerUserId, triggerMessageSid);
 
+  // Check if dates are already pre-filled (planner intake) — skip ahead
+  const { data: fresh } = await admin.from('trip_sessions').select('*').eq('id', session.id).single();
+  if (fresh?.dates && fresh?.budget_median) {
+    // Both dates and budget pre-filled — skip to destination vote
+    const skipMsg = await advancePhase(admin, fresh);
+    return `Dates and budget already sorted. ${skipMsg ?? ''}`;
+  }
+  if (fresh?.dates) {
+    // Dates pre-filled but no budget — skip to budget
+    const skipMsg = await advancePhase(admin, fresh);
+    return `Dates already sorted. ${skipMsg ?? ''}`;
+  }
+
   return "When are you thinking? Drop your dates \u2014 exact or rough both work.";
 }
 
