@@ -554,7 +554,9 @@ async function handlePhaseMessage(
   // Detect "I won't be able to make it", "have to remove myself", "I'm out",
   // "count me out", "sadly out" etc. WITHOUT requiring STOP keyword.
   // Mark as opted_out but send a warm farewell instead of the harsh STOP response.
-  const gracefulOptOutPattern = /\b(won'?t\s+be\s+able\s+to\s+make\s+it|have\s+to\s+remove\s+myself|(?:i'?m|i\s+am)\s+(?:sadly\s+)?out(?!\s+(?:for|of)\s+(?:the\s+first|town))|count\s+me\s+out|can'?t\s+(?:make\s+it|come|go|do\s+it)|not\s+(?:gonna|going\s+to)\s+(?:make\s+it|be\s+able)|have\s+to\s+(?:bow\s+out|drop\s+out|sit\s+this\s+one\s+out|pass)|gotta\s+(?:pass|bow\s+out|sit\s+out)|sadly\s+(?:i\s+)?can'?t|i'?m\s+definitely\s+out)\b/i;
+  // "I'm out" only matches as opt-out when NOT followed by "of [activity/noun phrase]"
+  // e.g. "I'm out" = opt-out, but "out of snow activities" or "out of town" = NOT opt-out
+  const gracefulOptOutPattern = /\b(won'?t\s+be\s+able\s+to\s+make\s+it|have\s+to\s+remove\s+myself|(?:i'?m|i\s+am)\s+(?:sadly\s+)?out(?!\s+(?:of|for)\b)|count\s+me\s+out|can'?t\s+(?:make\s+it|come|go|do\s+it)|not\s+(?:gonna|going\s+to)\s+(?:make\s+it|be\s+able)|have\s+to\s+(?:bow\s+out|drop\s+out|sit\s+this\s+one\s+out|pass)|gotta\s+(?:pass|bow\s+out|sit\s+out)|sadly\s+(?:i\s+)?can'?t|i'?m\s+definitely\s+out|don'?t\s+think\s+i'?m\s+(?:gonna|going\s+to)\s+make\s+it)\b/i;
   if (gracefulOptOutPattern.test(body) && message.participant) {
     // Make sure this isn't partial availability ("I'm out for the first two weeks")
     const partialPattern = /\b(?:i'?m|i\s+am)\s+(?:sadly\s+)?out\s+(?:for|of)\s+(?:the\s+first|the\s+last|the\s+second|the\s+third)/i;
@@ -576,6 +578,45 @@ async function handlePhaseMessage(
   }
   // Also catch short standalone compliments like "+1 thank you for planning!"
   if (/^(?:\+1[,.]?\s*)?(?:bless\s+you|thanks?(?:\s*you)?|ty)\b/i.test(body.trim()) && /\b(?:plan|organiz|coordinat)\w*/i.test(body)) {
+    return null;
+  }
+
+  // ─── Third-party status reports — stay silent (P2-3) ────────────────────
+  // "Michelle is a TBD", "He has laundry scheduled", "She might not make it"
+  if (/\b(\w+)\s+(?:is\s+(?:a\s+)?(?:TBD|maybe|tentative|uncertain)|might\s+(?:not\s+)?(?:make\s+it|come|be\s+(?:able|too))|has\s+\w+\s+scheduled|won'?t\s+(?:be\s+able|make\s+it))\b/i.test(body)) {
+    // Only match when talking about a third party (not "I")
+    const subjectMatch = body.match(/^(\w+)\s+(?:is\s+|might\s+|has\s+|won'?t\s+)/i);
+    if (subjectMatch && !['i', 'im', "i'm", 'we', "we're"].includes(subjectMatch[1].toLowerCase())) {
+      return null;
+    }
+  }
+
+  // ─── Emotional reactions — stay silent (P2-6) ──────────────────────────
+  // "noooo!!!", "I'm so sorry", "omg", reactions to personal news
+  if (/^(?:no+o+!*|nooo+!*|oo+f+!*|oh\s*no+!*|omg+!*|ugh+!*)$/i.test(body.trim())) {
+    return null;
+  }
+  if (/\b(?:i'?m\s+so\s+(?:so\s+)?sorry|sorry\s+to\s+hear|that\s+(?:sucks|stinks)|oh\s+no|poor\s+\w+|get\s+well|feel\s+better|sending\s+(?:love|hugs))\b/i.test(body) && wordCount <= 12) {
+    return null;
+  }
+
+  // ─── Off-topic personal stories and peer-to-peer chat — stay silent ────
+  // Questions directed at another person (not the bot)
+  if (/\b(?:was\s+it\s+\w+ing|did\s+(?:you|he|she|they)\s+\w+|too\s+bad\s+you\s+can'?t|you\s+should\s+(?:sue|try|ask|call)|sue\s+(?:that|the|him|her)|sounds?\s+like\s+a\s+dick|sounds?\s+like\s+an?\s+\w+)\b/i.test(body) && wordCount <= 15) {
+    return null;
+  }
+  // Short exclamatory reactions: "Def sue that bro", "NOOOO"
+  if (/^(?:def(?:initely)?\s+.{3,20}|lol+|haha+|omg+|yikes+|oof+|rip+|damn+|wow+|bruh+|sheesh+|aye+|ayy+)!*$/i.test(body.trim())) {
+    return null;
+  }
+  // Messages that are clearly responses to another person's personal story
+  if (/\b(?:the\s+instructor|sounds?\s+like|at\s+least|could\s+be\s+worse|on\s+the\s+bright\s+side|hope\s+you|wish\s+you|take\s+care)\b/i.test(body) && !/\b(trip|travel|flight|hotel|airbnb|book|dates?|budget|cost|destination)\b/i.test(body)) {
+    return null;
+  }
+
+  // ─── Peer-to-peer logistics questions — stay silent (P2-5) ─────────────
+  // Questions about property details the bot can't answer
+  if (/\b(?:what'?s?\s+the\s+(?:garage|wifi|gate|door|lock|address|code|password|key)|how\s+(?:do\s+(?:you|we)\s+)?(?:close|open|lock|unlock|use)\s+the|where'?s?\s+the\s+(?:key|remote|thermostat|breaker)|do\s+(?:we|you)\s+need\s+to\s+rent)\b/i.test(body)) {
     return null;
   }
 
