@@ -125,17 +125,36 @@ async function advanceFromCollectingDestinations(
 ): Promise<string | null> {
   await transitionPhase(admin, session, 'DECIDING_DATES', triggerUserId, triggerMessageSid);
 
-  // Check if dates are already pre-filled (planner intake) — skip ahead
+  // Check if dates/budget are pre-filled (planner intake) — ask group to confirm
   const { data: fresh } = await admin.from('trip_sessions').select('*').eq('id', session.id).single();
-  if (fresh?.dates && fresh?.budget_median) {
-    // Both dates and budget pre-filled — skip to destination vote
-    const skipMsg = await advancePhase(admin, fresh);
-    return `Dates and budget already sorted. ${skipMsg ?? ''}`;
-  }
-  if (fresh?.dates) {
-    // Dates pre-filled but no budget — skip to budget
-    const skipMsg = await advancePhase(admin, fresh);
-    return `Dates already sorted. ${skipMsg ?? ''}`;
+  if (fresh?.dates || fresh?.budget_median) {
+    const parts: string[] = [];
+    const dest = (fresh.destination_candidates as Array<{ label: string }>)?.[0]?.label ?? fresh.destination;
+    if (dest) parts.push(dest);
+    if (fresh.dates) {
+      const d = fresh.dates as { start: string; end: string };
+      const start = new Date(d.start + 'T12:00:00');
+      const end = new Date(d.end + 'T12:00:00');
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      parts.push(`${months[start.getMonth()]} ${start.getDate()}\u2013${end.getDate()}`);
+    }
+    if (fresh.budget_median) parts.push(`~$${fresh.budget_median}/person`);
+
+    const planner = participants.find(p => p.is_planner);
+    const plannerName = planner?.display_name ?? 'The planner';
+
+    // Auto-confirm the planner who proposed it
+    if (planner) {
+      await admin.from('trip_session_participants')
+        .update({ budget_raw: 'PREFILL_CONFIRMED' })
+        .eq('id', planner.id);
+    }
+
+    await admin.from('trip_sessions').update({
+      phase_sub_state: 'PREFILL_CONFIRMATION',
+    }).eq('id', session.id);
+
+    return `${plannerName} proposed ${parts.join(', ')}. Everyone good? Reply YES to confirm or suggest changes.`;
   }
 
   return "When are you thinking? Drop your dates \u2014 exact or rough both work.";

@@ -189,7 +189,8 @@ export async function handleSplitCommand(
     messages: JSON.stringify(messages),
   });
 
-  return `Splitting $${intent.amount} for ${intent.reason} \u2014 $${perPerson}/person for ${ways} of you. Sending links.`;
+  const groupLink = venmoWebLink(requesterPhone, perPerson, note);
+  return `Splitting $${intent.amount} for ${intent.reason} \u2014 $${perPerson}/person for ${ways} of you.\n\nPay ${requesterName}: ${groupLink}`;
 }
 
 // ─── PROPOSE flow ────────────────────────────────────────────────────────────
