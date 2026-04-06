@@ -218,7 +218,16 @@ export async function transitionPhase(
   triggeredByUserId?: string,
   triggeringMessageSid?: string,
 ): Promise<boolean> {
-  const fromPhase = session.phase;
+  // Reload current phase + version to handle chained transitions
+  const { data: current } = await admin
+    .from('trip_sessions')
+    .select('phase, version')
+    .eq('id', session.id)
+    .single();
+
+  if (!current) return false;
+  const fromPhase = current.phase;
+  const currentVersion = current.version;
 
   // Validate transition
   const allowed = VALID_TRANSITIONS[fromPhase];
@@ -227,16 +236,16 @@ export async function transitionPhase(
     return false;
   }
 
-  // Optimistic locking: update only if version matches
+  // Optimistic locking with fresh version
   const { data, error } = await admin
     .from('trip_sessions')
     .update({
       phase: toPhase,
-      version: session.version + 1,
+      version: currentVersion + 1,
       updated_at: new Date().toISOString(),
     })
     .eq('id', session.id)
-    .eq('version', session.version)
+    .eq('version', currentVersion)
     .select('id')
     .maybeSingle();
 

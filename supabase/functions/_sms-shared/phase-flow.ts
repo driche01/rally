@@ -186,12 +186,14 @@ async function advanceToDestinationVote(
       .slice(0, 4);
   }
 
-  // If only one candidate, lock it in directly
+  // If only one candidate, lock it in directly — still go through DECIDING_DESTINATION for valid transition chain
   if (candidates.length === 1) {
     await admin
       .from('trip_sessions')
       .update({ destination: candidates[0].label })
       .eq('id', session.id);
+    // Transition through DECIDING_DESTINATION → COLLECTING_ORIGINS
+    await transitionPhase(admin, session, 'DECIDING_DESTINATION', triggerUserId, triggerMessageSid);
     await transitionPhase(admin, session, 'COLLECTING_ORIGINS', triggerUserId, triggerMessageSid);
     return `Only one destination on the table \u2014 ${candidates[0].label} it is! Where is everyone flying from? Reply with your city or airport code.`;
   }
