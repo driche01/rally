@@ -86,7 +86,8 @@ const KNOWN_DESTINATIONS = [
   'mexico city', 'cdmx', 'costa rica', 'puerto rico', 'cartagena',
   'nashville', 'austin', 'scottsdale', 'vegas', 'las vegas', 'new orleans',
   'lake tahoe', 'lake shasta', 'shasta', 'sedona', 'joshua tree', 'palm springs',
-  'jamaica', 'punta cana', 'aruba', 'bahamas', 'turks and caicos',
+  'jamaica', 'punta cana', 'aruba', 'bahamas', 'nassau', 'turks and caicos',
+  'dominican republic', 'santo domingo',
   'iceland', 'portugal', 'spain', 'italy', 'greece', 'japan', 'thailand',
   'colombia', 'peru', 'argentina', 'brazil',
   'new york', 'nyc', 'los angeles', 'la', 'san francisco', 'chicago',
@@ -631,6 +632,49 @@ async function handlePhaseMessage(
     return null;
   }
 
+  // ─── P3-2: Budget info embedded in message — extract and store ──────────
+  // "flights ~$325 and villa ~$550/person", "$200 pp for the weekend"
+  const budgetMentions = [...body.matchAll(/\$\s*([\d,]+(?:\.\d{2})?)/g)];
+  if (budgetMentions.length > 0 && /\b(flight|villa|hotel|airbnb|lodging|per\s*person|pp|person|total)\b/i.test(body)) {
+    const amounts = budgetMentions.map(m => parseFloat(m[1].replace(',', ''))).filter(a => !isNaN(a) && a > 0);
+    if (amounts.length > 0) {
+      const totalPerPerson = amounts.reduce((sum, a) => sum + a, 0);
+      // Store as preliminary budget if no budget set yet
+      const { data: freshS } = await admin.from('trip_sessions').select('budget_median, budget_status').eq('id', session.id).single();
+      if (freshS && !freshS.budget_median) {
+        await admin.from('trip_sessions').update({
+          budget_median: totalPerPerson,
+          budget_status: 'ALIGNED',
+          updated_at: new Date().toISOString(),
+        }).eq('id', session.id);
+      }
+    }
+  }
+
+  // ─── P3-4/P3-5: Destination mentions during non-INTRO phases ───────────
+  // Recognize new destination candidates at any point in the planning process
+  if (phase !== 'INTRO') {
+    const bodyLower = body.toLowerCase();
+    for (const dest of KNOWN_DESTINATIONS) {
+      const destRegex = new RegExp(`\\b${dest.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+      if (destRegex.test(bodyLower)) {
+        const properDest = dest.split(' ').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+        const { data: freshS } = await admin.from('trip_sessions').select('destination_candidates').eq('id', session.id).single();
+        const existingCandidates = (freshS?.destination_candidates as Array<{ label: string; votes: number }>) ?? [];
+        if (!existingCandidates.some((c) => c.label.toLowerCase() === dest)) {
+          existingCandidates.push({ label: properDest, votes: 1 });
+          await admin.from('trip_sessions').update({
+            destination_candidates: existingCandidates,
+            updated_at: new Date().toISOString(),
+          }).eq('id', session.id);
+          // Don't respond here — let the message continue through phase handling
+          // The destination is silently tracked
+        }
+        break;
+      }
+    }
+  }
+
   // #32 — Dismissive / "shut up" messages (short, directed at Rally)
   if (wordCount <= 6 && /\b(shut\s*up|stop\s*talking|be\s*quiet|stfu|you'?re\s*annoying|go\s*away)\b/i.test(body)) {
     return "Noted. I'll keep it tight. Hit STATUS when you need me.";
@@ -770,6 +814,46 @@ async function handlePhaseMessage(
         return nextMsg ? dateMsg + '\n\n' + nextMsg : dateMsg;
       }
       return `${dateLabel} (${nights} nights) — everyone good? Reply YES to lock it in, or suggest different dates.`;
+    }
+
+    // P3-1: Check for MULTIPLE date ranges in one message ("Nov 8-12? maybe Nov 12-16?")
+    const allDateMatches = [...body.matchAll(/(\w+)\s+(\d{1,2})\s*[-\u2013to]+\s*(\d{1,2})/gi)];
+    const MONTH_MAP: Record<string, number> = {
+      jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2,
+      apr: 3, april: 3, may: 4, jun: 5, june: 5, jul: 6, july: 6,
+      aug: 7, august: 7, sep: 8, september: 8, oct: 9, october: 9,
+      nov: 10, november: 10, dec: 11, december: 11,
+    };
+    if (allDateMatches.length >= 2) {
+      // Multiple date ranges found — create options and ask group to vote
+      const dateOptions: Array<{ start: string; end: string; label: string }> = [];
+      for (const dm of allDateMatches) {
+        const mStr = dm[1];
+        const sDay = parseInt(dm[2]);
+        const eDay = parseInt(dm[3]);
+        const mNum = MONTH_MAP[mStr.toLowerCase()];
+        if (mNum === undefined || sDay <= 0 || eDay <= 0) continue;
+        const yr = new Date().getFullYear();
+        const s = new Date(yr, mNum, sDay);
+        const e = new Date(yr, mNum, eDay);
+        if (s < new Date()) { s.setFullYear(yr + 1); e.setFullYear(yr + 1); }
+        dateOptions.push({
+          start: s.toISOString().split('T')[0],
+          end: e.toISOString().split('T')[0],
+          label: `${mStr} ${sDay}–${eDay}`,
+        });
+      }
+      if (dateOptions.length >= 2) {
+        // Store both options and create a date vote
+        await admin.from('trip_sessions').update({
+          deadlines: dateOptions,
+          phase_sub_state: 'DATES_PROPOSED',
+          dates: { start: dateOptions[0].start, end: dateOptions[0].end, nights: Math.round((new Date(dateOptions[0].end).getTime() - new Date(dateOptions[0].start).getTime()) / (24*60*60*1000)) },
+          updated_at: new Date().toISOString(),
+        }).eq('id', session.id);
+        const labels = dateOptions.map(o => o.label);
+        return `A few date options:\n${labels.map((l, i) => `${i+1}. ${l}`).join('\n')}\n\nWhich works best? Vote by number or suggest your own.`;
+      }
     }
 
     // Try regex first for exact dates (e.g. "Nov 8-12", "Jan 15-19")

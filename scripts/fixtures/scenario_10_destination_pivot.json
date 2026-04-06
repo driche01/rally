@@ -1,0 +1,56 @@
+{
+  "script_name": "scenario_10_destination_pivot",
+  "description": "Planner proposes destination + multiple date ranges + budget in opening pitch. Group locks dates via voting. Weeks later flight prices spike, triggering destination reconsideration. Alternative destinations introduced mid-planning. Person removed by someone else. Based on real Tulum/Mexico trip text.",
+  "phones": {
+    "planner": "+15551300001",
+    "p2": "+15551300002",
+    "p3": "+15551300003",
+    "p4": "+15551300004",
+    "p5": "+15551300005",
+    "p6": "+15551300006",
+    "p7_removed": "+15551300007",
+    "rally": "+18559310010"
+  },
+  "assert_outbound_contains": [
+    "Reply STOP anytime",
+    "Tulum"
+  ],
+  "assert_outbound_does_not_contain": [
+    "Error",
+    "Could not parse"
+  ],
+  "messages": [
+    { "from": "+15551300001", "body": "Hey", "delay_ms": 0, "_note": "1:1 planner registration", "_is1to1": true },
+    { "from": "+15551300001", "body": "Caroline - Tulum", "delay_ms": 1000, "_note": "INTRO: planner opens with name + destination" },
+    { "from": "+15551300002", "body": "Ross", "delay_ms": 1000, "_note": "INTRO" },
+    { "from": "+15551300003", "body": "Abbey", "delay_ms": 1000, "_note": "INTRO" },
+    { "from": "+15551300004", "body": "Mike", "delay_ms": 1000, "_note": "INTRO" },
+    { "from": "+15551300005", "body": "Julia", "delay_ms": 1000, "_note": "INTRO" },
+    { "from": "+15551300006", "body": "Harry", "delay_ms": 1000, "_note": "INTRO" },
+    { "from": "+15551300007", "body": "Sofia", "delay_ms": 1000, "_note": "INTRO" },
+    { "from": "+15551300001", "body": "that's everyone", "delay_ms": 2000, "_note": "INTRO→COLLECTING_DESTINATIONS" },
+
+    { "from": "+15551300002", "body": "What city?", "delay_ms": 1000, "_note": "OUT OF ORDER: asking about destination after it was already mentioned. Agent should reply with current destination" },
+    { "from": "+15551300001", "body": "Have been looking at Tulum", "delay_ms": 1000, "_note": "Planner confirms destination" },
+
+    { "from": "+15551300001", "body": "probs about three full days, maybe Nov 8-12? maybe Nov 12-16?", "delay_ms": 2000, "_note": "DECIDING_DATES: two date ranges proposed in single message. Agent should detect both" },
+    { "from": "+15551300007", "body": "Nov 11th is Veterans Day so idk if people have that off also", "delay_ms": 1000, "_note": "Contextual info about dates — not a vote" },
+    { "from": "+15551300004", "body": "good shout sof", "delay_ms": 500, "_note": "Social acknowledgment — ignore" },
+    { "from": "+15551300002", "body": "As long as I don't have an exam either of the dates work", "delay_ms": 1000, "_note": "CONDITIONAL: both dates work but with caveat. Treat as flexible yes" },
+    { "from": "+15551300001", "body": "Okay y'all, votes are in. Nov 12-16", "delay_ms": 2000, "_note": "Planner announces date decision — agent should lock Nov 12-16" },
+
+    { "from": "+15551300001", "body": "im seeing flights ~$325 and villa ~$550/person", "delay_ms": 2000, "_note": "BUDGET: planner embeds cost estimate. Agent should store and potentially skip budget poll" },
+
+    { "from": "+15551300005", "body": "I'm good w either place we might end up going to!", "delay_ms": 2000, "_note": "FLEXIBLE VOTE: applies to all destination candidates. Don't force single choice" },
+    { "from": "+15551300007", "body": "Any updates on what we wanna do?", "delay_ms": 5000, "_note": "Momentum check after silence gap" },
+
+    { "from": "+15551300001", "body": "Flight price went up like $100 for Tulum. If prices don't go down, I think it's worth considering Rico more seriously", "delay_ms": 3000, "_note": "DESTINATION PIVOT: flight prices trigger new destination consideration. Agent should add Puerto Rico as candidate" },
+    { "from": "+15551300006", "body": "We can probably also do Puerto Rico if people want", "delay_ms": 1000, "_note": "Supporting alternative destination" },
+    { "from": "+15551300002", "body": "we can get to dominican republic for 380", "delay_ms": 1000, "_note": "THIRD DESTINATION: DR introduced. Agent should add as candidate" },
+    { "from": "+15551300002", "body": "nassau bahamas could be fun", "delay_ms": 1000, "_note": "FOURTH DESTINATION: Bahamas. Should be added" },
+
+    { "from": "+15551300003", "body": "My vote is Tulum same dates bc magee and I are also planning a roommate trip that would go back to back", "delay_ms": 2000, "_note": "VOTE WITH CONTEXT: voting for Tulum with personal reason" },
+
+    { "from": "+15551300001", "body": "STATUS", "delay_ms": 1000, "_note": "Status check: should show multiple destination candidates" }
+  ]
+}
