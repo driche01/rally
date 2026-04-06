@@ -1,0 +1,58 @@
+{
+  "script_name": "scenario_9_planner_drops_out",
+  "description": "Planner announces injury, can't attend but stays in chat to coordinate checkout logistics. Non-planner adds people mid-thread. Extended off-topic bonding. Third-party status reports. Based on real Tahoe ski trip text.",
+  "phones": {
+    "planner": "+15551290001",
+    "p2": "+15551290002",
+    "p3": "+15551290003",
+    "p4": "+15551290004",
+    "p5_late": "+15551290005",
+    "p6_late": "+15551290006",
+    "rally": "+18559310010"
+  },
+  "assert_outbound_contains": [
+    "Reply STOP anytime"
+  ],
+  "assert_outbound_does_not_contain": [
+    "session ended",
+    "trip cancelled",
+    "Error"
+  ],
+  "messages": [
+    { "from": "+15551290001", "body": "Hey", "delay_ms": 0, "_note": "1:1 planner registration", "_is1to1": true },
+    { "from": "+15551290001", "body": "Annika - Tahoe", "delay_ms": 1000, "_note": "INTRO: planner opens group" },
+    { "from": "+15551290002", "body": "Allison", "delay_ms": 1000, "_note": "INTRO: p2" },
+    { "from": "+15551290003", "body": "Bri", "delay_ms": 1000, "_note": "INTRO: p3" },
+    { "from": "+15551290004", "body": "Andy", "delay_ms": 1000, "_note": "INTRO: p4" },
+    { "from": "+15551290001", "body": "that's everyone for now", "delay_ms": 2000, "_note": "INTRO→COLLECTING_DESTINATIONS: planner confirms" },
+
+    { "from": "+15551290001", "body": "I unfortunately broke my arm this week and am out of any and all snow activities through the end of the season. But I want you all to still come up and enjoy the cabin!!", "delay_ms": 2000, "_note": "PLANNER DROPS OUT: announces can't attend but wants trip to continue. Should NOT end session" },
+    { "from": "+15551290001", "body": "I'll keep y'all updated if I do decide to come back, and let me know if this changes any of your plans too", "delay_ms": 1000, "_note": "Planner follow-up — still coordinating" },
+
+    { "from": "+15551290002", "body": "Annika noooooooo!!!!! I'm so so sorry", "delay_ms": 1000, "_note": "Emotional response — not a trip decision, should be ignored" },
+    { "from": "+15551290001", "body": "There's also a chance Nick and amanda might be up that weekend too!", "delay_ms": 1000, "_note": "Planner mentions potential additions — not actionable yet" },
+    { "from": "+15551290002", "body": "I have to ask.. was it snowboarding or skiing??", "delay_ms": 1000, "_note": "Off-topic question — ignore" },
+    { "from": "+15551290001", "body": "UGH snowboarding!! I'm a stereotype lol", "delay_ms": 1000, "_note": "Off-topic answer — ignore" },
+    { "from": "+15551290002", "body": "NOOOO", "delay_ms": 500, "_note": "Off-topic reaction — ignore" },
+    { "from": "+15551290002", "body": "Omg in a class??? Too bad you can't sue the instructor haha", "delay_ms": 1000, "_note": "Off-topic — ignore" },
+    { "from": "+15551290001", "body": "I'm going to try and get some money from it!! he told me to try this way of turning, then left me alone, and when I tried his turn that's when I fell and broke my arm!", "delay_ms": 1000, "_note": "Extended off-topic story — ignore" },
+    { "from": "+15551290002", "body": "Well the instructor sounds like a dick!", "delay_ms": 1000, "_note": "Off-topic — ignore" },
+    { "from": "+15551290003", "body": "ooooof I'm so sorry to hear that!!", "delay_ms": 1000, "_note": "Off-topic sympathy — ignore" },
+    { "from": "+15551290002", "body": "Def sue that bro", "delay_ms": 1000, "_note": "Off-topic — ignore" },
+
+    { "from": "+15551290003", "body": "Hi! Quickly following up to check on diff logistics. What day(s) are most people considering going up? Do we need to rent any vehicles?", "delay_ms": 3000, "_note": "Non-planner taking over logistics — legitimate trip planning question" },
+
+    { "from": "+15551290001", "body": "Mar 16-17 works for the cabin", "delay_ms": 1000, "_note": "DECIDING_DATES: planner proposes dates even though not attending" },
+    { "from": "+15551290002", "body": "works for me", "delay_ms": 1000, "_note": "DECIDING_DATES: confirmation" },
+    { "from": "+15551290003", "body": "same", "delay_ms": 1000, "_note": "DECIDING_DATES: confirmation" },
+
+    { "from": "+15551290004", "body": "I sadly have to fly to DC next Sunday for work so don't think I'm going to make it so potentially another spot if hasn't been filled", "delay_ms": 2000, "_note": "SOFT DROPOUT: not a hard no, leaving door open. Should mark as tentative opt-out" },
+
+    { "from": "+15551290001", "body": "Michelle is a TBD since she might be too jet lagged post Japan", "delay_ms": 2000, "_note": "THIRD-PARTY STATUS: planner reporting someone else's status. Should NOT be attributed to planner" },
+
+    { "from": "+15551290005", "body": "Amanda - hey everyone! Nick and I will have an SUV. Leaving Thurs night around 730-8 pm.", "delay_ms": 3000, "_note": "LATE JOINER: new person added by non-planner, introduces self with logistics" },
+    { "from": "+15551290006", "body": "Michelle", "delay_ms": 1000, "_note": "LATE JOINER: another new person" },
+
+    { "from": "+15551290001", "body": "STATUS", "delay_ms": 2000, "_note": "Status should show planner as non-attending but still planner, all participants listed" }
+  ]
+}
