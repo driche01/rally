@@ -21,9 +21,9 @@
     { "from": "+15551250002", "body": "Sarah — let's go!", "delay_ms": 1000 },
     { "from": "+15551250003", "body": "Mike — in", "delay_ms": 1000 },
     { "from": "+15551250004", "body": "Emma — yes!", "delay_ms": 1000 },
-    { "from": "+15551250001", "body": "that's everyone", "delay_ms": 2000, "_note": "Advance from INTRO" },
+    { "from": "+15551250001", "body": "that's everyone", "delay_ms": 2000, "_note": "Advance from INTRO — all 4 named, pre-filled dest+dates+budget skips to COLLECTING_ORIGINS" },
 
-    { "from": "+15551250001", "body": "SPLIT $200 4 ways dinner", "delay_ms": 2000, "_note": "Ad-hoc SPLIT: $200 / 4 = $50/person. Rally should generate Venmo links." },
+    { "from": "+15551250001", "body": "SPLIT $200 4 ways dinner", "delay_ms": 2000, "_note": "Ad-hoc SPLIT works from any phase: $200 / 4 = $50/person. Rally should generate Venmo links." },
     { "from": "+15551250001", "body": "PAID STATUS", "delay_ms": 2000, "_note": "Check payment status after split" },
 
     { "from": "+15551250002", "body": "SPLIT $80 4 ways uber", "delay_ms": 2000, "_note": "Non-planner can also SPLIT" },

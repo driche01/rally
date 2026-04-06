@@ -12,7 +12,7 @@ import type { SmsUser } from './phone-user-linker.ts';
 import type { TripSession, TripSessionParticipant } from './trip-session.ts';
 import { getParticipants } from './trip-session.ts';
 import { parseConversation, applyDecisions } from './conversation-parser.ts';
-import { getOpenPoll, handlePollResponse, handleBudgetResponse } from './poll-engine.ts';
+import { getOpenPoll, handlePollResponse, handleBudgetResponse, normalizeBudget } from './poll-engine.ts';
 import { ensureRespondent } from './phone-user-linker.ts';
 import { handleCommitResponse, handlePlannerDecision } from './commit-poll-engine.ts';
 import {
@@ -64,6 +64,16 @@ export interface RoutedMessage {
   is1to1: boolean;
 }
 
+// Helper: format session dates for display in confirmation messages
+function formatSessionDates(session: TripSession): string {
+  const dates = session.dates as { start?: string; end?: string; nights?: number } | null;
+  if (!dates?.start || !dates?.end) return '';
+  const start = new Date(dates.start + 'T12:00:00');
+  const end = new Date(dates.end + 'T12:00:00');
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${months[start.getMonth()]} ${start.getDate()}\u2013${end.getDate()}`;
+}
+
 // Known destination names for recognition (lowercase)
 const KNOWN_DESTINATIONS = [
   'tulum', 'cancun', 'cancún', 'cabo', 'cabo san lucas', 'playa del carmen',
@@ -103,7 +113,7 @@ const TYPO_MAP: Record<string, string> = {
  * Supports exact match + common typo fuzzy matching.
  * Returns the keyword and any arguments, or null.
  */
-function detectKeyword(body: string): { keyword: string; args: string } | null {
+function detectKeyword(body: string): { keyword: string; args: string; typoCorrection?: boolean } | null {
   const upper = body.trim().toUpperCase();
 
   // Check exact keywords first
@@ -121,7 +131,7 @@ function detectKeyword(body: string): { keyword: string; args: string } | null {
 
   // Fuzzy match common typos
   const corrected = TYPO_MAP[upper];
-  if (corrected) return { keyword: corrected, args: '' };
+  if (corrected) return { keyword: corrected, args: '', typoCorrection: true };
 
   return null;
 }
@@ -167,10 +177,15 @@ export async function routeMessage(
     const isSessionPlanner = message.fromUser.id === session.planner_user_id || isPlanner;
     if (plannerOnly && !isSessionPlanner) {
       const plannerName = await getPlannerName(admin, session);
-      return `Only ${plannerName} can do that.`;
+      return `Only the planner (${plannerName}) can ${kw.keyword.toLowerCase()}.`;
     }
 
-    return handleKeyword(admin, kw.keyword, kw.args, message);
+    const result = await handleKeyword(admin, kw.keyword, kw.args, message);
+    // Prepend typo correction hint
+    if (result && kw.typoCorrection) {
+      return `(I read that as ${kw.keyword})\n${result}`;
+    }
+    return result;
   }
 
   // ─── Phase-based routing ───────────────────────────────────────────────
@@ -230,7 +245,7 @@ async function handleKeyword(
     case 'NEXT':
       return handleNext(admin, session, fromUser);
     case 'RESET':
-      return 'Reset everything? I\u2019ll keep the group but clear all decisions. Reply YES to confirm.';
+      return handleReset(admin, session);
     case 'SPLIT':
       return handleSplitKeyword(admin, session, fromUser, args);
     case 'PROPOSE':
@@ -518,6 +533,19 @@ async function handlePhaseMessage(
     return null;
   }
 
+  // ─── RESET confirmation (must check before phase handlers) ──────────────
+  const resetSubState = (session as Record<string, unknown>).phase_sub_state as string | null;
+  if (resetSubState === 'RESET_PENDING' && body.trim().toUpperCase() === 'YES') {
+    return handleResetConfirm(admin, session);
+  }
+  if (resetSubState === 'RESET_PENDING' && body.trim().toUpperCase() === 'NO') {
+    await admin.from('trip_sessions').update({
+      phase_sub_state: null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', session.id);
+    return 'Reset cancelled \u2014 carrying on.';
+  }
+
   // ─── Personality intercepts (no LLM needed) ─────────────────────────────
   const lower = body.trim().toLowerCase();
   const wordCount = body.trim().split(/\s+/).length;
@@ -565,14 +593,52 @@ async function handlePhaseMessage(
   // Date collection during DECIDING_DATES — only when no poll is open
   // Skip emoji-only and very short messages
   if (phase === 'DECIDING_DATES' && message.participant && !(session as Record<string,unknown>).current_poll_id && /[a-zA-Z0-9]/.test(body)) {
-    // Store this participant's date preference as budget_raw (reuse field for date input tracking)
-    await admin
-      .from('trip_session_participants')
-      .update({ budget_raw: body.trim() })
-      .eq('id', message.participant.id);
+    const upperBody = body.trim().toUpperCase();
+    const subState = (session as Record<string, unknown>).phase_sub_state as string | null;
+
+    // SKIP — planner or anyone can skip dates entirely
+    if (upperBody === 'SKIP') {
+      const nextMsg = await advancePhase(admin, session);
+      return nextMsg ?? 'Dates skipped \u2014 moving on.';
+    }
+
+    // Confirmation matching — expanded to catch common variants
+    const isConfirmation = /^(y(a+|e+)?s+|yep|yup|yeah+|works?|good|perfect|same|down|done|totally|absolutely|for sure|def(initely)?|100%?|bet|sounds? good|works for me|i.?m good|that works|i.?m down|let.?s do it|same here|all good|i.?m in|locked)$/i.test(body.trim());
+
+    // Check if this is a confirmation when dates have been proposed
+    if (subState === 'DATES_PROPOSED' && session.dates && isConfirmation) {
+      // Track confirmation via budget_raw = 'DATE_CONFIRMED'
+      await admin.from('trip_session_participants')
+        .update({ budget_raw: 'DATE_CONFIRMED' })
+        .eq('id', message.participant.id);
+      // Check how many have confirmed
+      const { data: allP } = await admin
+        .from('trip_session_participants')
+        .select('budget_raw')
+        .eq('trip_session_id', session.id)
+        .eq('status', 'active');
+      const confirmed = (allP ?? []).filter((p: { budget_raw?: string }) => p.budget_raw === 'DATE_CONFIRMED').length;
+      const total = (allP ?? []).length;
+      if (confirmed >= total) {
+        // Clear sub_state and advance
+        await admin.from('trip_sessions').update({
+          phase_sub_state: null,
+          updated_at: new Date().toISOString(),
+        }).eq('id', session.id);
+        // Clear budget_raw for reuse in budget phase
+        await admin.from('trip_session_participants')
+          .update({ budget_raw: null })
+          .eq('trip_session_id', session.id);
+        const nextMsg = await advancePhase(admin, session);
+        const dateMsg = `Dates locked in!`;
+        return nextMsg ? dateMsg + '\n\n' + nextMsg : dateMsg;
+      }
+      const dateLabel = formatSessionDates(session);
+      return `${message.participant.display_name ?? 'Got it'} \u2014 ${dateLabel} ${confirmed}/${total} confirmed. Waiting on the rest.`;
+    }
 
     // Try regex first for exact dates (e.g. "Nov 8-12", "Jan 15-19")
-    const dateMatch = body.match(/(\w+)\s+(\d{1,2})\s*[-–to]+\s*(\d{1,2})/i);
+    const dateMatch = body.match(/(\w+)\s+(\d{1,2})\s*[-\u2013to]+\s*(\d{1,2})/i);
     if (dateMatch) {
       const monthStr = dateMatch[1];
       const startDay = parseInt(dateMatch[2]);
@@ -592,14 +658,82 @@ async function handlePhaseMessage(
         const startStr = start.toISOString().split('T')[0];
         const endStr = end.toISOString().split('T')[0];
         const nights = Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
+
+        // If dates already proposed and this matches, treat as confirmation
+        if (subState === 'DATES_PROPOSED' && session.dates) {
+          const existingStart = (session.dates as { start?: string }).start;
+          const existingEnd = (session.dates as { start?: string; end?: string }).end;
+          if (existingStart === startStr && existingEnd === endStr) {
+            // Same dates — treat as a confirmation
+            await admin.from('trip_session_participants')
+              .update({ budget_raw: 'DATE_CONFIRMED' })
+              .eq('id', message.participant.id);
+            const { data: allPCheck } = await admin
+              .from('trip_session_participants')
+              .select('budget_raw')
+              .eq('trip_session_id', session.id)
+              .eq('status', 'active');
+            const confirmedCount = (allPCheck ?? []).filter((p: { budget_raw?: string }) => p.budget_raw === 'DATE_CONFIRMED').length;
+            const totalCount = (allPCheck ?? []).length;
+            if (confirmedCount >= totalCount) {
+              await admin.from('trip_sessions').update({ phase_sub_state: null }).eq('id', session.id);
+              await admin.from('trip_session_participants').update({ budget_raw: null }).eq('trip_session_id', session.id);
+              const nextMsg = await advancePhase(admin, session);
+              return nextMsg ? `Dates locked in!\n\n${nextMsg}` : `Dates locked in!`;
+            }
+            const dateLabel2 = formatSessionDates(session);
+            return `${message.participant.display_name ?? 'Got it'} \u2014 ${dateLabel2} ${confirmedCount}/${totalCount} confirmed.`;
+          }
+          // Different dates proposed — override the previous proposal
+        }
+
+        // Store proposed dates on session but DON'T advance yet — wait for group confirmation
         await admin.from('trip_sessions').update({
           dates: { start: startStr, end: endStr, nights },
+          phase_sub_state: 'DATES_PROPOSED',
           updated_at: new Date().toISOString(),
         }).eq('id', session.id);
-        const nextMsg = await advancePhase(admin, session);
-        const dateMsg = `Got it \u2014 ${monthStr} ${startDay}\u2013${endDay} (${nights} nights).`;
-        return nextMsg ? dateMsg + '\n\n' + nextMsg : dateMsg;
+        // Reset everyone's confirmation since dates changed
+        await admin.from('trip_session_participants')
+          .update({ budget_raw: null })
+          .eq('trip_session_id', session.id);
+        // Auto-confirm the proposer via budget_raw
+        await admin.from('trip_session_participants')
+          .update({ budget_raw: 'DATE_CONFIRMED' })
+          .eq('id', message.participant.id);
+        // Check total participants
+        const { data: allP } = await admin
+          .from('trip_session_participants')
+          .select('id')
+          .eq('trip_session_id', session.id)
+          .eq('status', 'active');
+        const total = (allP ?? []).length;
+        if (total <= 1) {
+          // Solo planner — advance immediately
+          await admin.from('trip_sessions').update({ phase_sub_state: null }).eq('id', session.id);
+          const nextMsg = await advancePhase(admin, session);
+          const dateMsg = `Got it \u2014 ${monthStr} ${startDay}\u2013${endDay} (${nights} nights).`;
+          return nextMsg ? dateMsg + '\n\n' + nextMsg : dateMsg;
+        }
+        return `${monthStr} ${startDay}\u2013${endDay} (${nights} nights) \u2014 everyone good? Reply YES to lock it in, or suggest different dates.`;
       }
+    }
+
+    // Only store as date input if it looks like date-related content
+    // (contains a month, number, or date-like keyword). Don't overwrite DATE_CONFIRMED.
+    const looksLikeDateContent = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december|\d{1,2}|week|month|spring|summer|fall|winter|christmas|thanksgiving|new\s*year)/i.test(body);
+    const currentBudgetRaw = message.participant ? (await admin
+      .from('trip_session_participants')
+      .select('budget_raw')
+      .eq('id', message.participant.id)
+      .single()).data?.budget_raw : null;
+
+    // Don't overwrite DATE_CONFIRMED with off-topic messages
+    if (looksLikeDateContent && currentBudgetRaw !== 'DATE_CONFIRMED') {
+      await admin
+        .from('trip_session_participants')
+        .update({ budget_raw: body.trim() })
+        .eq('id', message.participant.id);
     }
 
     // Check if all participants have responded with date preferences
@@ -673,16 +807,28 @@ async function handlePhaseMessage(
       return "Got everyone's input on dates. Can someone nail down the exact dates? Like \"Apr 17-20\"";
     }
 
-    // Not all responded yet — acknowledge
-    const name = fromUser.display_name ?? 'Got it';
-    return `${name} \u2014 noted.`;
+    // Only acknowledge messages that look date-related. Stay silent on off-topic chatter.
+    if (looksLikeDateContent) {
+      const name = fromUser.display_name ?? 'Got it';
+      return `${name} \u2014 noted.`;
+    }
+
+    // Off-topic during DECIDING_DATES — stay silent
+    return null;
   }
 
   // Origin collection during COLLECTING_ORIGINS
   if (phase === 'COLLECTING_ORIGINS' && message.participant) {
-    // Store the origin (city or airport code)
     const origin = body.trim();
-    if (origin.length >= 2 && origin.length <= 50) {
+
+    // Skip common phrases that aren't origins
+    const NOT_ORIGINS = /^(that'?s\s*everyone|we'?re\s*(all\s*)?good|all\s*here|let'?s\s*go|that'?s\s*it|yes|no|ok|okay|sure|same|nice|lol|haha|omg|sounds?\s*good|works|perfect|done|ready)$/i;
+    if (NOT_ORIGINS.test(origin)) {
+      return null; // Silently ignore non-origin phrases
+    }
+
+    // Store the origin (city or airport code) — must be 2-50 chars
+    if (origin.length >= 2 && origin.length <= 50 && origin.split(/\s+/).length <= 4) {
       const isAirportCode = /^[A-Z]{3}$/i.test(origin);
       await admin
         .from('trip_session_participants')
@@ -820,6 +966,20 @@ async function handlePhaseMessage(
       }
       return budgetResult;
     }
+    // Budget vote accepted but not all in — ack the individual vote
+    // Check if this was actually a recognized budget response (not random chat)
+    const { amount, skipped } = normalizeBudget(body);
+    if (amount !== null || skipped) {
+      const { data: freshP } = await admin
+        .from('trip_session_participants')
+        .select('budget_raw')
+        .eq('trip_session_id', session.id)
+        .eq('status', 'active');
+      const voted = (freshP ?? []).filter((p) => p.budget_raw !== null).length;
+      const total = (freshP ?? []).length;
+      const name = fromUser.display_name ?? 'Got it';
+      return `${name} \u2014 ${voted}/${total} voted.`;
+    }
   }
 
   // Check for active poll first — if one is open, try to match as a vote
@@ -889,8 +1049,113 @@ async function handleNext(
   session: TripSession,
   user: SmsUser,
 ): Promise<string> {
+  // If in DECIDING_DATES with proposed dates, clear sub_state and budget_raw before advancing
+  const subState = (session as Record<string, unknown>).phase_sub_state as string | null;
+  if (session.phase === 'DECIDING_DATES' && subState === 'DATES_PROPOSED') {
+    await admin.from('trip_sessions').update({
+      phase_sub_state: null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', session.id);
+    await admin.from('trip_session_participants')
+      .update({ budget_raw: null })
+      .eq('trip_session_id', session.id);
+  }
+
+  // COMMIT_POLL: planner can force-advance with whoever has committed
+  if (session.phase === 'COMMIT_POLL') {
+    const participants = await getParticipants(admin, session.id);
+    const committed = participants.filter((p) => p.committed === true || p.flight_status === 'confirmed');
+    const uncommitted = participants.filter((p) => p.status === 'active' && !p.committed && p.flight_status !== 'confirmed');
+
+    if (committed.length === 0) {
+      return "No one's committed yet \u2014 need at least one YES before advancing.";
+    }
+
+    // Mark uncommitted as dropped
+    for (const p of uncommitted) {
+      await admin.from('trip_session_participants')
+        .update({ committed: false, flights_link_response: 'commit_no' })
+        .eq('id', p.id);
+    }
+
+    // Store committed list and advance
+    await admin.from('trip_sessions').update({
+      committed_participants: committed.map((p) => ({
+        user_id: p.user_id,
+        phone: p.phone,
+        display_name: p.display_name,
+      })),
+      phase: 'AWAITING_FLIGHTS',
+      updated_at: new Date().toISOString(),
+    }).eq('id', session.id);
+
+    const droppedNames = uncommitted.map((p) => p.display_name ?? p.phone).join(', ');
+    const msg = committed.length === participants.length
+      ? "Everyone's in! Moving on to flights."
+      : `Moving on with ${committed.length} of ${participants.length}. ${droppedNames ? droppedNames + ' didn\u2019t respond \u2014 they can rejoin later.' : ''}`;
+
+    return msg + '\n\nHave you booked your flights? Reply YES, NOT YET, or DRIVING.';
+  }
+
   const result = await advancePhase(admin, session, user.id);
   return result ?? `Can't advance from ${session.phase} right now.`;
+}
+
+// ─── RESET handler ──────────────────────────────────────────────────────────
+
+async function handleReset(
+  admin: SupabaseClient,
+  session: TripSession,
+): Promise<string> {
+  // Set sub_state to track that we're awaiting reset confirmation
+  await admin.from('trip_sessions').update({
+    phase_sub_state: 'RESET_PENDING',
+    updated_at: new Date().toISOString(),
+  }).eq('id', session.id);
+
+  return 'Reset everything? I\u2019ll keep the group but clear all decisions. Reply YES to confirm.';
+}
+
+async function handleResetConfirm(
+  admin: SupabaseClient,
+  session: TripSession,
+): Promise<string> {
+  // Clear all session data and rewind to COLLECTING_DESTINATIONS
+  await admin.from('trip_sessions').update({
+    phase: 'COLLECTING_DESTINATIONS',
+    phase_sub_state: null,
+    destination: null,
+    destination_candidates: null,
+    dates: null,
+    budget_median: null,
+    budget_range: null,
+    budget_status: null,
+    cost_estimates: null,
+    committed_participants: null,
+    current_poll_id: null,
+    deadlines: null,
+    updated_at: new Date().toISOString(),
+  }).eq('id', session.id);
+
+  // Clear participant data (origins, budgets, commits) but keep names
+  await admin.from('trip_session_participants').update({
+    budget_raw: null,
+    budget_normalized: null,
+    origin_city: null,
+    origin_airport: null,
+    committed: null,
+    flight_status: null,
+    flights_link_response: null,
+  }).eq('trip_session_id', session.id);
+
+  // Re-advance from COLLECTING_DESTINATIONS
+  const { data: freshSession } = await admin.from('trip_sessions').select('*').eq('id', session.id).single();
+  if (freshSession) {
+    const nextMsg = await advancePhase(admin, freshSession);
+    if (nextMsg) return nextMsg;
+  }
+
+  return "Where are you thinking? Drop your destination ideas \u2014 we'll vote once everyone's weighed in.";
 }
 
 // ─── SPLIT / PROPOSE handlers ────────────────────────────────────────────────

@@ -253,19 +253,26 @@ async function advanceFromCollectingOrigins(
     originGroups.set(origin, existing);
   }
 
-  // Fetch flight estimates per origin
+  // Fetch flight estimates per origin — all in parallel for speed
   const flightLines: string[] = [];
-  for (const [origin, names] of originGroups) {
-    if (startDate && endDate) {
-      const { estimate, example } = await estimateFlightCost(origin, destination, startDate, endDate);
-      if (example) {
-        const nameStr = names.join(', ');
+  if (startDate && endDate) {
+    const originEntries = [...originGroups.entries()];
+    const results = await Promise.all(
+      originEntries.map(([origin]) => estimateFlightCost(origin, destination, startDate, endDate)),
+    );
+    for (let i = 0; i < originEntries.length; i++) {
+      const [origin, names] = originEntries[i];
+      const { estimate, example } = results[i];
+      const nameStr = names.join(', ');
+      if (example && example.airline && example.price > 0) {
         flightLines.push(`\u2708\uFE0F ${nameStr} from ${origin}: ${example.airline} ~$${example.price}/person rt`);
         if (example.booking_url) flightLines.push(example.booking_url);
-      } else if (estimate) {
-        const nameStr = names.join(', ');
+      } else if (estimate && estimate.mid > 0) {
         flightLines.push(`\u2708\uFE0F ${nameStr} from ${origin}: ~$${estimate.mid}/person rt`);
         if (estimate.google_flights_url) flightLines.push(estimate.google_flights_url);
+      } else {
+        // Couldn't get pricing for this route — show a helpful fallback
+        flightLines.push(`\u2708\uFE0F ${nameStr} from ${origin}: check Google Flights for prices`);
       }
     }
   }

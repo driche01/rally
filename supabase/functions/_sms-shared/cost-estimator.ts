@@ -16,13 +16,28 @@
 // #77 — Strips markdown fences before JSON.parse. callGeminiWithRetry retries
 // once on failure. On final failure, returns null (marks estimate unavailable).
 function parseGeminiJson(raw: string): unknown {
+  // Strategy 1: Strip markdown fences and parse directly
   const stripped = raw
     .trim()
     .replace(/^```json\s*/i, '')
     .replace(/^```\s*/i, '')
     .replace(/\s*```$/i, '')
     .trim();
-  return JSON.parse(stripped);
+  try {
+    return JSON.parse(stripped);
+  } catch {
+    // Strategy 2: Extract JSON object/array from mixed text
+    // Grounded responses often include natural language around the JSON
+    const jsonMatch = raw.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+    if (jsonMatch) {
+      try {
+        return JSON.parse(jsonMatch[1]);
+      } catch {
+        // Fall through
+      }
+    }
+    throw new Error(`Cannot parse Gemini response as JSON. Raw text: ${raw.slice(0, 300)}`);
+  }
 }
 
 async function callGemini(prompt: string): Promise<unknown | null> {
@@ -34,7 +49,7 @@ async function callGemini(prompt: string): Promise<unknown | null> {
 
   try {
     const response = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
       {
         method: 'POST',
         headers: {
@@ -43,23 +58,39 @@ async function callGemini(prompt: string): Promise<unknown | null> {
         },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          tools: [{ googleSearch: {} }],
+          tools: [{ google_search: {} }],
         }),
       },
     );
 
     if (!response.ok) {
-      console.error('[cost-estimator] Gemini API error:', response.status);
+      const errBody = await response.text();
+      console.error('[cost-estimator] Gemini API error:', response.status, errBody.slice(0, 500));
       return null;
     }
 
     const result = await response.json();
-    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) return null;
+    const candidate = result.candidates?.[0];
+
+    // Check for blocked/safety filtered responses
+    if (candidate?.finishReason && candidate.finishReason !== 'STOP' && candidate.finishReason !== 'MAX_TOKENS') {
+      console.error('[cost-estimator] Gemini finish reason:', candidate.finishReason,
+        'Safety ratings:', JSON.stringify(candidate.safetyRatings ?? []).slice(0, 300));
+      return null;
+    }
+
+    // With google_search grounding, text may be across multiple parts
+    const parts = candidate?.content?.parts ?? [];
+    const text = parts.map((p: { text?: string }) => p.text ?? '').join('').trim();
+    if (!text) {
+      console.error('[cost-estimator] Gemini returned no text. Parts:', JSON.stringify(parts).slice(0, 300),
+        'Full response:', JSON.stringify(result).slice(0, 500));
+      return null;
+    }
 
     return parseGeminiJson(text);
   } catch (err) {
-    console.error('[cost-estimator] Gemini call failed:', err);
+    console.error('[cost-estimator] Gemini call failed:', (err as Error).message ?? err);
     return null;
   }
 }
@@ -114,9 +145,12 @@ export async function estimateFlightCost(
     ? { origin, destination, ...(estimateResult as Omit<FlightEstimate, 'origin' | 'destination'>) }
     : null;
 
-  const example = exampleResult
+  const rawExample = exampleResult
     ? { origin, destination, ...(exampleResult as Omit<FlightExample, 'origin' | 'destination'>) }
     : null;
+
+  // Validate example — discard if airline is null/empty or price is 0/missing
+  const example = (rawExample && rawExample.airline && rawExample.price > 0) ? rawExample : null;
 
   return { estimate, example };
 }
