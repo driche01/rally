@@ -1,0 +1,21 @@
+{
+  "script_name": "happy_path",
+  "phones": {
+    "planner": "+15551110001",
+    "p2": "+15551110002",
+    "p3": "+15551110003",
+    "rally": "+18559310010"
+  },
+  "assert_outbound_contains": [
+    "Reply STOP anytime",
+    "drop your name"
+  ],
+  "messages": [
+    { "from": "+15551110001", "body": "Hey", "delay_ms": 0, "_note": "1:1 planner registration" },
+    { "from": "+15551110001", "body": "Jake — Tulum, Nov 8-12", "delay_ms": 1000, "_note": "Group thread created" },
+    { "from": "+15551110002", "body": "Sarah — Tulum works!", "delay_ms": 1000 },
+    { "from": "+15551110003", "body": "Mike — yes Tulum", "delay_ms": 1000 },
+    { "from": "+15551110002", "body": "STATUS", "delay_ms": 1000 },
+    { "from": "+15551110001", "body": "HELP", "delay_ms": 500 }
+  ]
+}

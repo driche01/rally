@@ -48,7 +48,7 @@ export async function registerPushToken(): Promise<void> {
       name: 'Rally',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#FF6B5B',
+      lightColor: '#D85A30',
     });
   }
 

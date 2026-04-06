@@ -20,11 +20,11 @@ const SEASON_ICON: Record<string, React.ComponentProps<typeof Ionicons>['name']>
 
 // Stage accent colors — mirror the hero card palette on the dashboard
 const STAGE_COLOR: Record<string, { active: string; past: string; label: string }> = {
-  deciding:     { active: '#D85A30', past: '#FFBDAD', label: '#D85A30' },
-  confirmed:    { active: '#235C38', past: '#A8CCAA', label: '#235C38' },
-  planning:     { active: '#1A4060', past: '#9BB8CC', label: '#1A4060' },
-  experiencing: { active: '#085041', past: '#7EADA3', label: '#085041' },
-  reconciling:  { active: '#666666', past: '#CCCCCC', label: '#666666' },
+  deciding:     { active: '#E05A28', past: '#F9C4A5', label: '#E05A28' },
+  confirmed:    { active: '#1A9E5A', past: '#A8DFC0', label: '#1A9E5A' },
+  planning:     { active: '#1563B0', past: '#9BB8D8', label: '#1563B0' },
+  experiencing: { active: '#0A8A6A', past: '#7ECAB8', label: '#0A8A6A' },
+  reconciling:  { active: '#888888', past: '#CCCCCC', label: '#888888' },
   done:         { active: '#2C2C2A', past: '#AAAAAA', label: '#2C2C2A' },
 };
 
@@ -203,14 +203,14 @@ export default function HomeScreen() {
           keyExtractor={(t) => t.id}
           contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24 }}
           refreshControl={
-            <RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor="#FF6B5B" />
+            <RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor="#D85A30" />
           }
           ListEmptyComponent={
             !isLoading ? (
               <View className="items-center py-20 gap-3">
-                <Text className="text-xl font-semibold text-neutral-800">No trips yet</Text>
+                <Text className="text-xl font-semibold text-neutral-800">No rallies yet, mate</Text>
                 <Text className="text-base text-neutral-400 text-center">
-                  Tap the + below to create your first rally.
+                  Tap + below to kick off your first ripper trip.
                 </Text>
               </View>
             ) : null
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
   },
   tripName: {
     fontSize: 15,
-    fontWeight: '700',
+    fontFamily: 'SpaceGrotesk_700Bold',
     color: '#1a1a1a',
     lineHeight: 18,
   },

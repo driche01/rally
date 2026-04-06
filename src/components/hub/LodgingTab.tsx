@@ -180,7 +180,7 @@ function BookingSheet({
               <Pressable
                 onPress={() => onSave(local)}
                 disabled={saving}
-                style={{ flex: 2, paddingVertical: 14, borderRadius: 14, backgroundColor: '#FF6B5B', alignItems: 'center', justifyContent: 'center' }}
+                style={{ flex: 2, paddingVertical: 14, borderRadius: 14, backgroundColor: '#D85A30', alignItems: 'center', justifyContent: 'center' }}
               >
                 {saving ? (
                   <ActivityIndicator size="small" color="white" />
@@ -286,11 +286,11 @@ function ManualEntrySheet({
                         paddingVertical: 7,
                         borderRadius: 20,
                         borderWidth: 1.5,
-                        borderColor: local.platform === p.value ? '#FF6B5B' : '#E5E5E5',
+                        borderColor: local.platform === p.value ? '#D85A30' : '#E5E5E5',
                         backgroundColor: local.platform === p.value ? '#FFF1F0' : 'white',
                       }}
                     >
-                      <Text style={{ fontSize: 13, fontWeight: '600', color: local.platform === p.value ? '#FF6B5B' : '#737373' }}>{p.label}</Text>
+                      <Text style={{ fontSize: 13, fontWeight: '600', color: local.platform === p.value ? '#D85A30' : '#737373' }}>{p.label}</Text>
                     </Pressable>
                   ))}
                 </View>
@@ -382,7 +382,7 @@ function ManualEntrySheet({
                 <Pressable
                   onPress={() => canSave && onSave(local)}
                   disabled={!canSave || saving}
-                  style={{ flex: 2, paddingVertical: 14, borderRadius: 14, backgroundColor: canSave ? '#FF6B5B' : '#FCA99F', alignItems: 'center', justifyContent: 'center' }}
+                  style={{ flex: 2, paddingVertical: 14, borderRadius: 14, backgroundColor: canSave ? '#D85A30' : '#FCA99F', alignItems: 'center', justifyContent: 'center' }}
                 >
                   {saving ? (
                     <ActivityIndicator size="small" color="white" />
@@ -599,7 +599,7 @@ function PropertyCard({
               onPress={onBook}
               className="flex-row items-center gap-1 rounded-xl bg-coral-50 px-3 py-1.5"
             >
-              <Ionicons name="checkmark-circle-outline" size={12} color="#FF6B5B" />
+              <Ionicons name="checkmark-circle-outline" size={12} color="#D85A30" />
               <Text className="text-xs font-medium text-coral-600">Mark as booked</Text>
             </Pressable>
           ) : null}

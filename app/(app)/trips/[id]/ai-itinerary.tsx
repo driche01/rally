@@ -53,7 +53,7 @@ const BLOCK_TYPE_COLORS: Record<string, string> = {
   activity:      '#2563EB',
   meal:          '#EA580C',
   travel:        '#9333EA',
-  accommodation: '#FF6B5B',
+  accommodation: '#D85A30',
   free_time:     '#16A34A',
 };
 
@@ -344,11 +344,11 @@ export default function AiItineraryScreen() {
       {/* Body */}
       {isLoading ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#FF6B5B" />
+          <ActivityIndicator size="large" color="#D85A30" />
         </View>
       ) : isGenerating ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#FF6B5B" />
+          <ActivityIndicator size="large" color="#D85A30" />
           <Text style={styles.generatingText}>{LOADING_MESSAGES[loadingMsgIdx]}</Text>
           <Text style={styles.generatingSubText}>This takes about 15–20 seconds</Text>
         </View>

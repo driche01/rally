@@ -73,12 +73,12 @@ const HERO_CONFIG: Record<TripStage, {
   ctaLabel: string;
   ctaBg: string;
 }> = {
-  deciding:     { bg: '#F5F4F0', badge: 'DECIDING',       badgeColor: '#888',    titleColor: '#1A1A1A', subtitleColor: '#666',                pillBg: 'rgba(0,0,0,0.06)', ctaLabel: 'Share poll!', ctaBg: '#D85A30' },
-  confirmed:    { bg: '#DDE8D8', badge: "YOU'RE GOING",   badgeColor: '#3A7A55', titleColor: '#1A3020', subtitleColor: '#3A6045',             pillBg: 'rgba(255,255,255,0.55)', ctaLabel: 'Confirm group members!', ctaBg: '#235C38' },
-  planning:     { bg: '#D8E4EE', badge: 'PLANNING',       badgeColor: '#2A5068', titleColor: '#0D2B3E', subtitleColor: '#2A5068',             pillBg: 'rgba(255,255,255,0.55)', ctaLabel: 'Plan the trip', ctaBg: '#1A4060' },
-  experiencing: { bg: '#085041', badge: "YOU'RE HERE",    badgeColor: 'rgba(255,255,255,0.7)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.75)', pillBg: 'rgba(255,255,255,0.15)', ctaLabel: "See today's plan", ctaBg: 'rgba(255,255,255,0.2)' },
-  reconciling:  { bg: '#F0EDE8', badge: 'WRAPPING UP',    badgeColor: '#666',    titleColor: '#2C2C2A', subtitleColor: '#666',                pillBg: 'rgba(0,0,0,0.06)', ctaLabel: 'Settle expenses', ctaBg: '#2C2C2A' },
-  done:         { bg: '#2C2C2A', badge: 'DONE',           badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'View recap', ctaBg: 'rgba(255,255,255,0.15)' },
+  deciding:     { bg: '#1A1715', badge: 'FIGURING IT OUT', badgeColor: 'rgba(255,255,255,0.45)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'Rally the crew!', ctaBg: '#E05A28' },
+  confirmed:    { bg: '#0C2218', badge: "IT'S ON!",         badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.65)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'Sort the crew!', ctaBg: '#1A9E5A' },
+  planning:     { bg: '#0A1828', badge: 'GETTING SORTED',  badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.65)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'See the plan', ctaBg: '#1563B0' },
+  experiencing: { bg: '#042E26', badge: 'GET AMONGST IT!', badgeColor: 'rgba(255,255,255,0.7)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.75)', pillBg: 'rgba(255,255,255,0.15)', ctaLabel: "See today's plan", ctaBg: 'rgba(255,255,255,0.2)' },
+  reconciling:  { bg: '#1A1715', badge: 'SORTING IT OUT',  badgeColor: 'rgba(255,255,255,0.45)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'Settle up', ctaBg: '#555552' },
+  done:         { bg: '#1A1715', badge: 'WHAT A RIPPER!',  badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'Relive it', ctaBg: 'rgba(255,255,255,0.15)' },
 };
 
 // ─── Group Members Card ───────────────────────────────────────────────────────
@@ -108,11 +108,11 @@ function GroupMembersCard({
         <Ionicons name="people-outline" size={20} color="#555" />
       </View>
       <View style={styles.entryText}>
-        <Text style={styles.entryTitle}>Group members</Text>
+        <Text style={styles.entryTitle}>The Crew</Text>
         <Text style={styles.entrySubtitle}>
           {respondents.length === 0
-            ? 'No one else has joined yet'
-            : `${confirmedCount} of ${total} confirmed`}
+            ? 'No one else in yet'
+            : `${confirmedCount} of ${total} in`}
         </Text>
       </View>
       {editMode
@@ -208,7 +208,7 @@ const stage = trip ? getTripStage(trip) : 'deciding';
 
     // Build an exciting trip summary message
     const lines: string[] = [];
-    lines.push(`🎉 ${trip.name} is officially happening!`);
+    lines.push(`🎉 ${trip.name} is on! Who's keen?`);
     if (destination) lines.push(`📍 ${destination}`);
     if (dateDisplay) lines.push(`📅 ${dateDisplay}`);
     const details: string[] = [];
@@ -216,7 +216,7 @@ const stage = trip ? getTripStage(trip) : 'deciding';
     if (budgetDisplay) details.push(`${budgetDisplay} pp`);
     if (details.length > 0) lines.push(`👥 ${details.join(' · ')}`);
     lines.push('');
-    lines.push(`Confirm you're in and share your preferences:`);
+    lines.push(`Confirm you're in and tell us your preferences:`);
     lines.push(url);
     const msg = lines.join('\n');
 
@@ -526,16 +526,15 @@ const stage = trip ? getTripStage(trip) : 'deciding';
             <Text style={[styles.heroBadge, { color: hero.badgeColor }]}>{hero.badge}</Text>
           </View>
           {destination ? (
-            <TouchableOpacity
+            <Pressable
               onPress={(e) => { e.stopPropagation(); openMapsSheet(); }}
-              activeOpacity={0.75}
               accessibilityRole="link"
               accessibilityLabel={`Directions to ${destination}`}
             >
               <Text style={[styles.heroTitle, styles.heroTitleLink, { color: hero.titleColor }]}>
                 {destination}
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           ) : null}
           {dateDisplay ? (
             <Text style={[styles.heroTitle, { color: hero.titleColor }]}>{dateDisplay}</Text>
@@ -621,7 +620,7 @@ const styles = StyleSheet.create({
   // Hero
   heroCard: { borderRadius: 24, padding: 24, gap: 10, marginBottom: 8 },
   heroBadge: { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase' },
-  heroTitle: { fontSize: 30, fontWeight: '800', lineHeight: 36 },
+  heroTitle: { fontSize: 30, fontFamily: 'SpaceGrotesk_700Bold', lineHeight: 36 },
   heroTitleLink: { textDecorationLine: 'underline' },
   heroSubtitle: { fontSize: 15, lineHeight: 22 },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 2 },
