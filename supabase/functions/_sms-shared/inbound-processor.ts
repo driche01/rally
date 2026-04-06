@@ -161,34 +161,49 @@ export async function processInboundMessage(
 
       if (matchedSession) {
         session = matchedSession;
-        participant = await addParticipant(admin, session.id, user, false);
-        if (session.trip_id) {
-          await ensureRespondent(admin, session.trip_id, user);
-        }
-        await touchSession(admin, session.id);
 
-        // Extract name + destination from joining participant's message
-        const mergeNameMatch = body.match(/^([\p{L}][\p{L}'\-]{0,30})\s*[—–\-]\s*(.+)/u);
-        if (mergeNameMatch) {
-          const mName = mergeNameMatch[1].trim();
-          await admin.from('users').update({ display_name: mName }).eq('id', user.id);
-          await admin.from('trip_session_participants')
-            .update({ display_name: mName })
-            .eq('trip_session_id', session.id).eq('user_id', user.id);
+        // Check if user is already a participant (possibly opted_out)
+        const { data: existingP } = await admin
+          .from('trip_session_participants')
+          .select('id, trip_session_id, phone, display_name, status, committed, flight_status, is_planner, user_id, joined_at, updated_at')
+          .eq('trip_session_id', session.id)
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (existingP) {
+          // User was already in this session (possibly opted_out) — don't re-add
+          participant = existingP;
+          await touchSession(admin, session.id);
+        } else {
+          participant = await addParticipant(admin, session.id, user, false);
           if (session.trip_id) {
-            await admin.from('respondents').update({ name: mName })
-              .eq('trip_id', session.trip_id).eq('phone', user.phone);
+            await ensureRespondent(admin, session.trip_id, user);
           }
-        }
+          await touchSession(admin, session.id);
 
-        // Catch-up message if session is past INTRO
-        if (session.phase !== 'INTRO') {
-          const catchUpParts: string[] = ['Welcome to the group! Here\'s where we\'re at:'];
-          if (session.destination) catchUpParts.push(`Destination: ${session.destination}`);
-          if (session.dates) catchUpParts.push(`Dates: ${(session.dates as { start: string; end: string }).start}\u2013${(session.dates as { start: string; end: string }).end}`);
-          catchUpParts.push(`Current phase: ${session.phase.replace(/_/g, ' ').toLowerCase()}`);
-          catchUpParts.push('Jump in anytime \u2014 reply HELP if you need commands.');
-          introResponse = catchUpParts.join('\n');
+          // Extract name + destination from joining participant's message
+          const mergeNameMatch = body.match(/^([\p{L}][\p{L}'\-]{0,30})\s*[—–\-]\s*(.+)/u);
+          if (mergeNameMatch) {
+            const mName = mergeNameMatch[1].trim();
+            await admin.from('users').update({ display_name: mName }).eq('id', user.id);
+            await admin.from('trip_session_participants')
+              .update({ display_name: mName })
+              .eq('trip_session_id', session.id).eq('user_id', user.id);
+            if (session.trip_id) {
+              await admin.from('respondents').update({ name: mName })
+                .eq('trip_id', session.trip_id).eq('phone', user.phone);
+            }
+          }
+
+          // Catch-up message if session is past INTRO
+          if (session.phase !== 'INTRO') {
+            const catchUpParts: string[] = ['Welcome to the group! Here\'s where we\'re at:'];
+            if (session.destination) catchUpParts.push(`Destination: ${session.destination}`);
+            if (session.dates) catchUpParts.push(`Dates: ${(session.dates as { start: string; end: string }).start}\u2013${(session.dates as { start: string; end: string }).end}`);
+            catchUpParts.push(`Current phase: ${session.phase.replace(/_/g, ' ').toLowerCase()}`);
+            catchUpParts.push('Jump in anytime \u2014 reply HELP if you need commands.');
+            introResponse = catchUpParts.join('\n');
+          }
         }
       } else {
         // ─── Truly new session ────────────────────────────────────────────

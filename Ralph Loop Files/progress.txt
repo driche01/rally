@@ -1,0 +1,19 @@
+# Rally SMS Agent — Ralph Loop Progress
+
+## Status: IN PROGRESS
+
+## Completed Tasks:
+
+### Phase 1: Large Group & Attrition (scenario 8) — ALL PASSING
+- [x] P1-1: Handle 10+ participant groups — 10 participants registered, STATUS works correctly
+- [x] P1-2: Graceful self-removal — "Won't be able to make it" / "Have to remove myself" detected, marks opted_out with warm farewell ("{name} — got it, we'll miss you!") instead of harsh STOP response
+- [x] P1-3: Track alternative dates — "Also flexible weekend of 9/5" stored as alternative via deadlines field, acknowledged separately
+- [x] P1-4: Partial availability — "out for the first two wks of sept" stored as CONSTRAINT in budget_raw, acknowledged with "we'll work around that"
+- [x] P1-5: Filter compliments — "Bless you for being an organizer" / "thank you for planning" → silent (null response)
+- [x] P1-6: Off-topic detection — "Are you at Dolores for the protest?" / "out of town at the river this weekend" → silent
+- [x] P1-7: Slang/abbreviations — "A Bri bday boat I c u" → silent (not parsed as date/trip decision)
+
+Key code changes:
+- message-router.ts: Added graceful opt-out detection, compliment filter, off-topic filter, farewell filter, partial availability handler, weekend-of-M/D date parser, alternative date tracking
+- inbound-processor.ts: Fixed opted-out participant re-add bug (was creating new participant on next message; now recognizes existing opted_out participant)
+- Added "lake shasta" to KNOWN_DESTINATIONS

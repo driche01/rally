@@ -85,7 +85,7 @@ const KNOWN_DESTINATIONS = [
   'amsterdam', 'lisbon', 'porto', 'berlin', 'prague', 'dublin',
   'mexico city', 'cdmx', 'costa rica', 'puerto rico', 'cartagena',
   'nashville', 'austin', 'scottsdale', 'vegas', 'las vegas', 'new orleans',
-  'lake tahoe', 'sedona', 'joshua tree', 'palm springs',
+  'lake tahoe', 'lake shasta', 'shasta', 'sedona', 'joshua tree', 'palm springs',
   'jamaica', 'punta cana', 'aruba', 'bahamas', 'turks and caicos',
   'iceland', 'portugal', 'spain', 'italy', 'greece', 'japan', 'thailand',
   'colombia', 'peru', 'argentina', 'brazil',
@@ -550,6 +550,46 @@ async function handlePhaseMessage(
   const lower = body.trim().toLowerCase();
   const wordCount = body.trim().split(/\s+/).length;
 
+  // ─── Graceful self-removal (P1-2) ──────────────────────────────────────
+  // Detect "I won't be able to make it", "have to remove myself", "I'm out",
+  // "count me out", "sadly out" etc. WITHOUT requiring STOP keyword.
+  // Mark as opted_out but send a warm farewell instead of the harsh STOP response.
+  const gracefulOptOutPattern = /\b(won'?t\s+be\s+able\s+to\s+make\s+it|have\s+to\s+remove\s+myself|(?:i'?m|i\s+am)\s+(?:sadly\s+)?out(?!\s+(?:for|of)\s+(?:the\s+first|town))|count\s+me\s+out|can'?t\s+(?:make\s+it|come|go|do\s+it)|not\s+(?:gonna|going\s+to)\s+(?:make\s+it|be\s+able)|have\s+to\s+(?:bow\s+out|drop\s+out|sit\s+this\s+one\s+out|pass)|gotta\s+(?:pass|bow\s+out|sit\s+out)|sadly\s+(?:i\s+)?can'?t|i'?m\s+definitely\s+out)\b/i;
+  if (gracefulOptOutPattern.test(body) && message.participant) {
+    // Make sure this isn't partial availability ("I'm out for the first two weeks")
+    const partialPattern = /\b(?:i'?m|i\s+am)\s+(?:sadly\s+)?out\s+(?:for|of)\s+(?:the\s+first|the\s+last|the\s+second|the\s+third)/i;
+    if (!partialPattern.test(body)) {
+      await admin
+        .from('trip_session_participants')
+        .update({ status: 'opted_out' })
+        .eq('trip_session_id', session.id)
+        .eq('user_id', fromUser.id);
+
+      const name = fromUser.display_name ?? 'friend';
+      return `${name} — got it, we'll miss you!`;
+    }
+  }
+
+  // ─── Compliment / gratitude to organizer — stay silent (P1-5) ──────────
+  if (/\b(bless\s+you|thank\s*(?:you|u)|thanks)\s+(?:for\s+)?(?:coordinating|planning|organizing|putting\s+(?:this|it)\s+together|being\s+(?:an?\s+)?organizer|setting\s+(?:this|it)\s+up)\b/i.test(body)) {
+    return null;
+  }
+  // Also catch short standalone compliments like "+1 thank you for planning!"
+  if (/^(?:\+1[,.]?\s*)?(?:bless\s+you|thanks?(?:\s*you)?|ty)\b/i.test(body.trim()) && /\b(?:plan|organiz|coordinat)\w*/i.test(body)) {
+    return null;
+  }
+
+  // ─── Off-topic detection — stay silent (P1-6) ──────────────────────────
+  // Questions/statements clearly unrelated to the trip
+  if (/\b(at\s+\w+\s+for\s+the\s+protest|for\s+the\s+protest|out\s+of\s+town\s+(?:at|this)\s+(?:the\s+)?(?:river|lake|beach|mountains?)\s+this\s+weekend|new\s+(?:\w+\s+)?album\s+alert)\b/i.test(body)) {
+    return null;
+  }
+
+  // ─── Farewell follow-ups (after opt-out) — stay silent ─────────────────
+  if (/^(?:bye+\s*(?:guys+|everyone|y'?all|all)?!*|see\s+y(?:ou|a)|later+!*|peace+!*)$/i.test(body.trim())) {
+    return null;
+  }
+
   // #32 — Dismissive / "shut up" messages (short, directed at Rally)
   if (wordCount <= 6 && /\b(shut\s*up|stop\s*talking|be\s*quiet|stfu|you'?re\s*annoying|go\s*away)\b/i.test(body)) {
     return "Noted. I'll keep it tight. Hit STATUS when you need me.";
@@ -637,6 +677,60 @@ async function handlePhaseMessage(
       return `${message.participant.display_name ?? 'Got it'} \u2014 ${dateLabel} ${confirmed}/${total} confirmed. Waiting on the rest.`;
     }
 
+    // Try "weekend of M/D" format (e.g. "weekend of 9/12", "wknd of 9/5")
+    const weekendMatch = body.match(/(?:week\s*end|wknd|wkd)\s+(?:of\s+)?(\d{1,2})\/(\d{1,2})/i);
+    if (weekendMatch) {
+      const wMonth = parseInt(weekendMatch[1]) - 1; // 0-indexed
+      const wDay = parseInt(weekendMatch[2]);
+      const year = new Date().getFullYear();
+      // Calculate the weekend: find the Friday-Sunday around this date
+      const anchor = new Date(year, wMonth, wDay);
+      if (anchor < new Date()) anchor.setFullYear(year + 1);
+      const dow = anchor.getDay(); // 0=Sun, 6=Sat
+      const fri = new Date(anchor);
+      fri.setDate(anchor.getDate() - ((dow + 2) % 7)); // back to Friday
+      const sun = new Date(fri);
+      sun.setDate(fri.getDate() + 2); // Sunday
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const friStr = fri.toISOString().split('T')[0];
+      const sunStr = sun.toISOString().split('T')[0];
+      const nights = 2;
+      const monthLabel = months[fri.getMonth()];
+      const dateLabel = `${monthLabel} ${fri.getDate()}–${sun.getDate()}`;
+
+      // Check if this is an alternative date (P1-3) — "also", "or", "flexible"
+      const isAlternative = /\b(also|or\b|flexible|alternatively|another\s+option)\b/i.test(body);
+      if (isAlternative && subState === 'DATES_PROPOSED' && session.dates) {
+        // Store as an alternative date option on the session deadlines field
+        const existingAlts = ((session as Record<string, unknown>).deadlines as Array<{ start: string; end: string; label: string }>) ?? [];
+        existingAlts.push({ start: friStr, end: sunStr, label: dateLabel });
+        await admin.from('trip_sessions').update({
+          deadlines: existingAlts,
+          updated_at: new Date().toISOString(),
+        }).eq('id', session.id);
+        return `Also noted ${dateLabel} as an option. We'll figure out which works best.`;
+      }
+
+      // Store as the primary proposal
+      await admin.from('trip_sessions').update({
+        dates: { start: friStr, end: sunStr, nights },
+        phase_sub_state: 'DATES_PROPOSED',
+        updated_at: new Date().toISOString(),
+      }).eq('id', session.id);
+      await admin.from('trip_session_participants').update({ budget_raw: null }).eq('trip_session_id', session.id);
+      await admin.from('trip_session_participants').update({ budget_raw: 'DATE_CONFIRMED' }).eq('id', message.participant.id);
+
+      const { data: allP } = await admin.from('trip_session_participants').select('id').eq('trip_session_id', session.id).eq('status', 'active');
+      const total = (allP ?? []).length;
+      if (total <= 1) {
+        await admin.from('trip_sessions').update({ phase_sub_state: null }).eq('id', session.id);
+        const nextMsg = await advancePhase(admin, session);
+        const dateMsg = `Got it — ${dateLabel} (${nights} nights).`;
+        return nextMsg ? dateMsg + '\n\n' + nextMsg : dateMsg;
+      }
+      return `${dateLabel} (${nights} nights) — everyone good? Reply YES to lock it in, or suggest different dates.`;
+    }
+
     // Try regex first for exact dates (e.g. "Nov 8-12", "Jan 15-19")
     const dateMatch = body.match(/(\w+)\s+(\d{1,2})\s*[-\u2013to]+\s*(\d{1,2})/i);
     if (dateMatch) {
@@ -684,7 +778,17 @@ async function handlePhaseMessage(
             const dateLabel2 = formatSessionDates(session);
             return `${message.participant.display_name ?? 'Got it'} \u2014 ${dateLabel2} ${confirmedCount}/${totalCount} confirmed.`;
           }
-          // Different dates proposed — override the previous proposal
+          // Different dates proposed — check if it's an alternative (P1-3)
+          const isAltDate = /\b(also|or\b|flexible|alternatively|another\s+option)\b/i.test(body);
+          if (isAltDate) {
+            const existingAlts = ((session as Record<string, unknown>).deadlines as Array<{ start: string; end: string; label: string }>) ?? [];
+            existingAlts.push({ start: startStr, end: endStr, label: `${monthStr} ${startDay}–${endDay}` });
+            await admin.from('trip_sessions').update({
+              deadlines: existingAlts,
+              updated_at: new Date().toISOString(),
+            }).eq('id', session.id);
+            return `Also noted ${monthStr} ${startDay}–${endDay} as an option. We'll figure out which works best.`;
+          }
         }
 
         // Store proposed dates on session but DON'T advance yet — wait for group confirmation
@@ -717,6 +821,24 @@ async function handlePhaseMessage(
         }
         return `${monthStr} ${startDay}\u2013${endDay} (${nights} nights) \u2014 everyone good? Reply YES to lock it in, or suggest different dates.`;
       }
+    }
+
+    // P1-4: Partial availability — "out for the first two weeks of sept" is a constraint, not opt-out
+    const partialAvailMatch = /\b(?:out|busy|unavailable|away|gone|traveling)\s+(?:for\s+)?(?:the\s+)?(?:first|last|second|third|beginning|end)\s+(?:\w+\s+)?(?:weeks?|wks?|days?|half)\s+(?:of\s+|for\s+|in\s+)?(\w+)/i.test(body);
+    if (partialAvailMatch && message.participant) {
+      const currentBR = (await admin
+        .from('trip_session_participants')
+        .select('budget_raw')
+        .eq('id', message.participant.id)
+        .single()).data?.budget_raw;
+      if (currentBR !== 'DATE_CONFIRMED') {
+        await admin
+          .from('trip_session_participants')
+          .update({ budget_raw: `CONSTRAINT: ${body.trim()}` })
+          .eq('id', message.participant.id);
+      }
+      const name = fromUser.display_name ?? 'Got it';
+      return `${name} — noted, we'll work around that.`;
     }
 
     // Only store as date input if it looks like date-related content
