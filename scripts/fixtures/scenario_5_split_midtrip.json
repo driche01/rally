@@ -1,0 +1,40 @@
+{
+  "script_name": "scenario_5_split_midtrip",
+  "description": "After booking, someone sends SPLIT $200 4 ways dinner. Does Venmo linking work? Also tests PROPOSE flow.",
+  "phones": {
+    "planner": "+15551250001",
+    "p2": "+15551250002",
+    "p3": "+15551250003",
+    "p4": "+15551250004",
+    "rally": "+18559310010"
+  },
+  "assert_outbound_contains": [
+    "Reply STOP anytime",
+    "Splitting",
+    "/person",
+    "Sending links"
+  ],
+  "assert_outbound_does_not_contain": [],
+  "messages": [
+    { "from": "+15551250001", "body": "Hey", "delay_ms": 0, "_note": "1:1 planner registration" },
+    { "from": "+15551250001", "body": "Jake — Tulum, Nov 8-12, $1250pp", "delay_ms": 1000, "_note": "INTRO with planner intake" },
+    { "from": "+15551250002", "body": "Sarah — let's go!", "delay_ms": 1000 },
+    { "from": "+15551250003", "body": "Mike — in", "delay_ms": 1000 },
+    { "from": "+15551250004", "body": "Emma — yes!", "delay_ms": 1000 },
+    { "from": "+15551250001", "body": "that's everyone", "delay_ms": 2000, "_note": "Advance from INTRO" },
+
+    { "from": "+15551250001", "body": "SPLIT $200 4 ways dinner", "delay_ms": 2000, "_note": "Ad-hoc SPLIT: $200 / 4 = $50/person. Rally should generate Venmo links." },
+    { "from": "+15551250001", "body": "PAID STATUS", "delay_ms": 2000, "_note": "Check payment status after split" },
+
+    { "from": "+15551250002", "body": "SPLIT $80 4 ways uber", "delay_ms": 2000, "_note": "Non-planner can also SPLIT" },
+
+    { "from": "+15551250003", "body": "PROPOSE $110 Gitano Beach dinner, Fri Nov 14", "delay_ms": 2000, "_note": "PROPOSE: p3 wants to pre-pay for group dinner" },
+    { "from": "+15551250001", "body": "YES", "delay_ms": 1000, "_note": "PROPOSE vote: planner says yes" },
+    { "from": "+15551250002", "body": "YES", "delay_ms": 1000, "_note": "PROPOSE vote: p2 says yes" },
+    { "from": "+15551250004", "body": "YES", "delay_ms": 1000, "_note": "PROPOSE vote: p4 says yes. Should meet 80% threshold." },
+
+    { "from": "+15551250001", "body": "SPLIT $1100 10 ways big dinner", "delay_ms": 2000, "_note": "Larger SPLIT with commas in amount" },
+
+    { "from": "+15551250001", "body": "STATUS", "delay_ms": 1000, "_note": "Final status check" }
+  ]
+}

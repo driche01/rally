@@ -156,7 +156,15 @@ export async function generateResponse(
 
     const result = await response.json();
     const raw = result.content?.[0]?.text ?? null;
-    return raw ? stripAiDisclaimer(raw, context) : generateFallback(context);
+    if (!raw) return generateFallback(context);
+    let text = stripAiDisclaimer(raw, context);
+    // Enforce 320 char SMS limit
+    if (text.length > 320) {
+      const truncated = text.slice(0, 320);
+      const lastBreak = Math.max(truncated.lastIndexOf('. '), truncated.lastIndexOf('! '), truncated.lastIndexOf('\n'));
+      text = lastBreak > 100 ? truncated.slice(0, lastBreak + 1) : truncated.slice(0, truncated.lastIndexOf(' '));
+    }
+    return text;
   } catch (err) {
     console.error('[bot-response] Error calling Sonnet:', err);
     return generateFallback(context);
@@ -219,7 +227,14 @@ export async function generateCelebration(
     if (!response.ok) return getCelebrationFallback(milestone, milestoneDetail);
 
     const result = await response.json();
-    return result.content?.[0]?.text ?? getCelebrationFallback(milestone, milestoneDetail);
+    let text = result.content?.[0]?.text ?? getCelebrationFallback(milestone, milestoneDetail);
+    // Enforce 320 char SMS limit — truncate at last complete sentence/word
+    if (text.length > 320) {
+      const truncated = text.slice(0, 320);
+      const lastBreak = Math.max(truncated.lastIndexOf('. '), truncated.lastIndexOf('! '), truncated.lastIndexOf('\n'));
+      text = lastBreak > 100 ? truncated.slice(0, lastBreak + 1) : truncated.slice(0, truncated.lastIndexOf(' '));
+    }
+    return text;
   } catch {
     return getCelebrationFallback(milestone, milestoneDetail);
   }
