@@ -606,6 +606,10 @@ async function handlePhaseMessage(
   if (/\b(?:was\s+it\s+\w+ing|did\s+(?:you|he|she|they)\s+\w+|too\s+bad\s+you\s+can'?t|you\s+should\s+(?:sue|try|ask|call)|sue\s+(?:that|the|him|her)|sounds?\s+like\s+a\s+dick|sounds?\s+like\s+an?\s+\w+)\b/i.test(body) && wordCount <= 15) {
     return null;
   }
+  // Short social messages: "Thanks Harry", "good shout sof"
+  if (/^(?:thanks?\s+\w+|thx\s+\w+|good\s+(?:shout|call|point|one)\s+\w+|nice\s+one\s+\w+|cheers\s+\w+)!*$/i.test(body.trim())) {
+    return null;
+  }
   // Short exclamatory reactions: "Def sue that bro", "NOOOO"
   if (/^(?:def(?:initely)?\s+.{3,20}|lol+|haha+|omg+|yikes+|oof+|rip+|damn+|wow+|bruh+|sheesh+|aye+|ayy+)!*$/i.test(body.trim())) {
     return null;
@@ -623,7 +627,7 @@ async function handlePhaseMessage(
 
   // ─── Off-topic detection — stay silent (P1-6) ──────────────────────────
   // Questions/statements clearly unrelated to the trip
-  if (/\b(at\s+\w+\s+for\s+the\s+protest|for\s+the\s+protest|out\s+of\s+town\s+(?:at|this)\s+(?:the\s+)?(?:river|lake|beach|mountains?)\s+this\s+weekend|new\s+(?:\w+\s+)?album\s+alert)\b/i.test(body)) {
+  if (/\b(at\s+\w+\s+for\s+the\s+protest|for\s+the\s+protest|out\s+of\s+town\s+(?:at|this)\s+(?:the\s+)?(?:river|lake|beach|mountains?)\s+this\s+weekend|new\s+(?:[\w\s]+\s+)?album\s+alert)\b/i.test(body)) {
     return null;
   }
 
@@ -1095,6 +1099,29 @@ async function handlePhaseMessage(
   // Flight status collection during AWAITING_FLIGHTS
   if (phase === 'AWAITING_FLIGHTS' && message.participant) {
     const upper = body.trim().toUpperCase();
+
+    // P4-3: Detect varied booking confirmations
+    const isBookingConfirmation = /\b(?:i\s+booked|mine\s+(?:are\s+)?(?:actually\s+)?booked|(?:i'?ve|i\s+have)\s+booked|flights?\s+(?:are\s+)?booked|just\s+booked|already\s+booked)\b/i.test(body)
+      && !/\b(?:did\s+you|can\s+we|gonna|going\s+to|plan\s+to|about\s+to|want\s+to)\b/i.test(body);
+    // "I may or may not have also booked" — playful but means booked
+    const isPlayfulBooked = /\bi\s+may\s+or\s+may\s+not\s+have\s+(?:also\s+)?booked\b/i.test(body);
+    // Future intent — NOT booked: "gonna book tn", "down to book tonight", "planning to book"
+    const isFutureIntent = /\b(?:gonna|going\s+to|plan(?:ning)?\s+to|about\s+to|down\s+to|want\s+to|need\s+to)\s+book\b/i.test(body);
+
+    if ((isBookingConfirmation || isPlayfulBooked) && !isFutureIntent) {
+      await admin
+        .from('trip_session_participants')
+        .update({ flight_status: 'confirmed' })
+        .eq('id', message.participant.id);
+      const name = fromUser.display_name ?? 'Someone';
+      return `${name}'s flights are locked in \ud83d\udd12 who's next?`;
+    }
+
+    // P4-5: "can someone send me the flights" — request for info, stay silent
+    if (/\b(?:can\s+someone\s+send|send\s+me\s+the\s+flights?|share\s+the\s+(?:flights?|link))\b/i.test(body)) {
+      return null;
+    }
+
     if (['YES', 'NOT YET', 'DRIVING'].includes(upper)) {
       const statusMap: Record<string, string> = {
         'YES': 'confirmed',
