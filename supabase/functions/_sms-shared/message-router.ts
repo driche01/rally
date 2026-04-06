@@ -64,6 +64,25 @@ export interface RoutedMessage {
   is1to1: boolean;
 }
 
+// Known destination names for recognition (lowercase)
+const KNOWN_DESTINATIONS = [
+  'tulum', 'cancun', 'cancún', 'cabo', 'cabo san lucas', 'playa del carmen',
+  'paris', 'london', 'tokyo', 'bali', 'bangkok', 'phuket',
+  'hawaii', 'maui', 'oahu', 'kauai', 'big island',
+  'aspen', 'park city', 'whistler', 'vail', 'steamboat', 'mammoth',
+  'miami', 'key west', 'fort lauderdale', 'tampa', 'orlando',
+  'barcelona', 'rome', 'florence', 'amalfi', 'santorini', 'mykonos',
+  'amsterdam', 'lisbon', 'porto', 'berlin', 'prague', 'dublin',
+  'mexico city', 'cdmx', 'costa rica', 'puerto rico', 'cartagena',
+  'nashville', 'austin', 'scottsdale', 'vegas', 'las vegas', 'new orleans',
+  'lake tahoe', 'sedona', 'joshua tree', 'palm springs',
+  'jamaica', 'punta cana', 'aruba', 'bahamas', 'turks and caicos',
+  'iceland', 'portugal', 'spain', 'italy', 'greece', 'japan', 'thailand',
+  'colombia', 'peru', 'argentina', 'brazil',
+  'new york', 'nyc', 'los angeles', 'la', 'san francisco', 'chicago',
+  'denver', 'seattle', 'portland', 'savannah', 'charleston',
+];
+
 // Common typo mappings for fuzzy keyword matching
 const TYPO_MAP: Record<string, string> = {
   STAUS: 'STATUS', STAUTS: 'STATUS', SATUS: 'STATUS', STATU: 'STATUS',
@@ -361,6 +380,15 @@ async function handlePhaseMessage(
 
   // During INTRO, collect names and destination ideas
   if (phase === 'INTRO') {
+    // Check for "yes", "that's everyone", "we're good", "all here" to advance
+    const introUpper = body.trim().toUpperCase();
+    const participants = await getParticipants(admin, session.id);
+    const namedCount = participants.filter((p) => p.display_name && p.status === 'active').length;
+    if (namedCount >= 2 && (introUpper === 'YES' || introUpper === 'YEP' || introUpper === 'YEAH' ||
+        /\b(that'?s\s*everyone|we'?re\s*(all\s*)?good|all\s*here|that'?s\s*it|let'?s\s*go)\b/i.test(body))) {
+      return advancePhase(admin, session);
+    }
+
     // Extract name from "Name — destination" pattern
     const nameMatch = body.match(/^([\p{L}][\p{L}'\-]{0,30})\s*[—–\-]\s*(.+)/u);
     if (nameMatch) {
@@ -389,39 +417,44 @@ async function handlePhaseMessage(
           .eq('phone', fromUser.phone);
       }
 
-      // Add destination to candidates
-      const existingCandidates = ((session as Record<string, unknown>).destination_candidates as Array<{ label: string; votes: number }>) ?? [];
-      const alreadyListed = existingCandidates.some(
-        (c) => c.label.toLowerCase() === destinationIdea.toLowerCase(),
-      );
-      if (!alreadyListed) {
-        existingCandidates.push({ label: destinationIdea, votes: 1 });
-        await admin
-          .from('trip_sessions')
-          .update({ destination_candidates: existingCandidates })
-          .eq('id', session.id);
+      // Add destination to candidates — only if it looks like a real place name
+      const destLower = destinationIdea.toLowerCase();
+      const recognizedDest = KNOWN_DESTINATIONS.find((d) => destLower.includes(d));
+      if (recognizedDest) {
+        const properDest = recognizedDest.split(' ').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+        const existingCandidates = ((session as Record<string, unknown>).destination_candidates as Array<{ label: string; votes: number }>) ?? [];
+        if (!existingCandidates.some((c) => c.label.toLowerCase() === recognizedDest)) {
+          existingCandidates.push({ label: properDest, votes: 1 });
+          await admin
+            .from('trip_sessions')
+            .update({ destination_candidates: existingCandidates })
+            .eq('id', session.id);
+        }
+
+        const updatedP = await getParticipants(admin, session.id);
+        const nowNamedD = updatedP.filter((p) => p.display_name && p.status === 'active').length;
+        if (nowNamedD >= 2) {
+          return `Got it, ${name} \u2014 ${properDest} is on the list! Is that everyone? Reply YES when the whole crew is here.`;
+        }
+        return `Got it, ${name} \u2014 ${properDest} is on the list!`;
       }
 
-      // Check if all participants now have names — auto-advance
-      const autoMsg = await checkAutoAdvance(admin, session);
-      if (autoMsg) {
-        return `Got it, ${name} \u2014 ${destinationIdea} is on the list!\n\n${autoMsg}`;
+      // Name extracted but no recognizable destination — just acknowledge name
+      // Check if we have enough people to ask "is that everyone?"
+      const updatedParticipants = await getParticipants(admin, session.id);
+      const nowNamed = updatedParticipants.filter((p) => p.display_name && p.status === 'active').length;
+      if (nowNamed >= 2) {
+        return `Hey ${name}! Is that everyone? Reply YES when the whole crew is here.`;
       }
-      return `Got it, ${name} \u2014 ${destinationIdea} is on the list!`;
+      return `Hey ${name}!`;
     }
 
     // #1 — Destination buried in natural language ("Tulum would be sick but idk")
     // If message is >3 words and contains alphabetic chars but didn't match the
     // "Name - Destination" pattern, check for destination mentions via simple keyword scan
     if (body.trim().split(/\s+/).length > 3 && /[a-zA-Z]/.test(body)) {
-      const knownDestinations = [
-        'tulum', 'cancun', 'cabo', 'paris', 'london', 'tokyo', 'bali',
-        'hawaii', 'aspen', 'park city', 'miami', 'barcelona', 'rome',
-        'amsterdam', 'lisbon', 'mexico city', 'cdmx', 'costa rica',
-        'puerto rico', 'nashville', 'scottsdale', 'vegas', 'las vegas',
-      ];
       const bodyLower = body.toLowerCase();
-      for (const dest of knownDestinations) {
+      for (const dest of KNOWN_DESTINATIONS) {
         if (bodyLower.includes(dest)) {
           const properDest = dest.split(' ').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
           const existingCandidates = ((session as Record<string, unknown>).destination_candidates as Array<{ label: string; votes: number }>) ?? [];

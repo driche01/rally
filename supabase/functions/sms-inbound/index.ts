@@ -265,9 +265,12 @@ Deno.serve(async (req: Request) => {
             // Parse remainder for destination, dates, budget
             // Split on commas to separate components
             const parts = remainder.split(',').map((p) => p.trim());
-            const plannerDest = parts[0]; // First part is always destination
-            const sessionUpdates: Record<string, unknown> = {
-              destination_candidates: [{ label: plannerDest, votes: 1 }],
+            const plannerDestRaw = parts[0];
+            const sessionUpdates: Record<string, unknown> = {};
+
+            // Only store as destination if it's short (likely a place name, not a sentence)
+            if (plannerDestRaw.split(/\s+/).length <= 4) {
+              sessionUpdates.destination_candidates = [{ label: plannerDestRaw, votes: 1 }];
             };
 
             // Check remaining parts for dates and budget
