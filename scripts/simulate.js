@@ -42,39 +42,52 @@ function parseTwiml(xml) {
     .replace(/&quot;/g, '"');
 }
 
-async function sendMessage(from, body, phones) {
+async function sendMessage(from, body, phones, opts = {}) {
   // Build To field: Rally + all other participants
   const others = phones.filter((p) => p !== from);
   const to = [RALLY_PHONE, ...others].join(',');
 
+  // Use MM prefix for group MMS, SM for 1:1 — the bot checks this to distinguish
+  const sidPrefix = opts.is1to1 ? 'SM' : 'MM';
   const params = new URLSearchParams({
-    MessageSid: `SM_sim_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    MessageSid: `${sidPrefix}_sim_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     From: from,
     To: to,
     Body: body,
     NumMedia: '0',
   });
 
-  const res = await fetch(`${BASE_URL}/sms-inbound`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      Authorization: `Bearer ${SERVICE_KEY}`,
-    },
-    body: params.toString(),
-  });
+  // Retry with backoff on transient errors
+  let lastErr;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch(`${BASE_URL}/sms-inbound`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: `Bearer ${SERVICE_KEY}`,
+        },
+        body: params.toString(),
+      });
 
-  if (!res.ok) {
-    console.error(`  FAIL: ${body} → HTTP ${res.status}`);
-    process.exit(1);
+      if (!res.ok) {
+        console.error(`  FAIL: ${body} → HTTP ${res.status}`);
+        process.exit(1);
+      }
+
+      const xml = await res.text();
+      const reply = parseTwiml(xml);
+
+      if (reply) outboundMessages.push(reply);
+
+      return reply;
+    } catch (err) {
+      lastErr = err;
+      if (attempt < 2) await sleep(1000 * (attempt + 1));
+    }
   }
-
-  const xml = await res.text();
-  const reply = parseTwiml(xml);
-
-  if (reply) outboundMessages.push(reply);
-
-  return reply;
+  console.error(`  FAIL after 3 retries: ${body}`, lastErr);
+  process.exit(1);
 }
 
 async function run() {
@@ -87,11 +100,13 @@ async function run() {
 
   // Send messages in sequence
   for (const msg of script.messages) {
-    // Delay (cap at 5s for test speed)
-    const delay = Math.min(msg.delay_ms || 0, 5000);
-    if (delay > 0) await sleep(delay);
+    // Minimum 500ms between messages, cap at 5s
+    const delay = Math.max(Math.min(msg.delay_ms || 500, 5000), 500);
+    await sleep(delay);
 
-    const reply = await sendMessage(msg.from, msg.body, phones);
+    // Detect 1:1 messages (planner pre-registration) from the _note field
+    const is1to1 = msg._note?.includes('1:1') || msg._is1to1 || false;
+    const reply = await sendMessage(msg.from, msg.body, phones, { is1to1 });
 
     const tag = msg.from.slice(-4);
     console.log(`  [${tag}] ${msg.body}`);

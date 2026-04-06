@@ -336,7 +336,8 @@ async function handleResume(admin: SupabaseClient, session: TripSession): Promis
     .update({ paused: false, paused_at: null })
     .eq('id', session.id);
 
-  return await handleStatus(admin, session);
+  const status = await handleStatus(admin, session);
+  return `We\u2019re back! \ud83d\ude4c\n${status}`;
 }
 
 async function handleBooked(
@@ -419,7 +420,10 @@ async function handlePhaseMessage(
 
       // Add destination to candidates — only if it looks like a real place name
       const destLower = destinationIdea.toLowerCase();
-      const recognizedDest = KNOWN_DESTINATIONS.find((d) => destLower.includes(d));
+      const recognizedDest = KNOWN_DESTINATIONS.find((d) => {
+        const re = new RegExp(`\\b${d.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+        return re.test(destLower);
+      });
       if (recognizedDest) {
         const properDest = recognizedDest.split(' ').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
         const existingCandidates = ((session as Record<string, unknown>).destination_candidates as Array<{ label: string; votes: number }>) ?? [];
@@ -450,8 +454,19 @@ async function handlePhaseMessage(
     }
 
     // Single-word or two-word name without dash ("Abbey", "Sofia", "Matt B")
+    // Exclude common chat words that aren't names
+    const NOT_NAMES = new Set([
+      'lol', 'omg', 'wow', 'ok', 'okay', 'yes', 'no', 'yep', 'nah', 'nope',
+      'haha', 'hahaha', 'lmao', 'lmfao', 'bruh', 'bro', 'dude', 'same',
+      'nice', 'cool', 'sick', 'fire', 'bet', 'facts', 'cap', 'idk',
+      'tbh', 'imo', 'fr', 'ngl', 'smh', 'rip', 'gg', 'yikes', 'oof',
+      'hi', 'hey', 'yo', 'sup', 'sure', 'maybe', 'true', 'right',
+      'what', 'huh', 'wait', 'why', 'how', 'who', 'when', 'where',
+      'in', 'down', 'go', 'let', 'do', 'up', 'me', 'we', 'he', 'she',
+    ]);
     const wordCount = body.trim().split(/\s+/).length;
-    if (wordCount <= 2 && /^[\p{L}]/u.test(body.trim()) && !/\d/.test(body)) {
+    if (wordCount <= 2 && /^[\p{L}]/u.test(body.trim()) && !/\d/.test(body) &&
+        !NOT_NAMES.has(body.trim().toLowerCase())) {
       const name = body.trim().split(/\s+/).map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 
       await admin.from('trip_session_participants')
@@ -482,7 +497,9 @@ async function handlePhaseMessage(
     if (body.trim().split(/\s+/).length > 3 && /[a-zA-Z]/.test(body)) {
       const bodyLower = body.toLowerCase();
       for (const dest of KNOWN_DESTINATIONS) {
-        if (bodyLower.includes(dest)) {
+        // Use word boundary matching to prevent "la" matching inside "last", "place", etc.
+        const destRegex = new RegExp(`\\b${dest.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+        if (destRegex.test(bodyLower)) {
           const properDest = dest.split(' ').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
           const existingCandidates = ((session as Record<string, unknown>).destination_candidates as Array<{ label: string; votes: number }>) ?? [];
           if (!existingCandidates.some((c) => c.label.toLowerCase() === dest)) {
@@ -644,10 +661,10 @@ async function handlePhaseMessage(
                 }).eq('id', session.id);
                 const { createPoll, formatPollMessage } = await import('./poll-engine.ts');
                 await createPoll(admin, freshS, 'dates', 'Which dates work best?', labels);
-                return `${parsed.summary ?? 'A few options came up.'}\n\n` + formatPollMessage('Vote on dates:', labels);
+                return `A few date options came up!\n\n` + formatPollMessage('Vote on dates:', labels);
               }
             } else {
-              return `Hearing ${parsed.summary ?? 'some ideas'}. Can someone nail down specific dates? Like "Apr 17-20"`;
+              return `Sounds like no one's locked in dates yet. Can someone nail down specific dates? Like "Apr 17-20"`;
             }
           } catch { /* fall through */ }
         }
