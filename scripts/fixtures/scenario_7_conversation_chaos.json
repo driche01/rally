@@ -9,7 +9,8 @@
     "rally": "+18559310010"
   },
   "assert_outbound_contains": [
-    "Reply STOP anytime"
+    "Reply STOP anytime",
+    "Dates locked in"
   ],
   "assert_outbound_does_not_contain": [],
   "messages": [

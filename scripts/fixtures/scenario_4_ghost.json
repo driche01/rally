@@ -32,8 +32,8 @@
     { "from": "+15551240002", "body": "YES", "delay_ms": 1000, "_note": "COMMIT_POLL: p2 commits" },
     { "from": "+15551240003", "body": "YES", "delay_ms": 1000, "_note": "COMMIT_POLL: p3 commits. Ghost Gary never responds — should be marked committed=false after 48h (or planner NEXT)." },
 
-    { "from": "+15551240001", "body": "NEXT", "delay_ms": 2000, "_note": "Planner advances past ghost at commit poll" },
+    { "from": "+15551240001", "body": "NEXT", "delay_ms": 2000, "_note": "Planner advances past ghost at commit poll — should move to AWAITING_FLIGHTS" },
 
-    { "from": "+15551240001", "body": "STATUS", "delay_ms": 1000, "_note": "Final check: ghost should be excluded from committed group" }
+    { "from": "+15551240001", "body": "STATUS", "delay_ms": 1000, "_note": "Final check: should be in AWAITING_FLIGHTS, ghost excluded" }
   ]
 }
