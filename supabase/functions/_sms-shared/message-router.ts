@@ -619,9 +619,29 @@ async function handlePhaseMessage(
     return null;
   }
 
-  // ─── Peer-to-peer logistics questions — stay silent (P2-5) ─────────────
-  // Questions about property details the bot can't answer
+  // ─── During-trip logistics — stay silent (P5-1 through P5-5) ────────────
+  // Grocery coordination, property questions, activity coordination
+  if (/\b(?:grocery|groceries|store|market|outlet|bananas?|fruits?|meat|vegetarian|stir\s*fry|pasta|dinner|lunch|breakfast|brekky|milk|bread|eggs|snacks|drinks|ice\s*cream|coffee)\b/i.test(body) && /\b(?:get|buy|grab|pick\s+up|send\s+requests?|we'?re\s+at|can\s+we|please|plz)\b/i.test(body)) {
+    return null;
+  }
+  // Property questions and answers
   if (/\b(?:what'?s?\s+the\s+(?:garage|wifi|gate|door|lock|address|code|password|key)|how\s+(?:do\s+(?:you|we)\s+)?(?:close|open|lock|unlock|use)\s+the|where'?s?\s+the\s+(?:key|remote|thermostat|breaker)|do\s+(?:we|you)\s+need\s+to\s+rent)\b/i.test(body)) {
+    return null;
+  }
+  // Short numeric answers (codes, prices, counts) — not trip decisions
+  if (/^\d{1,6}$/.test(body.trim()) && phase !== 'BUDGET_POLL' && phase !== 'DECIDING_DESTINATION') {
+    return null;
+  }
+  // Activity coordination
+  if (/\b(?:anyone\s+want\s+to\s+(?:go|come|do|try|join|play)|want\s+to\s+go\s+for\s+a|let'?s\s+(?:go|do|try|hit|head)|heading\s+(?:out|to|over))\b/i.test(body) && !/\b(?:book|flight|hotel|trip|travel)\b/i.test(body)) {
+    return null;
+  }
+  // Self-resolved questions ("ah I realized", "we're all good", "never mind")
+  if (/\b(?:i\s+realized|never\s*mind|nvm|figured\s+(?:it\s+)?out|we'?re\s+all\s+good|all\s+good\s+folks|sorted\s+it)\b/i.test(body)) {
+    return null;
+  }
+  // Asterisk corrections ("*four including me")
+  if (/^\*/.test(body.trim())) {
     return null;
   }
 
