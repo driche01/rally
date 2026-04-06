@@ -557,7 +557,7 @@ async function handlePhaseMessage(
   // Mark as opted_out but send a warm farewell instead of the harsh STOP response.
   // "I'm out" only matches as opt-out when NOT followed by "of [activity/noun phrase]"
   // e.g. "I'm out" = opt-out, but "out of snow activities" or "out of town" = NOT opt-out
-  const gracefulOptOutPattern = /\b(won'?t\s+be\s+able\s+to\s+make\s+it|have\s+to\s+remove\s+myself|(?:i'?m|i\s+am)\s+(?:sadly\s+)?out(?!\s+(?:of|for)\b)|count\s+me\s+out|can'?t\s+(?:make\s+it|come|go|do\s+it)|not\s+(?:gonna|going\s+to)\s+(?:make\s+it|be\s+able)|have\s+to\s+(?:bow\s+out|drop\s+out|sit\s+this\s+one\s+out|pass)|gotta\s+(?:pass|bow\s+out|sit\s+out)|sadly\s+(?:i\s+)?can'?t|i'?m\s+definitely\s+out|don'?t\s+think\s+i'?m\s+(?:gonna|going\s+to)\s+make\s+it)\b/i;
+  const gracefulOptOutPattern = /\b(won'?t\s+be\s+able\s+to\s+make\s+it|have\s+to\s+remove\s+myself|(?:i'?m|i\s+am)\s+(?:(?:sadly|also|definitely|probably)\s+)?out(?!\s+(?:of|for)\b)|count\s+me\s+out|can'?t\s+(?:make\s+it|come|go|do\s+it)|not\s+(?:gonna|going\s+to)\s+(?:make\s+it|be\s+able)|have\s+to\s+(?:bow\s+out|drop\s+out|sit\s+this\s+one\s+out|pass)|gotta\s+(?:pass|bow\s+out|sit\s+out)|sadly\s+(?:i\s+)?can'?t|i'?m\s+definitely\s+out|don'?t\s+think\s+i'?m\s+(?:gonna|going\s+to)\s+make\s+it)\b/i;
   if (gracefulOptOutPattern.test(body) && message.participant) {
     // Make sure this isn't partial availability ("I'm out for the first two weeks")
     const partialPattern = /\b(?:i'?m|i\s+am)\s+(?:sadly\s+)?out\s+(?:for|of)\s+(?:the\s+first|the\s+last|the\s+second|the\s+third)/i;
@@ -720,7 +720,7 @@ async function handlePhaseMessage(
   }
 
   // Commit poll — YES/NO during COMMIT_POLL phase
-  if (phase === 'COMMIT_POLL' && message.participant) {
+  if (phase === 'COMMIT_POLL' && message.participant && message.participant.status === 'active') {
     const upper = body.trim().toUpperCase();
     if (upper === 'YES' || upper === 'NO') {
       const result = await handleCommitResponse(
@@ -728,6 +728,11 @@ async function handlePhaseMessage(
       );
       if (result) return result;
       return null; // Still collecting
+    }
+    // P6-1: Ambiguous commitments — "I might be in", "maybe", "probably"
+    if (/\b(?:i\s+might|maybe|i'?m\s+(?:not\s+sure|thinking|considering)|probably|possibly|i\s+think\s+(?:i\s+might|so))\b/i.test(body)) {
+      const name = fromUser.display_name ?? 'Hey';
+      return `${name} — need a firm YES or NO so we can finalize the headcount!`;
     }
   }
 
