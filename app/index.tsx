@@ -8,10 +8,10 @@ export default function RootIndex() {
   if (isLoading) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FAFAFA' }}>
-        <ActivityIndicator size="large" color="#FF6B5B" />
+        <ActivityIndicator size="large" color="#D85A30" />
       </View>
     );
   }
 
-  return <Redirect href={session ? '/(app)/(tabs)' : '/(auth)/login'} />;
+  return <Redirect href={session ? '/(app)/(tabs)' : '/(auth)/onboarding'} />;
 }

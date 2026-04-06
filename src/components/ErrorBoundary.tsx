@@ -60,7 +60,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
               paddingVertical: 14,
               paddingHorizontal: 32,
               borderRadius: 14,
-              backgroundColor: '#FF6B5B',
+              backgroundColor: '#D85A30',
             }}
           >
             <Text style={{ color: 'white', fontWeight: '600', fontSize: 15 }}>Try again</Text>

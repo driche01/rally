@@ -417,12 +417,12 @@ function AddExpenseSheet({
                           paddingVertical: 7,
                           borderRadius: 20,
                           borderWidth: 1.5,
-                          borderColor: active ? '#FF6B5B' : '#E5E5E5',
+                          borderColor: active ? '#D85A30' : '#E5E5E5',
                           backgroundColor: active ? '#FFF1F0' : 'white',
                         }}
                       >
-                        <Ionicons name={c.icon} size={13} color={active ? '#FF6B5B' : '#737373'} />
-                        <Text style={{ fontSize: 12, fontWeight: '600', color: active ? '#FF6B5B' : '#737373' }}>
+                        <Ionicons name={c.icon} size={13} color={active ? '#D85A30' : '#737373'} />
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: active ? '#D85A30' : '#737373' }}>
                           {c.label}
                         </Text>
                       </Pressable>
@@ -446,11 +446,11 @@ function AddExpenseSheet({
                           paddingVertical: 7,
                           borderRadius: 20,
                           borderWidth: 1.5,
-                          borderColor: active ? '#FF6B5B' : '#E5E5E5',
+                          borderColor: active ? '#D85A30' : '#E5E5E5',
                           backgroundColor: active ? '#FFF1F0' : 'white',
                         }}
                       >
-                        <Text style={{ fontSize: 12, fontWeight: '600', color: active ? '#FF6B5B' : '#737373' }}>
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: active ? '#D85A30' : '#737373' }}>
                           {p.name}
                         </Text>
                       </Pressable>
@@ -470,7 +470,7 @@ function AddExpenseSheet({
                       style={{
                         paddingHorizontal: 12,
                         paddingVertical: 5,
-                        backgroundColor: splitMode === mode ? '#FF6B5B' : 'white',
+                        backgroundColor: splitMode === mode ? '#D85A30' : 'white',
                       }}
                     >
                       <Text style={{ fontSize: 12, fontWeight: '600', color: splitMode === mode ? 'white' : '#737373' }}>
@@ -539,7 +539,7 @@ function AddExpenseSheet({
                 <Pressable
                   onPress={handleSave}
                   disabled={!canSave || saving}
-                  style={{ flex: 2, paddingVertical: 14, borderRadius: 14, backgroundColor: canSave ? '#FF6B5B' : '#FCA99F', alignItems: 'center', justifyContent: 'center' }}
+                  style={{ flex: 2, paddingVertical: 14, borderRadius: 14, backgroundColor: canSave ? '#D85A30' : '#FCA99F', alignItems: 'center', justifyContent: 'center' }}
                 >
                   {saving ? (
                     <ActivityIndicator size="small" color="white" />
@@ -685,17 +685,28 @@ export function ExpensesTab({ tripId, isPlanner = true }: { tripId: string; isPl
 
         {/* ── Section B: Expense feed ── */}
         {!hasExpenses ? (
-          <View className="mt-6 items-center gap-3 py-8">
-            <View className="h-14 w-14 items-center justify-center rounded-2xl bg-neutral-100">
-              <Ionicons name="receipt-outline" size={28} color="#A3A3A3" />
-            </View>
-            <Text className="text-base font-semibold text-neutral-700">No expenses yet</Text>
-            <Text className="text-center text-sm text-neutral-400">
-              Tap + to log your first expense.
-            </Text>
-            <Text className="text-center text-xs text-neutral-300">
+          <View className="mt-2 gap-3">
+            <Text className="text-xs text-neutral-400">
               Accommodation costs from your booking will appear here automatically.
             </Text>
+            {isPlanner ? (
+              <Pressable
+                onPress={() => setAddSheetVisible(true)}
+                style={{
+                  borderWidth: 1.5,
+                  borderColor: '#D1D5DB',
+                  borderStyle: 'dashed',
+                  borderRadius: 16,
+                  paddingVertical: 28,
+                  alignItems: 'center',
+                  gap: 8,
+                  marginTop: 4,
+                }}
+              >
+                <Ionicons name="add-circle-outline" size={28} color="#A3A3A3" />
+                <Text style={{ fontSize: 14, color: '#A3A3A3' }}>Tap to log an expense</Text>
+              </Pressable>
+            ) : null}
           </View>
         ) : (
           <>
@@ -713,34 +724,27 @@ export function ExpensesTab({ tripId, isPlanner = true }: { tripId: string; isPl
                 onSettleSplit={handleSettleSplit}
               />
             ))}
+            {isPlanner ? (
+              <Pressable
+                onPress={() => setAddSheetVisible(true)}
+                style={{
+                  borderWidth: 1.5,
+                  borderColor: '#D1D5DB',
+                  borderStyle: 'dashed',
+                  borderRadius: 16,
+                  paddingVertical: 20,
+                  alignItems: 'center',
+                  gap: 6,
+                  marginTop: 4,
+                }}
+              >
+                <Ionicons name="add-circle-outline" size={22} color="#A3A3A3" />
+                <Text style={{ fontSize: 13, color: '#A3A3A3' }}>Add another expense</Text>
+              </Pressable>
+            ) : null}
           </>
         )}
       </ScrollView>
-
-      {/* ── Section C: FAB — planners only ── */}
-      {isPlanner ? (
-      <View
-        style={{
-          position: 'absolute',
-          bottom: insets.bottom > 0 ? insets.bottom + 16 : 24,
-          right: 20,
-        }}
-      >
-        <Pressable
-          onPress={() => setAddSheetVisible(true)}
-          className="h-14 w-14 items-center justify-center rounded-full bg-coral-500 active:bg-coral-600"
-          style={{
-            shadowColor: '#FF6B5B',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.4,
-            shadowRadius: 12,
-            elevation: 6,
-          }}
-        >
-          <Ionicons name="add" size={28} color="white" />
-        </Pressable>
-      </View>
-      ) : null}
 
       {/* Add Expense Sheet */}
       <AddExpenseSheet

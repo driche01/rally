@@ -13,6 +13,7 @@ export interface DestinationSectionProps {
   onOptionAdd: () => void;
   allowMulti: boolean;
   onAllowMultiChange: (v: boolean) => void;
+  accentColor?: string;
 }
 
 export function DestinationSection({
@@ -24,6 +25,7 @@ export function DestinationSection({
   onOptionAdd,
   allowMulti,
   onAllowMultiChange,
+  accentColor = '#D85A30',
 }: DestinationSectionProps) {
   return (
     <>
@@ -31,7 +33,7 @@ export function DestinationSection({
         label="Question"
         value={title}
         onChangeText={onTitleChange}
-        placeholder="What should the group decide?"
+        placeholder="Where are we headed?"
       />
 
       <Divider />
@@ -72,8 +74,8 @@ export function DestinationSection({
             className="flex-row items-center gap-2 py-2"
             accessibilityRole="button"
           >
-            <Ionicons name="add-circle-outline" size={20} color="#FF6B5B" />
-            <Text className="text-base text-coral-500">Add option</Text>
+            <Ionicons name="add-circle-outline" size={20} color={accentColor} />
+            <Text className="text-base" style={{ color: accentColor }}>Add option</Text>
           </Pressable>
         ) : null}
       </View>
@@ -82,15 +84,15 @@ export function DestinationSection({
 
       <View className="flex-row items-center justify-between">
         <View className="flex-1 gap-0.5">
-          <Text className="text-base font-medium text-neutral-800">Allow multiple choices</Text>
+          <Text className="text-base font-medium text-neutral-800">Allow multiple picks</Text>
           <Text className="text-sm text-neutral-400">
-            Group members can select more than one
+            The crew can pick more than one
           </Text>
         </View>
         <Switch
           value={allowMulti}
           onValueChange={onAllowMultiChange}
-          trackColor={{ false: '#E8E8E8', true: '#FF6B5B' }}
+          trackColor={{ false: '#E8E8E8', true: accentColor }}
           thumbColor="white"
         />
       </View>

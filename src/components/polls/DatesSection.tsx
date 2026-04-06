@@ -19,9 +19,11 @@ import type { DateRange } from '@/types/polls';
 function CalendarPicker({
   ranges,
   onRangesChange,
+  accentColor = '#D85A30',
 }: {
   ranges: DateRange[];
   onRangesChange: (r: DateRange[]) => void;
+  accentColor?: string;
 }) {
   const today = stripTime(new Date());
   const [viewYear, setViewYear] = useState(today.getFullYear());
@@ -120,22 +122,19 @@ function CalendarPicker({
                 disabled={isPast}
               >
                 <View
-                  className={[
-                    'h-8 w-8 items-center justify-center rounded-full',
-                    isPast ? '' : isEndpoint ? 'bg-coral-500' : isIn ? 'bg-coral-100' : '',
-                  ].join(' ')}
+                  className="h-8 w-8 items-center justify-center rounded-full"
+                  style={isPast ? {} : isEndpoint ? { backgroundColor: accentColor } : isIn ? { backgroundColor: accentColor + '20' } : {}}
                 >
                   <Text
-                    className={[
-                      'text-xs',
-                      isPast
-                        ? 'text-neutral-300'
-                        : isEndpoint
-                          ? 'font-bold text-white'
-                          : isIn
-                            ? 'text-coral-700'
-                            : 'text-neutral-700',
-                    ].join(' ')}
+                    className="text-xs"
+                    style={isPast
+                      ? { color: '#D4D4D4' }
+                      : isEndpoint
+                        ? { fontWeight: '700', color: '#FFFFFF' }
+                        : isIn
+                          ? { color: accentColor }
+                          : { color: '#404040' }
+                    }
                   >
                     {day.getDate()}
                   </Text>
@@ -159,14 +158,15 @@ function CalendarPicker({
           {ranges.map((r, i) => (
             <View
               key={i}
-              className="flex-row items-center gap-1 rounded-full border border-coral-200 bg-coral-50 px-3 py-1.5"
+              className="flex-row items-center gap-1 rounded-full border px-3 py-1.5"
+              style={{ borderColor: accentColor + '60', backgroundColor: accentColor + '12' }}
             >
-              <Text className="text-sm text-coral-700">{fmtRange(r)}</Text>
+              <Text className="text-sm" style={{ color: accentColor }}>{fmtRange(r)}</Text>
               <Pressable
                 onPress={() => onRangesChange(ranges.filter((_, j) => j !== i))}
                 hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
               >
-                <Ionicons name="close" size={13} color="#FF6B5B" />
+                <Ionicons name="close" size={13} color={accentColor} />
               </Pressable>
             </View>
           ))}
@@ -195,6 +195,7 @@ export interface DatesSectionProps {
   customDurationUnit: DurationUnit;
   onCustomDurationUnitChange: (u: DurationUnit) => void;
   onCustomDurationAdd: () => void;
+  accentColor?: string;
 }
 
 export function DatesSection({
@@ -211,6 +212,7 @@ export function DatesSection({
   customDurationUnit,
   onCustomDurationUnitChange,
   onCustomDurationAdd,
+  accentColor = '#D85A30',
 }: DatesSectionProps) {
   return (
     <>
@@ -220,7 +222,7 @@ export function DatesSection({
           label="Duration question"
           value={durationTitle}
           onChangeText={onDurationTitleChange}
-          placeholder="How long should the trip be?"
+          placeholder="How long's the trip?"
         />
 
         {/* Preset + custom duration chips */}
@@ -231,14 +233,15 @@ export function DatesSection({
               <Pressable
                 key={dur}
                 onPress={() => onDurationToggle(dur)}
-                className={[
-                  'rounded-full border px-4 py-2',
-                  sel ? 'border-coral-500 bg-coral-500' : 'border-neutral-200 bg-white',
-                ].join(' ')}
+                className="rounded-full border px-4 py-2"
+                style={sel
+                  ? { borderColor: accentColor, backgroundColor: accentColor }
+                  : { borderColor: '#E5E5E5', backgroundColor: '#FFFFFF' }
+                }
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: sel }}
               >
-                <Text className={['text-sm font-medium', sel ? 'text-white' : 'text-neutral-600'].join(' ')}>
+                <Text className="text-sm font-medium" style={{ color: sel ? '#FFFFFF' : '#525252' }}>
                   {dur}
                 </Text>
               </Pressable>
@@ -250,7 +253,8 @@ export function DatesSection({
             .map((dur) => (
               <View
                 key={dur}
-                className="flex-row items-center gap-1 rounded-full border border-coral-500 bg-coral-500 px-4 py-2"
+                className="flex-row items-center gap-1 rounded-full border px-4 py-2"
+                style={{ borderColor: accentColor, backgroundColor: accentColor }}
               >
                 <Text className="text-sm font-medium text-white">{dur}</Text>
                 <Pressable
@@ -282,15 +286,16 @@ export function DatesSection({
               <Pressable
                 key={u}
                 onPress={() => onCustomDurationUnitChange(u)}
-                className={[
-                  'flex-1 items-center justify-center rounded-2xl border min-h-[44px] px-1',
-                  sel ? 'border-coral-500 bg-coral-500' : 'border-neutral-200 bg-white',
-                ].join(' ')}
+                className="flex-1 items-center justify-center rounded-2xl border min-h-[44px] px-1"
+                style={sel
+                  ? { borderColor: accentColor, backgroundColor: accentColor }
+                  : { borderColor: '#E5E5E5', backgroundColor: '#FFFFFF' }
+                }
                 accessibilityRole="radio"
                 accessibilityState={{ selected: sel }}
                 accessibilityLabel={u}
               >
-                <Text className={['text-xs font-medium', sel ? 'text-white' : 'text-neutral-600'].join(' ')}>
+                <Text className="text-xs font-medium" style={{ color: sel ? '#FFFFFF' : '#525252' }}>
                   {u}
                 </Text>
               </Pressable>
@@ -299,14 +304,12 @@ export function DatesSection({
           <Pressable
             onPress={onCustomDurationAdd}
             disabled={!customDurationInput.trim()}
-            className={[
-              'h-11 w-11 items-center justify-center rounded-full',
-              customDurationInput.trim() ? 'bg-coral-500' : 'bg-neutral-200',
-            ].join(' ')}
+            className="h-11 w-11 items-center justify-center rounded-full"
+            style={{ backgroundColor: customDurationInput.trim() ? accentColor : '#E5E5E5' }}
             accessibilityRole="button"
             accessibilityLabel="Add custom duration"
           >
-            <Ionicons name="add" size={22} color={customDurationInput.trim() ? 'white' : '#A8A8A8'} />
+            <Ionicons name="add" size={22} color={customDurationInput.trim() ? '#FFFFFF' : '#A8A8A8'} />
           </Pressable>
         </View>
       </View>
@@ -318,9 +321,9 @@ export function DatesSection({
         label="Availability question"
         value={datesTitle}
         onChangeText={onDatesTitleChange}
-        placeholder="When works best for you?"
+        placeholder="When can ya make it?"
       />
-      <CalendarPicker ranges={dateRanges} onRangesChange={onDateRangesChange} />
+      <CalendarPicker ranges={dateRanges} onRangesChange={onDateRangesChange} accentColor={accentColor} />
     </>
   );
 }

@@ -1,5 +1,11 @@
 export { colors } from './colors';
 
+// Display font — Space Grotesk, falls back to system sans-serif
+export const displayFont = {
+  semiBold: { fontFamily: 'SpaceGrotesk_600SemiBold' } as const,
+  bold:     { fontFamily: 'SpaceGrotesk_700Bold' } as const,
+};
+
 export const spacing = {
   xs: 4,
   sm: 8,

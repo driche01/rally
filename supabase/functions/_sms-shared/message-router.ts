@@ -1,0 +1,938 @@
+/**
+ * Component 4: MessageRouter
+ *
+ * Routes inbound messages to the correct handler based on:
+ * 1. Keyword commands (checked first, always immediate)
+ * 2. Current session phase
+ *
+ * Returns a response body string (or null if no response needed).
+ */
+import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import type { SmsUser } from './phone-user-linker.ts';
+import type { TripSession, TripSessionParticipant } from './trip-session.ts';
+import { getParticipants } from './trip-session.ts';
+import { parseConversation, applyDecisions } from './conversation-parser.ts';
+import { getOpenPoll, handlePollResponse, handleBudgetResponse } from './poll-engine.ts';
+import { ensureRespondent } from './phone-user-linker.ts';
+import { handleCommitResponse, handlePlannerDecision } from './commit-poll-engine.ts';
+import {
+  parseSplitIntent,
+  handleSplitCommand,
+  launchPropose,
+  handleProposeResponse,
+  handleProposePaid,
+  handleProposeCancel,
+} from './venmo-split-link.ts';
+import { handleReEngagementYes } from './post-trip-reengager.ts';
+import { advancePhase, checkAutoAdvance } from './phase-flow.ts';
+
+// ─── Keyword detection ───────────────────────────────────────────────────────
+
+const KEYWORDS: Record<string, { plannerOnly: boolean }> = {
+  STOP: { plannerOnly: false },
+  REJOIN: { plannerOnly: false },
+  HELP: { plannerOnly: false },
+  STATUS: { plannerOnly: false },
+  FOCUS: { plannerOnly: false },
+  BOOKED: { plannerOnly: false },
+  'PAID STATUS': { plannerOnly: false },
+  CANCEL: { plannerOnly: false },
+  NEXT: { plannerOnly: true },
+  RESET: { plannerOnly: true },
+  PAUSE: { plannerOnly: true },
+  RESUME: { plannerOnly: true },
+};
+
+// Keywords that take arguments (checked via prefix)
+const PREFIX_KEYWORDS: Record<string, { plannerOnly: boolean }> = {
+  PLANNER: { plannerOnly: true },
+  DEADLINE: { plannerOnly: true },
+  DESTINATION: { plannerOnly: true },
+  SPLIT: { plannerOnly: false },
+  PROPOSE: { plannerOnly: false },
+  FLIGHTS: { plannerOnly: true },
+};
+
+export interface RoutedMessage {
+  type: 'keyword' | 'phase' | '1to1' | 'new_session';
+  keyword?: string;
+  keywordArgs?: string;
+  body: string;
+  fromUser: SmsUser;
+  session: TripSession | null;
+  participant: TripSessionParticipant | null;
+  is1to1: boolean;
+}
+
+// Known destination names for recognition (lowercase)
+const KNOWN_DESTINATIONS = [
+  'tulum', 'cancun', 'cancún', 'cabo', 'cabo san lucas', 'playa del carmen',
+  'paris', 'london', 'tokyo', 'bali', 'bangkok', 'phuket',
+  'hawaii', 'maui', 'oahu', 'kauai', 'big island',
+  'aspen', 'park city', 'whistler', 'vail', 'steamboat', 'mammoth',
+  'miami', 'key west', 'fort lauderdale', 'tampa', 'orlando',
+  'barcelona', 'rome', 'florence', 'amalfi', 'santorini', 'mykonos',
+  'amsterdam', 'lisbon', 'porto', 'berlin', 'prague', 'dublin',
+  'mexico city', 'cdmx', 'costa rica', 'puerto rico', 'cartagena',
+  'nashville', 'austin', 'scottsdale', 'vegas', 'las vegas', 'new orleans',
+  'lake tahoe', 'sedona', 'joshua tree', 'palm springs',
+  'jamaica', 'punta cana', 'aruba', 'bahamas', 'turks and caicos',
+  'iceland', 'portugal', 'spain', 'italy', 'greece', 'japan', 'thailand',
+  'colombia', 'peru', 'argentina', 'brazil',
+  'new york', 'nyc', 'los angeles', 'la', 'san francisco', 'chicago',
+  'denver', 'seattle', 'portland', 'savannah', 'charleston',
+];
+
+// Common typo mappings for fuzzy keyword matching
+const TYPO_MAP: Record<string, string> = {
+  STAUS: 'STATUS', STAUTS: 'STATUS', SATUS: 'STATUS', STATU: 'STATUS',
+  STATS: 'STATUS', STATSU: 'STATUS',
+  HLEP: 'HELP', HEPL: 'HELP', HALP: 'HELP',
+  REUSME: 'RESUME', RESME: 'RESUME', RESMUE: 'RESUME',
+  PASE: 'PAUSE', PASUE: 'PAUSE', PUASE: 'PAUSE',
+  RSEET: 'RESET', RESTE: 'RESET',
+  FOCSU: 'FOCUS', FOUCS: 'FOCUS',
+  BOOOKD: 'BOOKED', BOKKED: 'BOOKED', BOOKD: 'BOOKED',
+  STPO: 'STOP', SOTP: 'STOP',
+  REJION: 'REJOIN', REJON: 'REJOIN',
+  NXET: 'NEXT', NETX: 'NEXT',
+};
+
+/**
+ * Detect if the message is a keyword command.
+ * Supports exact match + common typo fuzzy matching.
+ * Returns the keyword and any arguments, or null.
+ */
+function detectKeyword(body: string): { keyword: string; args: string } | null {
+  const upper = body.trim().toUpperCase();
+
+  // Check exact keywords first
+  for (const kw of Object.keys(KEYWORDS)) {
+    if (upper === kw) return { keyword: kw, args: '' };
+  }
+
+  // Check prefix keywords
+  for (const kw of Object.keys(PREFIX_KEYWORDS)) {
+    if (upper.startsWith(kw + ' ') || upper === kw) {
+      const args = body.trim().slice(kw.length).trim();
+      return { keyword: kw, args };
+    }
+  }
+
+  // Fuzzy match common typos
+  const corrected = TYPO_MAP[upper];
+  if (corrected) return { keyword: corrected, args: '' };
+
+  return null;
+}
+
+/**
+ * Route an inbound message and return a response.
+ *
+ * This is the main entry point after TwilioWebhookReceiver has parsed
+ * and validated the message and PhoneUserLinker has resolved the user.
+ */
+export async function routeMessage(
+  admin: SupabaseClient,
+  message: RoutedMessage,
+): Promise<string | null> {
+  const { session, fromUser, body, is1to1 } = message;
+
+  // ─── 1:1 message (no group thread) ─────────────────────────────────────
+  if (is1to1) {
+    return handle1to1(admin, fromUser);
+  }
+
+  // ─── No existing session — new group thread ────────────────────────────
+  if (!session) {
+    // This is handled by the webhook receiver (creates session + routes back)
+    return null;
+  }
+
+  // ─── Re-engagement YES ────────────────────────────────────────────────
+  if (session.status === 'RE_ENGAGEMENT_PENDING' && body.trim().toUpperCase() === 'YES') {
+    const result = await handleReEngagementYes(admin, session.id, fromUser.id);
+    if (result) return result.message;
+  }
+
+  // ─── Keyword commands ──────────────────────────────────────────────────
+  const kw = detectKeyword(body);
+  if (kw) {
+    // Check planner-only restriction
+    const isPlanner = message.participant?.is_planner ?? false;
+    const plannerOnly =
+      KEYWORDS[kw.keyword]?.plannerOnly ?? PREFIX_KEYWORDS[kw.keyword]?.plannerOnly ?? false;
+
+    // Check planner status via session.planner_user_id (more reliable than participant flag)
+    const isSessionPlanner = message.fromUser.id === session.planner_user_id || isPlanner;
+    if (plannerOnly && !isSessionPlanner) {
+      const plannerName = await getPlannerName(admin, session);
+      return `Only ${plannerName} can do that.`;
+    }
+
+    return handleKeyword(admin, kw.keyword, kw.args, message);
+  }
+
+  // ─── Phase-based routing ───────────────────────────────────────────────
+  return handlePhaseMessage(admin, message);
+}
+
+// ─── 1:1 handler ─────────────────────────────────────────────────────────────
+
+async function handle1to1(admin: SupabaseClient, user: SmsUser): Promise<string> {
+  // Register as pending planner
+  await admin.from('pending_planners').upsert(
+    {
+      phone: user.phone,
+      registered_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    },
+    { onConflict: 'phone' },
+  );
+
+  return (
+    "Hey! I'm Rally \u2014 I help groups plan trips fast. " +
+    "You're registered as the trip organizer. " +
+    'Now add me to a group thread with your crew and I\u2019ll take it from there. ' +
+    'Reply STOP anytime to opt out.'
+  );
+}
+
+// ─── Keyword handlers ────────────────────────────────────────────────────────
+
+async function handleKeyword(
+  admin: SupabaseClient,
+  keyword: string,
+  args: string,
+  message: RoutedMessage,
+): Promise<string | null> {
+  const { session, fromUser } = message;
+  if (!session) return null;
+
+  switch (keyword) {
+    case 'STOP':
+      return handleStop(admin, session, fromUser);
+    case 'REJOIN':
+      return handleRejoin(admin, session, fromUser);
+    case 'HELP':
+      return handleHelp(session);
+    case 'STATUS':
+    case 'FOCUS':
+      return handleStatus(admin, session);
+    case 'PAUSE':
+      return handlePause(admin, session);
+    case 'RESUME':
+      return handleResume(admin, session);
+    case 'BOOKED':
+      return handleBooked(admin, session, fromUser);
+    case 'PAID STATUS':
+      return handlePaidStatus(admin, session);
+    case 'NEXT':
+      return handleNext(admin, session, fromUser);
+    case 'RESET':
+      return 'Reset everything? I\u2019ll keep the group but clear all decisions. Reply YES to confirm.';
+    case 'SPLIT':
+      return handleSplitKeyword(admin, session, fromUser, args);
+    case 'PROPOSE':
+      return handleProposeKeyword(admin, session, fromUser, args);
+    case 'CANCEL':
+      return handleProposeCancel(admin, session, fromUser.id);
+    default:
+      return `Got it \u2014 ${keyword} ${args}.`;
+  }
+}
+
+async function handleStop(
+  admin: SupabaseClient,
+  session: TripSession,
+  user: SmsUser,
+): Promise<string> {
+  await admin
+    .from('trip_session_participants')
+    .update({ status: 'opted_out' })
+    .eq('trip_session_id', session.id)
+    .eq('user_id', user.id);
+
+  await admin.from('users').update({ opted_out: true }).eq('id', user.id);
+
+  return "Got it, I won't message you anymore. The group can still use me.";
+}
+
+async function handleRejoin(
+  admin: SupabaseClient,
+  session: TripSession,
+  user: SmsUser,
+): Promise<string> {
+  await admin
+    .from('trip_session_participants')
+    .update({ status: 'active' })
+    .eq('trip_session_id', session.id)
+    .eq('user_id', user.id);
+
+  await admin.from('users').update({ opted_out: false }).eq('id', user.id);
+
+  return "Welcome back! You're back in the group.";
+}
+
+function handleHelp(session: TripSession): string {
+  const phase = session.phase;
+  return (
+    `Current phase: ${phase}. ` +
+    'Commands: STATUS, FOCUS, HELP, STOP, REJOIN, BOOKED, PAID STATUS. ' +
+    'Planner commands: RESET, PAUSE, RESUME, DEADLINE, DESTINATION, FLIGHTS, PLANNER.'
+  );
+}
+
+async function handleStatus(admin: SupabaseClient, session: TripSession): Promise<string> {
+  const parts: string[] = [];
+
+  if (session.destination) parts.push(`Destination: ${session.destination}`);
+  if (session.dates) parts.push(`Dates: ${session.dates.start}\u2013${session.dates.end}`);
+
+  const { data: participants } = await admin
+    .from('trip_session_participants')
+    .select('display_name, committed, flight_status')
+    .eq('trip_session_id', session.id)
+    .eq('status', 'active');
+
+  const total = participants?.length ?? 0;
+  const committed = participants?.filter((p) => p.committed).length ?? 0;
+  if (committed > 0) parts.push(`${committed}/${total} confirmed`);
+
+  if (session.lodging_property) parts.push(`Lodging: ${session.lodging_property}`);
+
+  parts.push(`Phase: ${session.phase}`);
+
+  return parts.join('\n') || 'No decisions locked yet.';
+}
+
+async function handlePause(admin: SupabaseClient, session: TripSession): Promise<string> {
+  await admin
+    .from('trip_sessions')
+    .update({ paused: true, paused_at: new Date().toISOString() })
+    .eq('id', session.id);
+
+  // Cancel pending scheduled actions
+  await admin
+    .from('scheduled_actions')
+    .update({ executed_at: new Date().toISOString() })
+    .eq('trip_session_id', session.id)
+    .is('executed_at', null);
+
+  return 'Paused \u2014 text RESUME whenever you\u2019re ready to pick up where you left off.';
+}
+
+async function handleResume(admin: SupabaseClient, session: TripSession): Promise<string> {
+  // Check if dates have passed
+  if (session.dates?.start) {
+    const start = new Date(session.dates.start);
+    if (start < new Date()) {
+      return "Looks like those dates have passed \u2014 reply with new dates or RESET to start fresh.";
+    }
+  }
+
+  await admin
+    .from('trip_sessions')
+    .update({ paused: false, paused_at: null })
+    .eq('id', session.id);
+
+  return await handleStatus(admin, session);
+}
+
+async function handleBooked(
+  admin: SupabaseClient,
+  session: TripSession,
+  user: SmsUser,
+): Promise<string> {
+  await admin
+    .from('trip_session_participants')
+    .update({ flight_status: 'confirmed' })
+    .eq('trip_session_id', session.id)
+    .eq('user_id', user.id);
+
+  const name = user.display_name ?? 'Someone';
+  return `${name}'s flights are locked in \ud83d\udd12 who's next?`;
+}
+
+async function handlePaidStatus(admin: SupabaseClient, session: TripSession): Promise<string> {
+  const { data: splits } = await admin
+    .from('split_requests')
+    .select('payer_user_id, status')
+    .eq('trip_session_id', session.id);
+
+  if (!splits || splits.length === 0) return 'No splits to track yet.';
+
+  const paid = splits.filter((s) => s.status === 'paid').length;
+  const pending = splits.filter((s) => s.status === 'pending').length;
+
+  return `Paid: ${paid}. Still waiting: ${pending}.`;
+}
+
+// ─── Phase message handler ───────────────────────────────────────────────────
+
+async function handlePhaseMessage(
+  admin: SupabaseClient,
+  message: RoutedMessage,
+): Promise<string | null> {
+  const { session, fromUser, body } = message;
+  if (!session) return null;
+  const phase = session.phase;
+
+  // During INTRO, collect names and destination ideas
+  if (phase === 'INTRO') {
+    // Check for "yes", "that's everyone", "we're good", "all here" to advance
+    const introUpper = body.trim().toUpperCase();
+    const participants = await getParticipants(admin, session.id);
+    const namedCount = participants.filter((p) => p.display_name && p.status === 'active').length;
+    if (namedCount >= 2 && (introUpper === 'YES' || introUpper === 'YEP' || introUpper === 'YEAH' ||
+        /\b(that'?s\s*everyone|we'?re\s*(all\s*)?good|all\s*here|that'?s\s*it|let'?s\s*go)\b/i.test(body))) {
+      return advancePhase(admin, session);
+    }
+
+    // Extract name from "Name — destination" pattern
+    const nameMatch = body.match(/^([\p{L}][\p{L}'\-]{0,30})\s*[—–\-]\s*(.+)/u);
+    if (nameMatch) {
+      const name = nameMatch[1].trim();
+      const destinationIdea = nameMatch[2].trim();
+
+      // Update participant display name
+      await admin
+        .from('trip_session_participants')
+        .update({ display_name: name })
+        .eq('trip_session_id', session.id)
+        .eq('user_id', fromUser.id);
+
+      // Update user display name
+      await admin
+        .from('users')
+        .update({ display_name: name })
+        .eq('id', fromUser.id);
+
+      // Update respondent name
+      if (session.trip_id) {
+        await admin
+          .from('respondents')
+          .update({ name })
+          .eq('trip_id', session.trip_id)
+          .eq('phone', fromUser.phone);
+      }
+
+      // Add destination to candidates — only if it looks like a real place name
+      const destLower = destinationIdea.toLowerCase();
+      const recognizedDest = KNOWN_DESTINATIONS.find((d) => destLower.includes(d));
+      if (recognizedDest) {
+        const properDest = recognizedDest.split(' ').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+        const existingCandidates = ((session as Record<string, unknown>).destination_candidates as Array<{ label: string; votes: number }>) ?? [];
+        if (!existingCandidates.some((c) => c.label.toLowerCase() === recognizedDest)) {
+          existingCandidates.push({ label: properDest, votes: 1 });
+          await admin
+            .from('trip_sessions')
+            .update({ destination_candidates: existingCandidates })
+            .eq('id', session.id);
+        }
+
+        const updatedP = await getParticipants(admin, session.id);
+        const nowNamedD = updatedP.filter((p) => p.display_name && p.status === 'active').length;
+        if (nowNamedD >= 2) {
+          return `Got it, ${name} \u2014 ${properDest} is on the list! Is that everyone? Reply YES when the whole crew is here.`;
+        }
+        return `Got it, ${name} \u2014 ${properDest} is on the list!`;
+      }
+
+      // Name extracted but no recognizable destination — just acknowledge name
+      // Check if we have enough people to ask "is that everyone?"
+      const updatedParticipants = await getParticipants(admin, session.id);
+      const nowNamed = updatedParticipants.filter((p) => p.display_name && p.status === 'active').length;
+      if (nowNamed >= 2) {
+        return `Hey ${name}! Is that everyone? Reply YES when the whole crew is here.`;
+      }
+      return `Hey ${name}!`;
+    }
+
+    // Single-word or two-word name without dash ("Abbey", "Sofia", "Matt B")
+    const wordCount = body.trim().split(/\s+/).length;
+    if (wordCount <= 2 && /^[\p{L}]/u.test(body.trim()) && !/\d/.test(body)) {
+      const name = body.trim().split(/\s+/).map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+
+      await admin.from('trip_session_participants')
+        .update({ display_name: name })
+        .eq('trip_session_id', session.id)
+        .eq('user_id', fromUser.id);
+      await admin.from('users')
+        .update({ display_name: name })
+        .eq('id', fromUser.id);
+      if (session.trip_id) {
+        await admin.from('respondents')
+          .update({ name })
+          .eq('trip_id', session.trip_id)
+          .eq('phone', fromUser.phone);
+      }
+
+      const updatedP = await getParticipants(admin, session.id);
+      const nowNamed = updatedP.filter((p) => p.display_name && p.status === 'active').length;
+      if (nowNamed >= 2) {
+        return `Hey ${name}! Is that everyone? Reply YES when the whole crew is here.`;
+      }
+      return `Hey ${name}!`;
+    }
+
+    // #1 — Destination buried in natural language ("Tulum would be sick but idk")
+    // If message is >3 words and contains alphabetic chars but didn't match the
+    // "Name - Destination" pattern, check for destination mentions via simple keyword scan
+    if (body.trim().split(/\s+/).length > 3 && /[a-zA-Z]/.test(body)) {
+      const bodyLower = body.toLowerCase();
+      for (const dest of KNOWN_DESTINATIONS) {
+        if (bodyLower.includes(dest)) {
+          const properDest = dest.split(' ').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+          const existingCandidates = ((session as Record<string, unknown>).destination_candidates as Array<{ label: string; votes: number }>) ?? [];
+          if (!existingCandidates.some((c) => c.label.toLowerCase() === dest)) {
+            existingCandidates.push({ label: properDest, votes: 1 });
+            await admin
+              .from('trip_sessions')
+              .update({ destination_candidates: existingCandidates })
+              .eq('id', session.id);
+            return `Heard ${properDest} \u2014 adding it to the list!`;
+          }
+          break;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  // ─── Personality intercepts (no LLM needed) ─────────────────────────────
+  const lower = body.trim().toLowerCase();
+  const wordCount = body.trim().split(/\s+/).length;
+
+  // #32 — Dismissive / "shut up" messages (short, directed at Rally)
+  if (wordCount <= 6 && /\b(shut\s*up|stop\s*talking|be\s*quiet|stfu|you'?re\s*annoying|go\s*away)\b/i.test(body)) {
+    return "Noted. I'll keep it tight. Hit STATUS when you need me.";
+  }
+
+  // #38 — Bot-identity questions
+  if (/\b(are\s*you\s*(a\s*)?bot|are\s*you\s*(an?\s*)?ai|are\s*you\s*real|are\s*you\s*human)\b/i.test(body)) {
+    return "I'm Rally \u2014 part bot, part trip-planning legend. What do you need?";
+  }
+
+  // #39 — Casual / off-topic conversation
+  if (/\b(how\s*are\s*you|what'?s\s*your\s*fav(ou?rite)?|tell\s*me\s*about\s*yourself|what\s*do\s*you\s*do|who\s*are\s*you|what\s*are\s*you)\b/i.test(body) && wordCount <= 10) {
+    return "I'm great when groups are booking trips! What's next for yours?";
+  }
+
+  // #46 — Participant calls out confusing message ("wait what does that mean")
+  if (wordCount <= 8 && /\b(what\s*does\s*that\s*mean|i\s*don'?t\s*understand|what\??$|huh\??$|confused)\b/i.test(lower)) {
+    return "My bad \u2014 text STATUS for a summary of where we're at.";
+  }
+
+  // Commit poll — YES/NO during COMMIT_POLL phase
+  if (phase === 'COMMIT_POLL' && message.participant) {
+    const upper = body.trim().toUpperCase();
+    if (upper === 'YES' || upper === 'NO') {
+      const result = await handleCommitResponse(
+        admin, session, message.participant, upper.toLowerCase() as 'yes' | 'no',
+      );
+      if (result) return result;
+      return null; // Still collecting
+    }
+  }
+
+  // Solo planner decision — CONTINUE/CANCEL
+  if (phase === 'AWAITING_PLANNER_DECISION') {
+    const upper = body.trim().toUpperCase();
+    if (upper === 'CONTINUE' || upper === 'CANCEL') {
+      return handlePlannerDecision(admin, session, upper.toLowerCase() as 'continue' | 'cancel');
+    }
+  }
+
+  // Date collection during DECIDING_DATES — only when no poll is open
+  // Skip emoji-only and very short messages
+  if (phase === 'DECIDING_DATES' && message.participant && !(session as Record<string,unknown>).current_poll_id && /[a-zA-Z0-9]/.test(body)) {
+    // Store this participant's date preference as budget_raw (reuse field for date input tracking)
+    await admin
+      .from('trip_session_participants')
+      .update({ budget_raw: body.trim() })
+      .eq('id', message.participant.id);
+
+    // Try regex first for exact dates (e.g. "Nov 8-12", "Jan 15-19")
+    const dateMatch = body.match(/(\w+)\s+(\d{1,2})\s*[-–to]+\s*(\d{1,2})/i);
+    if (dateMatch) {
+      const monthStr = dateMatch[1];
+      const startDay = parseInt(dateMatch[2]);
+      const endDay = parseInt(dateMatch[3]);
+      const months: Record<string, number> = {
+        jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2,
+        apr: 3, april: 3, may: 4, jun: 5, june: 5, jul: 6, july: 6,
+        aug: 7, august: 7, sep: 8, september: 8, oct: 9, october: 9,
+        nov: 10, november: 10, dec: 11, december: 11,
+      };
+      const month = months[monthStr.toLowerCase()];
+      if (month !== undefined && startDay > 0 && endDay > 0) {
+        const year = new Date().getFullYear();
+        const start = new Date(year, month, startDay);
+        const end = new Date(year, month, endDay);
+        if (start < new Date()) { start.setFullYear(year + 1); end.setFullYear(year + 1); }
+        const startStr = start.toISOString().split('T')[0];
+        const endStr = end.toISOString().split('T')[0];
+        const nights = Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
+        await admin.from('trip_sessions').update({
+          dates: { start: startStr, end: endStr, nights },
+          updated_at: new Date().toISOString(),
+        }).eq('id', session.id);
+        const nextMsg = await advancePhase(admin, session);
+        const dateMsg = `Got it \u2014 ${monthStr} ${startDay}\u2013${endDay} (${nights} nights).`;
+        return nextMsg ? dateMsg + '\n\n' + nextMsg : dateMsg;
+      }
+    }
+
+    // Check if all participants have responded with date preferences
+    const { data: allP } = await admin
+      .from('trip_session_participants')
+      .select('budget_raw')
+      .eq('trip_session_id', session.id)
+      .eq('status', 'active');
+    const allResponded = (allP ?? []).every((p) => p.budget_raw);
+
+    if (allResponded && !session.dates) {
+      // Everyone responded but no exact date parsed — use Haiku to extract
+      const { data: dateMessages } = await admin
+        .from('thread_messages')
+        .select('sender_phone, body')
+        .eq('trip_session_id', session.id)
+        .eq('direction', 'inbound')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
+      if (apiKey) {
+        const history = (dateMessages ?? []).reverse().map((m) => m.body).join('\n');
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 200,
+            messages: [{ role: 'user', content: `The group is deciding trip dates. Here are their messages:\n${history}\n\nExtract ALL possible date windows that could work for the group. Use the current year (${new Date().getFullYear()}) or next year if dates are in the past. Return ONLY a JSON object: { "options": [{ "start": "YYYY-MM-DD", "end": "YYYY-MM-DD", "label": "short label like Apr 17-20" }], "summary": "one sentence about what the group said" }. If you can't determine any specific dates, return { "options": [], "summary": "what they said" }.` }],
+          }),
+        });
+        if (res.ok) {
+          const result = await res.json();
+          const text = result.content?.[0]?.text ?? '';
+          try {
+            const parsed = JSON.parse(text.replace(/```json\s*/i, '').replace(/```\s*$/i, '').trim());
+            const options = parsed.options ?? [];
+
+            if (options.length === 1) {
+              // One clear option — lock it in
+              const opt = options[0];
+              const nights = Math.round((new Date(opt.end).getTime() - new Date(opt.start).getTime()) / (24 * 60 * 60 * 1000));
+              await admin.from('trip_sessions').update({
+                dates: { start: opt.start, end: opt.end, nights },
+                updated_at: new Date().toISOString(),
+              }).eq('id', session.id);
+              const nextMsg = await advancePhase(admin, session);
+              const dateMsg = `Got it \u2014 ${opt.label ?? opt.start + ' to ' + opt.end} (${nights} nights).`;
+              return nextMsg ? dateMsg + '\n\n' + nextMsg : dateMsg;
+            } else if (options.length > 1) {
+              // Multiple options — create a date vote poll
+              const { data: freshS } = await admin.from('trip_sessions').select('*').eq('id', session.id).single();
+              if (freshS) {
+                const labels = options.map((o: { label: string }) => o.label);
+                // Store options metadata on session for later lookup
+                await admin.from('trip_sessions').update({
+                  deadlines: options, // temporarily store date options here
+                }).eq('id', session.id);
+                const { createPoll, formatPollMessage } = await import('./poll-engine.ts');
+                await createPoll(admin, freshS, 'dates', 'Which dates work best?', labels);
+                return `${parsed.summary ?? 'A few options came up.'}\n\n` + formatPollMessage('Vote on dates:', labels);
+              }
+            } else {
+              return `Hearing ${parsed.summary ?? 'some ideas'}. Can someone nail down specific dates? Like "Apr 17-20"`;
+            }
+          } catch { /* fall through */ }
+        }
+      }
+
+      return "Got everyone's input on dates. Can someone nail down the exact dates? Like \"Apr 17-20\"";
+    }
+
+    // Not all responded yet — acknowledge
+    const name = fromUser.display_name ?? 'Got it';
+    return `${name} \u2014 noted.`;
+  }
+
+  // Origin collection during COLLECTING_ORIGINS
+  if (phase === 'COLLECTING_ORIGINS' && message.participant) {
+    // Store the origin (city or airport code)
+    const origin = body.trim();
+    if (origin.length >= 2 && origin.length <= 50) {
+      const isAirportCode = /^[A-Z]{3}$/i.test(origin);
+      await admin
+        .from('trip_session_participants')
+        .update({
+          origin_city: isAirportCode ? null : origin,
+          origin_airport: isAirportCode ? origin.toUpperCase() : null,
+        })
+        .eq('id', message.participant.id);
+
+      const name = fromUser.display_name ?? 'Got it';
+      const autoMsg = await checkAutoAdvance(admin, session);
+      if (autoMsg) return `${name} \u2014 ${origin}. ${autoMsg}`;
+      return `${name} \u2014 ${origin}. Waiting on the rest.`;
+    }
+  }
+
+  // Flight status collection during AWAITING_FLIGHTS
+  if (phase === 'AWAITING_FLIGHTS' && message.participant) {
+    const upper = body.trim().toUpperCase();
+    if (['YES', 'NOT YET', 'DRIVING'].includes(upper)) {
+      const statusMap: Record<string, string> = {
+        'YES': 'confirmed',
+        'NOT YET': 'not_yet',
+        'DRIVING': 'driving',
+      };
+      await admin
+        .from('trip_session_participants')
+        .update({ flight_status: statusMap[upper] })
+        .eq('id', message.participant.id);
+
+      // Check if all have responded → auto-advance to lodging
+      const allP = await getParticipants(admin, session.id);
+      const activeP = allP.filter((p) => p.status === 'active');
+      const allResponded = activeP.every(
+        (p) => p.flight_status !== 'unknown' || p.user_id === fromUser.id,
+      );
+      // Re-check with updated data
+      const { data: freshP } = await admin
+        .from('trip_session_participants')
+        .select('flight_status')
+        .eq('trip_session_id', session.id)
+        .eq('status', 'active');
+      const allDone = (freshP ?? []).every((p) => p.flight_status !== 'unknown');
+
+      if (allDone) {
+        const advMsg = await advancePhase(admin, session);
+        const name = fromUser.display_name ?? 'Someone';
+        const ack = upper === 'YES' ? `${name}'s flights are locked in \u{1F512}` : '';
+        return ack ? (advMsg ? ack + '\n\n' + advMsg : ack) : advMsg;
+      }
+
+      if (upper === 'YES') {
+        const name = fromUser.display_name ?? 'Someone';
+        return `${name}'s flights are locked in \u{1F512}`;
+      }
+      return null;
+    }
+  }
+
+  // #34: Sub-group booking detection — Rally only splits for the whole group
+  if (/\b(just\s+me\s+and\s+\w+|only\s+\d+\s+of\s+us|just\s+us\s+two|just\s+the\s+two\s+of\s+us)\b/i.test(body)) {
+    const subNameMatch = body.match(/just\s+me\s+and\s+(\w+)/i);
+    const subName = subNameMatch ? subNameMatch[1] : 'them';
+    return `I can only split for the whole group \u2014 you and ${subName} can sort that one between yourselves.`;
+  }
+
+  // Group lodging booking confirmation during AWAITING_GROUP_BOOKING
+  if (phase === 'AWAITING_GROUP_BOOKING') {
+    // Parse "Booked [property] for $[amount]"
+    const bookMatch = body.match(/booked?\s+(.+?)\s+for\s+\$?([\d,]+(?:\.\d{2})?)/i);
+    if (bookMatch) {
+      const property = bookMatch[1].trim();
+      const cost = parseFloat(bookMatch[2].replace(',', ''));
+
+      await admin.from('trip_sessions').update({
+        lodging_property: property,
+        lodging_cost: cost,
+        status: 'FIRST_BOOKING_REACHED',
+        updated_at: new Date().toISOString(),
+      }).eq('id', session.id);
+
+      // Also update the linked trip
+      if (session.trip_id) {
+        await admin.from('trips').update({ status: 'active' }).eq('id', session.trip_id);
+      }
+
+      const allP = await getParticipants(admin, session.id);
+      const committed = allP.filter((p) => p.committed || p.status === 'active');
+      const perPerson = committed.length > 0 ? Math.round(cost / committed.length) : cost;
+
+      return `You're booked! \u{1F389} ${property} for $${cost} total ($${perPerson}/person for ${committed.length}).`;
+    }
+  }
+
+  // Individual lodging/flights confirmation during AWAITING_INDIVIDUAL_*
+  if ((phase === 'AWAITING_INDIVIDUAL_LODGING' || phase === 'AWAITING_INDIVIDUAL_FLIGHTS') && message.participant) {
+    const upper = body.trim().toUpperCase();
+    if (upper === 'BOOKED' || upper === 'YES' || upper === 'DONE') {
+      await admin
+        .from('trip_session_participants')
+        .update({ committed: true })
+        .eq('id', message.participant.id);
+
+      // Check if all have confirmed
+      const { data: freshP } = await admin
+        .from('trip_session_participants')
+        .select('committed')
+        .eq('trip_session_id', session.id)
+        .eq('status', 'active');
+      const allBooked = (freshP ?? []).every((p) => p.committed);
+
+      if (allBooked) {
+        await admin.from('trip_sessions').update({
+          status: 'FIRST_BOOKING_REACHED',
+          updated_at: new Date().toISOString(),
+        }).eq('id', session.id);
+
+        return "Everyone's booked! \u{1F389} First booking is locked. Trip is happening!";
+      }
+
+      const name = fromUser.display_name ?? 'Someone';
+      return `${name} is sorted \u{2705}`;
+    }
+  }
+
+  // Budget poll phase — handle budget responses (only when no vote poll is open)
+  if (phase === 'BUDGET_POLL' && message.participant && !(session as Record<string,unknown>).current_poll_id) {
+    const budgetResult = await handleBudgetResponse(admin, session, message.participant, body);
+    if (budgetResult) {
+      // Budget resolved — advance phase
+      const { data: updatedSession } = await admin.from('trip_sessions').select('*').eq('id', session.id).single();
+      if (updatedSession) {
+        const nextMsg = await advancePhase(admin, updatedSession);
+        if (nextMsg) return budgetResult + '\n\n' + nextMsg;
+      }
+      return budgetResult;
+    }
+  }
+
+  // Check for active poll first — if one is open, try to match as a vote
+  const participants = await getParticipants(admin, session.id);
+  const openPoll = await getOpenPoll(admin, session.id);
+
+  if (openPoll) {
+
+    // Standard vote poll — match response to option
+    if (session.trip_id) {
+      const respondentId = await ensureRespondent(admin, session.trip_id, fromUser);
+      const activeCount = participants.filter((p) => p.status === 'active').length;
+      const name = fromUser.display_name ?? fromUser.phone;
+
+      const pollResult = await handlePollResponse(
+        admin, session, openPoll, respondentId, name, body, activeCount,
+      );
+      if (pollResult) {
+        // Poll resolved — advance to next phase
+        // Reload session to get updated state (winner applied by poll-engine)
+        const { data: updatedSession } = await admin
+          .from('trip_sessions')
+          .select('*')
+          .eq('id', session.id)
+          .single();
+        if (updatedSession) {
+          const advanceMsg = await advancePhase(admin, updatedSession);
+          if (advanceMsg) return pollResult + '\n\n' + advanceMsg;
+        }
+        return pollResult;
+      }
+    }
+  }
+
+  // Run ConversationParser on active decision phases
+  const decisions = await parseConversation(admin, session, participants, body);
+
+  if (decisions) {
+    const applied = await applyDecisions(admin, session, decisions);
+    if (applied.length > 0) {
+      console.log(`[message-router] Organic decisions detected: ${applied.join(', ')}`);
+
+      if (applied.includes('destination')) {
+        return `Sounds like you're already set on ${decisions.destination} \u2014 locking that in.`;
+      }
+      if (applied.includes('dates')) {
+        const d = decisions.dates;
+        return `Got it \u2014 ${d?.start} to ${d?.end} is locked in.`;
+      }
+      if (applied.includes('flight_status')) {
+        return null;
+      }
+    }
+  }
+
+  // Check if the phase should auto-advance based on collected data
+  const autoMsg = await checkAutoAdvance(admin, session);
+  if (autoMsg) return autoMsg;
+
+  return null;
+}
+
+// ─── NEXT handler (planner manually advances phase) ──────────────────────────
+
+async function handleNext(
+  admin: SupabaseClient,
+  session: TripSession,
+  user: SmsUser,
+): Promise<string> {
+  const result = await advancePhase(admin, session, user.id);
+  return result ?? `Can't advance from ${session.phase} right now.`;
+}
+
+// ─── SPLIT / PROPOSE handlers ────────────────────────────────────────────────
+
+async function handleSplitKeyword(
+  admin: SupabaseClient,
+  session: TripSession,
+  user: SmsUser,
+  args: string,
+): Promise<string> {
+  const intent = parseSplitIntent(args);
+  if (!intent) {
+    return 'Usage: SPLIT $[amount] [N] ways [reason]\nExample: SPLIT $1100 10 ways dinner';
+  }
+
+  return handleSplitCommand(
+    admin, session, user.id, user.phone, user.display_name ?? user.phone, intent,
+  );
+}
+
+async function handleProposeKeyword(
+  admin: SupabaseClient,
+  session: TripSession,
+  user: SmsUser,
+  args: string,
+): Promise<string> {
+  // Parse: PROPOSE $[amount] [reason]
+  // #64 — "PROPOSE dinner" (no dollar amount) fails parse, returns usage message
+  const match = args.match(/\$?([\d,]+(?:\.\d{2})?)\s+(.+)/);
+  if (!match) {
+    return 'Usage: PROPOSE $[amount] [reason]\nExample: PROPOSE $110 Gitano Beach dinner';
+  }
+
+  const amount = parseFloat(match[1].replace(',', ''));
+  const reason = match[2].trim();
+
+  if (isNaN(amount)) return 'Could not parse amount. Try: PROPOSE $110 dinner';
+
+  // #65 — Warn on implausibly high amounts (don't block)
+  let result = await launchPropose(
+    admin, session, user.id, user.display_name ?? user.phone, amount, reason,
+  );
+  if (amount > 10000) {
+    result += `\n\nHeads up — that's $${amount} total. Make sure the amount is right.`;
+  }
+
+  return result;
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+async function getPlannerName(admin: SupabaseClient, session: TripSession): Promise<string> {
+  if (!session.planner_user_id) return 'the planner';
+
+  const { data } = await admin
+    .from('users')
+    .select('display_name')
+    .eq('id', session.planner_user_id)
+    .maybeSingle();
+
+  return data?.display_name ?? 'the planner';
+}

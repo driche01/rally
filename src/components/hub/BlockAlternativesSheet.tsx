@@ -41,7 +41,7 @@ const BLOCK_TYPE_COLORS: Record<string, string> = {
   activity:      '#2563EB',
   meal:          '#EA580C',
   travel:        '#9333EA',
-  accommodation: '#FF6B5B',
+  accommodation: '#D85A30',
   free_time:     '#16A34A',
 };
 
