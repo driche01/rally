@@ -218,7 +218,7 @@ export async function generateCelebration(
         messages: [
           {
             role: 'user',
-            content: `Generate a single celebratory message for this milestone: ${milestoneDetail}.\n\nThe group's tone is ${tone.energy} energy and ${tone.formality}. Match their style exactly — sound like you've been in this thread the whole time. Reference the milestone concretely. Emoji are allowed. Max 320 characters. Plain text only.`,
+            content: `Generate a SHORT celebratory message (1-2 sentences max, under 120 characters) for this milestone: ${milestoneDetail}.\n\nThe group's tone is ${tone.energy} energy and ${tone.formality}. Keep it punchy — one excited line, maybe one emoji. No questions, no fluff, no food references. Plain text only.`,
           },
         ],
       }),
