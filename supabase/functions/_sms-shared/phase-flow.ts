@@ -83,12 +83,11 @@ async function advanceFromIntro(
   triggerUserId?: string,
   triggerMessageSid?: string,
 ): Promise<string | null> {
-  // Check if all active participants have provided names
   const named = participants.filter((p) => p.display_name && p.status === 'active');
   const active = participants.filter((p) => p.status === 'active');
 
-  // Need at least 2 participants with names, or planner can force with NEXT
-  if (named.length < 2 && named.length < active.length) return null;
+  // Need at least 2 named participants to advance
+  if (named.length < 2) return null;
 
   await transitionPhase(admin, session, 'COLLECTING_DESTINATIONS', triggerUserId, triggerMessageSid);
 
@@ -416,14 +415,8 @@ export async function checkAutoAdvance(
   const active = participants.filter((p) => p.status === 'active');
 
   switch (phase) {
-    case 'INTRO': {
-      // Auto-advance when all active participants have names
-      const allNamed = active.every((p) => p.display_name);
-      if (allNamed && active.length >= 2) {
-        return advancePhase(admin, session);
-      }
-      return null;
-    }
+    // INTRO: no auto-advance — waits for YES/"that's everyone" confirmation
+    // (handled in message-router.ts INTRO handler)
 
     case 'COLLECTING_DESTINATIONS': {
       // Auto-advance when all participants have suggested a destination
