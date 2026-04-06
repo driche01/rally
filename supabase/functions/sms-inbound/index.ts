@@ -268,10 +268,16 @@ Deno.serve(async (req: Request) => {
             const plannerDestRaw = parts[0];
             const sessionUpdates: Record<string, unknown> = {};
 
-            // Only store as destination if it's short (likely a place name, not a sentence)
-            if (plannerDestRaw.split(/\s+/).length <= 4) {
-              sessionUpdates.destination_candidates = [{ label: plannerDestRaw, votes: 1 }];
-            };
+            // Only store as destination if it's a recognizable place name (≤4 words)
+            // Prevents "let's plan a trip" or "adding Rally to help" from becoming candidates
+            const destWords = plannerDestRaw.split(/\s+/).length;
+            if (destWords <= 4 && destWords >= 1) {
+              // Quick check: does it look like a place? (starts with capital, no common verbs)
+              const skipPatterns = /^(let'?s|adding|hey|help|plan|get|figure|want|think|going|i'?m|we)/i;
+              if (!skipPatterns.test(plannerDestRaw)) {
+                sessionUpdates.destination_candidates = [{ label: plannerDestRaw, votes: 1 }];
+              }
+            }
 
             // Check remaining parts for dates and budget
             for (const part of parts.slice(1)) {

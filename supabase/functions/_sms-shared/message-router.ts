@@ -449,6 +449,33 @@ async function handlePhaseMessage(
       return `Hey ${name}!`;
     }
 
+    // Single-word or two-word name without dash ("Abbey", "Sofia", "Matt B")
+    const wordCount = body.trim().split(/\s+/).length;
+    if (wordCount <= 2 && /^[\p{L}]/u.test(body.trim()) && !/\d/.test(body)) {
+      const name = body.trim().split(/\s+/).map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+
+      await admin.from('trip_session_participants')
+        .update({ display_name: name })
+        .eq('trip_session_id', session.id)
+        .eq('user_id', fromUser.id);
+      await admin.from('users')
+        .update({ display_name: name })
+        .eq('id', fromUser.id);
+      if (session.trip_id) {
+        await admin.from('respondents')
+          .update({ name })
+          .eq('trip_id', session.trip_id)
+          .eq('phone', fromUser.phone);
+      }
+
+      const updatedP = await getParticipants(admin, session.id);
+      const nowNamed = updatedP.filter((p) => p.display_name && p.status === 'active').length;
+      if (nowNamed >= 2) {
+        return `Hey ${name}! Is that everyone? Reply YES when the whole crew is here.`;
+      }
+      return `Hey ${name}!`;
+    }
+
     // #1 — Destination buried in natural language ("Tulum would be sick but idk")
     // If message is >3 words and contains alphabetic chars but didn't match the
     // "Name - Destination" pattern, check for destination mentions via simple keyword scan
