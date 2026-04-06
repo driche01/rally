@@ -505,6 +505,11 @@ export async function handleBudgetResponse(
 ): Promise<string | null> {
   const { amount, skipped } = normalizeBudget(body);
 
+  // Only store budget_raw when the message is a recognizable budget response
+  // (tier 1-4, SKIP, or a dollar amount). Casual messages like "works" or "same"
+  // shouldn't count as budget responses — they're likely replying to another human.
+  if (amount === null && !skipped) return null;
+
   // Update participant's budget
   await admin
     .from('trip_session_participants')

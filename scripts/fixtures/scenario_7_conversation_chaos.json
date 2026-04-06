@@ -1,0 +1,43 @@
+{
+  "script_name": "scenario_7_conversation_chaos",
+  "description": "Mix of off-topic banter, reactions, links, photos between poll responses. Tests that Rally filters noise and still advances.",
+  "phones": {
+    "planner": "+15551270001",
+    "p2": "+15551270002",
+    "p3": "+15551270003",
+    "p4": "+15551270004",
+    "rally": "+18559310010"
+  },
+  "assert_outbound_contains": [
+    "Reply STOP anytime"
+  ],
+  "assert_outbound_does_not_contain": [],
+  "messages": [
+    { "from": "+15551270001", "body": "Hey", "delay_ms": 0, "_note": "1:1 planner registration" },
+    { "from": "+15551270001", "body": "Jake — thinking Tulum", "delay_ms": 1000, "_note": "INTRO with destination" },
+    { "from": "+15551270002", "body": "Sarah — omg yes", "delay_ms": 1000, "_note": "INTRO: name with short banter" },
+
+    { "from": "+15551270003", "body": "lol", "delay_ms": 500, "_note": "BANTER: short message, no name. Pre-filter should skip." },
+    { "from": "+15551270004", "body": "🌴🔥", "delay_ms": 500, "_note": "BANTER: emoji-only. Pre-filter should skip." },
+    { "from": "+15551270003", "body": "Mike — tulum would be sick but idk", "delay_ms": 1000, "_note": "INTRO: name buried in natural language. ConversationParser should extract Tulum." },
+    { "from": "+15551270004", "body": "Emma — Tulum or Cancun either works", "delay_ms": 1000, "_note": "INTRO: name with two destinations" },
+
+    { "from": "+15551270002", "body": "haha remember last trip when Mike lost his passport", "delay_ms": 1000, "_note": "OFF-TOPIC: Rally should ignore this completely during INTRO" },
+    { "from": "+15551270003", "body": "omg stopppp 😂😂😂", "delay_ms": 500, "_note": "OFF-TOPIC: banter. Rally stays quiet." },
+    { "from": "+15551270001", "body": "ok focus lol. that's everyone let's go", "delay_ms": 1000, "_note": "Advance: 'that's everyone' + 'let's go' should trigger advance" },
+
+    { "from": "+15551270002", "body": "wait what are we deciding?", "delay_ms": 2000, "_note": "Confused participant mid-flow. Rally should explain current phase." },
+
+    { "from": "+15551270004", "body": "https://www.airbnb.com/rooms/12345", "delay_ms": 1000, "_note": "LINK: Airbnb URL dropped mid-conversation. Rally should detect wishlist/listing." },
+
+    { "from": "+15551270001", "body": "Nov 8-12", "delay_ms": 2000, "_note": "DECIDING_DATES: actual date suggestion amid chaos" },
+    { "from": "+15551270002", "body": "yasss", "delay_ms": 500, "_note": "Affirmative but short — pre-filter may skip" },
+    { "from": "+15551270003", "body": "this shit is taking forever can we just do tulum nov 8-12", "delay_ms": 1000, "_note": "Profanity + actual decision content. Rally should extract dates + destination, ignore profanity." },
+    { "from": "+15551270004", "body": "same", "delay_ms": 500, "_note": "Short agreement" },
+
+    { "from": "+15551270002", "body": "btw has anyone seen that new show on netflix", "delay_ms": 2000, "_note": "OFF-TOPIC: total non-sequitur. Rally should not respond." },
+    { "from": "+15551270003", "body": "yes it's so good", "delay_ms": 500, "_note": "OFF-TOPIC: Rally stays quiet" },
+
+    { "from": "+15551270001", "body": "STATUS", "delay_ms": 2000, "_note": "Re-anchor: planner checks where things stand after chaos" }
+  ]
+}
