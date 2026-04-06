@@ -13,3 +13,9 @@ export function getAdmin(): SupabaseClient {
   }
   return _admin;
 }
+
+/** Test-only: inject a mock client. */
+// deno-lint-ignore no-explicit-any
+export function _setAdminForTesting(client: any): void {
+  _admin = client as SupabaseClient;
+}
