@@ -434,29 +434,37 @@ async function handlePhaseMessage(
           .eq('phone', fromUser.phone);
       }
 
-      // Add destination to candidates — only if it looks like a real place name
+      // Add ALL recognized destinations from the message to candidates
       const destLower = destinationIdea.toLowerCase();
-      const recognizedDest = KNOWN_DESTINATIONS.find((d) => {
+      const recognizedDests: string[] = [];
+      const existingCandidates = ((session as Record<string, unknown>).destination_candidates as Array<{ label: string; votes: number }>) ?? [];
+      for (const d of KNOWN_DESTINATIONS) {
         const re = new RegExp(`\\b${d.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-        return re.test(destLower);
-      });
-      if (recognizedDest) {
-        const properDest = recognizedDest.split(' ').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
-        const existingCandidates = ((session as Record<string, unknown>).destination_candidates as Array<{ label: string; votes: number }>) ?? [];
-        if (!existingCandidates.some((c) => c.label.toLowerCase() === recognizedDest)) {
-          existingCandidates.push({ label: properDest, votes: 1 });
-          await admin
-            .from('trip_sessions')
-            .update({ destination_candidates: existingCandidates })
-            .eq('id', session.id);
+        if (re.test(destLower)) {
+          const properDest = d.split(' ').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+          if (!existingCandidates.some((c) => c.label.toLowerCase() === d)) {
+            existingCandidates.push({ label: properDest, votes: 1 });
+          }
+          recognizedDests.push(properDest);
         }
+      }
+      if (recognizedDests.length > 0) {
+        await admin
+          .from('trip_sessions')
+          .update({ destination_candidates: existingCandidates })
+          .eq('id', session.id);
+
+        const destListStr = recognizedDests.join(' and ');
+        // Detect uncertainty — "idk", "not sure", "maybe", "possibly"
+        const isUncertain = /\b(idk|not\s+sure|maybe|possibly|i\s+guess|could\s+be|might)\b/i.test(destinationIdea);
 
         const updatedP = await getParticipants(admin, session.id);
         const nowNamedD = updatedP.filter((p) => p.display_name && p.status === 'active').length;
-        if (nowNamedD >= 2) {
-          return `Got it, ${name} \u2014 ${properDest} is on the list! Is that everyone? Reply YES when the whole crew is here.`;
+        const everyonePrompt = nowNamedD >= 2 ? ' Is that everyone? Reply YES when the whole crew is here.' : '';
+        if (isUncertain) {
+          return `Got it, ${name} \u2014 ${destListStr} is on the list! Any other places you'd wanna explore?${everyonePrompt}`;
         }
-        return `Got it, ${name} \u2014 ${properDest} is on the list!`;
+        return `Got it, ${name} \u2014 ${destListStr} ${recognizedDests.length > 1 ? 'are' : 'is'} on the list!${everyonePrompt}`;
       }
 
       // Name extracted but no recognizable destination — just acknowledge name
