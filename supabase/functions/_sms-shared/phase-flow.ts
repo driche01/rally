@@ -100,10 +100,13 @@ async function advanceFromIntro(
   if (candidates.length > 0 && named.length >= active.length) {
     const list = candidates.map((c) => c.label).join(', ');
     const datesMsg = await advanceFromCollectingDestinations(admin, freshSession!, participants, triggerUserId, triggerMessageSid);
-    const transitionNote = candidates.length > 1
-      ? `${list} on the table \u2014 we'll nail down dates and budget first, then vote on where.`
-      : `${list} on the table.`;
-    return `${transitionNote}\n\n${datesMsg}`;
+    // Single destination = decided. Multiple = list as options to vote on later.
+    if (candidates.length === 1) {
+      // Lock in the destination immediately
+      await admin.from('trip_sessions').update({ destination: candidates[0].label }).eq('id', session.id);
+      return `${list} it is! \ud83c\udf89\n\n${datesMsg}`;
+    }
+    return `${list} on the table \u2014 we'll nail down dates and budget first, then vote on where.\n\n${datesMsg}`;
   }
 
   if (candidates.length > 0) {

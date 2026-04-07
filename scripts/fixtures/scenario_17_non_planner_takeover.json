@@ -1,0 +1,53 @@
+{
+  "script_name": "scenario_17_non_planner_takeover",
+  "description": "Planner goes quiet. A non-planner starts driving logistics: asking about dates, coordinating cars, following up on who's coming. Tests whether agent recognizes non-planner coordination without breaking planner-only restrictions. Based on Tahoe (Bri taking over from Annika) and Tulum (Abbey/Ross driving logistics).",
+  "phones": {
+    "planner": "+15551370001",
+    "p2_takeover": "+15551370002",
+    "p3": "+15551370003",
+    "p4": "+15551370004",
+    "p5": "+15551370005",
+    "rally": "+18559310010"
+  },
+  "assert_outbound_contains": [
+    "Reply STOP anytime",
+    "Only the planner"
+  ],
+  "assert_outbound_does_not_contain": [
+    "Error"
+  ],
+  "messages": [
+    { "from": "+15551370001", "body": "Hey", "delay_ms": 0, "_note": "1:1 planner registration", "_is1to1": true },
+    { "from": "+15551370001", "body": "Annika - Tahoe", "delay_ms": 1000 },
+    { "from": "+15551370002", "body": "Bri", "delay_ms": 1000 },
+    { "from": "+15551370003", "body": "Allison", "delay_ms": 1000 },
+    { "from": "+15551370004", "body": "Kelsey", "delay_ms": 1000 },
+    { "from": "+15551370005", "body": "David", "delay_ms": 1000 },
+    { "from": "+15551370001", "body": "yes", "delay_ms": 2000 },
+
+    { "from": "+15551370001", "body": "Mar 16-17", "delay_ms": 1000 },
+    { "from": "+15551370002", "body": "works", "delay_ms": 500 },
+    { "from": "+15551370003", "body": "yes", "delay_ms": 500 },
+    { "from": "+15551370004", "body": "yes", "delay_ms": 500 },
+    { "from": "+15551370005", "body": "yes", "delay_ms": 500 },
+
+    { "from": "+15551370002", "body": "Hi! Quickly following up to check on diff logistics. What day(s) are most people considering going up? Do we need to rent any vehicles? Are there any sleeping spaces we're looking to fill?", "delay_ms": 3000, "_note": "NON-PLANNER TAKEOVER: Bri asks multiple logistics questions in one message. These are legitimate trip-planning questions from a non-planner. Agent should recognize but not confuse with planner commands" },
+
+    { "from": "+15551370002", "body": "also curious to hear the status of your healing / litigation journey, Annika", "delay_ms": 1000, "_note": "Off-topic personal question directed at planner — ignore" },
+
+    { "from": "+15551370004", "body": "Can also rent a car if needed. Do we just have the 1 (Amanda & Nick's) so far?", "delay_ms": 2000, "_note": "Carpool coordination — peer-to-peer, agent should be silent" },
+    { "from": "+15551370004", "body": "Depending on car situation I'm down to ski any combination of/all 3 days", "delay_ms": 1000, "_note": "Activity planning — beyond agent's scope, silent" },
+    { "from": "+15551370002", "body": "I'm thinking I'll ski half day Friday (afternoon), all day Saturday and as long as ppl want to ski Sunday!", "delay_ms": 1000, "_note": "Activity schedule — silent" },
+
+    { "from": "+15551370002", "body": "A little birdie told me you might drive car two, David - so I think we're set for vehicles if you think you can fit four on the way back?", "delay_ms": 2000, "_note": "Carpool coordination mentioning specific person — peer-to-peer, silent" },
+    { "from": "+15551370005", "body": "the birdie was right! i can fit four ppl who pack extremely lightly lol", "delay_ms": 1000, "_note": "Carpool response — silent" },
+    { "from": "+15551370005", "body": "*four including me", "delay_ms": 500, "_note": "ASTERISK CORRECTION: agent should ignore" },
+
+    { "from": "+15551370002", "body": "NEXT", "delay_ms": 3000, "_note": "NON-PLANNER USES PLANNER COMMAND: Bri tries to advance. Agent should reject — only planner can use NEXT" },
+
+    { "from": "+15551370001", "body": "PLANNER Bri", "delay_ms": 2000, "_note": "PLANNER TRANSFER: Annika transfers planner to Bri" },
+    { "from": "+15551370002", "body": "NEXT", "delay_ms": 1000, "_note": "Now Bri is planner — NEXT should work" },
+
+    { "from": "+15551370001", "body": "STATUS", "delay_ms": 2000, "_note": "Status check — should show Bri as planner now" }
+  ]
+}
