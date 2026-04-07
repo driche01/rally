@@ -25,6 +25,7 @@ import {
 } from './venmo-split-link.ts';
 import { handleReEngagementYes } from './post-trip-reengager.ts';
 import { advancePhase, checkAutoAdvance } from './phase-flow.ts';
+import { classifyMessage } from './message-classifier.ts';
 
 // ─── Keyword detection ───────────────────────────────────────────────────────
 
@@ -419,23 +420,33 @@ async function handlePhaseMessage(
   if (!session) return null;
   const phase = session.phase;
 
-  // ─── System/reaction noise — stay silent in ALL phases ─────────────────
-  // iMessage reactions forwarded as SMS: "Reacted X to ...", "Liked ...", etc.
-  if (/^(?:reacted\s+\S+\s+to\s+["']|liked\s+["']|loved\s+["']|emphasized\s+["']|laughed\s+at\s+["']|questioned\s+["']|disliked\s+["'])/i.test(body.trim())) {
-    return null;
-  }
-  // "You unsent a message" / "X unsent a message" — iMessage system notification
-  if (/^(?:you|[\w\s]+)\s+unsent\s+a\s+message$/i.test(body.trim())) {
-    return null;
-  }
-  // Emoji-only messages (single or repeated emojis, nothing else meaningful)
-  const stripped = body.trim().replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\s\u200d\ufe0f]/gu, '');
-  if (stripped.length === 0 && body.trim().length > 0) {
-    return null;
-  }
-  // ChatGPT-style pasted content (long with "treasure trove", "heritage", "here are some top")
-  if (/\b(?:treasure\s+trove|heritage,\s+offering|here\s+are\s+some\s+top|blend\s+of\s+ancient)\b/i.test(body) && body.length > 100) {
-    return null;
+  // ─── Noise gate: fast-path regex + Haiku classifier ──────────────────────
+  // Categorizes the message into trip_decision / opt_out / reaction /
+  // peer_chat / noise / unknown. Reactions, pure noise, and peer-chat are
+  // silenced for Rally (they may still be used by ConversationParser
+  // elsewhere). opt_out and trip_decision and unknown all fall through to
+  // existing phase logic. See message-classifier.ts for category definitions.
+  //
+  // We SKIP the classifier during INTRO because every message there is an
+  // introduction like "Hi I'm Julia" which is its own extraction pipeline,
+  // and classifier calls would add unnecessary latency to onboarding.
+  if (phase !== 'INTRO') {
+    const participantsForClassify = await getParticipants(admin, session.id);
+    const classification = await classifyMessage({
+      admin,
+      session,
+      participants: participantsForClassify,
+      body,
+    });
+    if (
+      classification.category === 'reaction' ||
+      classification.category === 'noise' ||
+      classification.category === 'peer_chat'
+    ) {
+      return null;
+    }
+    // opt_out falls through to the graceful self-removal handler below.
+    // trip_decision and unknown both fall through to phase-specific logic.
   }
 
   // During INTRO, collect names and destination ideas
@@ -719,88 +730,10 @@ async function handlePhaseMessage(
     }
   }
 
-  // ─── Compliment / gratitude to organizer — stay silent (P1-5) ──────────
-  if (/\b(bless\s+you|thank\s*(?:you|u)|thanks)\s+(?:for\s+)?(?:coordinating|planning|organizing|putting\s+(?:this|it)\s+together|being\s+(?:an?\s+)?organizer|setting\s+(?:this|it)\s+up)\b/i.test(body)) {
-    return null;
-  }
-  // Also catch short standalone compliments like "+1 thank you for planning!"
-  if (/^(?:\+1[,.]?\s*)?(?:bless\s+you|thanks?(?:\s*you)?|ty)\b/i.test(body.trim()) && /\b(?:plan|organiz|coordinat)\w*/i.test(body)) {
-    return null;
-  }
-
-  // ─── Third-party status reports — stay silent (P2-3) ────────────────────
-  // "Michelle is a TBD", "He has laundry scheduled", "She might not make it"
-  if (/\b(\w+)\s+(?:is\s+(?:a\s+)?(?:TBD|maybe|tentative|uncertain)|might\s+(?:not\s+)?(?:make\s+it|come|be\s+(?:able|too))|has\s+\w+\s+scheduled|won'?t\s+(?:be\s+able|make\s+it))\b/i.test(body)) {
-    // Only match when talking about a third party (not "I")
-    const subjectMatch = body.match(/^(\w+)\s+(?:is\s+|might\s+|has\s+|won'?t\s+)/i);
-    if (subjectMatch && !['i', 'im', "i'm", 'we', "we're"].includes(subjectMatch[1].toLowerCase())) {
-      return null;
-    }
-  }
-
-  // ─── Emotional reactions — stay silent (P2-6) ──────────────────────────
-  // "noooo!!!", "I'm so sorry", "omg", reactions to personal news
-  if (/^(?:no+o+!*|nooo+!*|oo+f+!*|oh\s*no+!*|omg+!*|ugh+!*)$/i.test(body.trim())) {
-    return null;
-  }
-  if (/\b(?:i'?m\s+so\s+(?:so\s+)?sorry|sorry\s+to\s+hear|that\s+(?:sucks|stinks)|oh\s+no|poor\s+\w+|get\s+well|feel\s+better|sending\s+(?:love|hugs))\b/i.test(body) && wordCount <= 12) {
-    return null;
-  }
-
-  // ─── Off-topic personal stories and peer-to-peer chat — stay silent ────
-  // Questions directed at another person (not the bot)
-  if (/\b(?:was\s+it\s+\w+ing|did\s+(?:you|he|she|they)\s+\w+|too\s+bad\s+you\s+can'?t|you\s+should\s+(?:sue|try|ask|call)|sue\s+(?:that|the|him|her)|sounds?\s+like\s+a\s+dick|sounds?\s+like\s+an?\s+\w+)\b/i.test(body) && wordCount <= 15) {
-    return null;
-  }
-  // Short social messages: "Thanks Harry", "good shout sof"
-  if (/^(?:thanks?\s+\w+|thx\s+\w+|good\s+(?:shout|call|point|one)\s+\w+|nice\s+one\s+\w+|cheers\s+\w+)!*$/i.test(body.trim())) {
-    return null;
-  }
-  // Short exclamatory reactions: "Def sue that bro", "NOOOO"
-  if (/^(?:def(?:initely)?\s+.{3,20}|lol+|haha+|omg+|yikes+|oof+|rip+|damn+|wow+|bruh+|sheesh+|aye+|ayy+)!*$/i.test(body.trim())) {
-    return null;
-  }
-  // Messages that are clearly responses to another person's personal story
-  if (/\b(?:the\s+instructor|sounds?\s+like|at\s+least|could\s+be\s+worse|on\s+the\s+bright\s+side|hope\s+you|wish\s+you|take\s+care)\b/i.test(body) && !/\b(trip|travel|flight|hotel|airbnb|book|dates?|budget|cost|destination)\b/i.test(body)) {
-    return null;
-  }
-
-  // ─── During-trip logistics — stay silent (P5-1 through P5-5) ────────────
-  // Grocery coordination, property questions, activity coordination
-  if (/\b(?:grocery|groceries|store|market|outlet|bananas?|fruits?|meat|vegetarian|stir\s*fry|pasta|dinner|lunch|breakfast|brekky|milk|bread|eggs|snacks|drinks|ice\s*cream|coffee)\b/i.test(body) && /\b(?:get|buy|grab|pick\s+up|send\s+requests?|we'?re\s+at|can\s+we|please|plz)\b/i.test(body)) {
-    return null;
-  }
-  // Property questions and answers
-  if (/\b(?:what'?s?\s+the\s+(?:garage|wifi|gate|door|lock|address|code|password|key)|how\s+(?:do\s+(?:you|we)\s+)?(?:close|open|lock|unlock|use)\s+the|where'?s?\s+the\s+(?:key|remote|thermostat|breaker)|do\s+(?:we|you)\s+need\s+to\s+rent)\b/i.test(body)) {
-    return null;
-  }
-  // Short numeric answers (codes, prices, counts) — not trip decisions
-  if (/^\d{1,6}$/.test(body.trim()) && phase !== 'BUDGET_POLL' && phase !== 'DECIDING_DESTINATION') {
-    return null;
-  }
-  // Activity coordination
-  if (/\b(?:anyone\s+want\s+to\s+(?:go|come|do|try|join|play)|want\s+to\s+go\s+for\s+a|let'?s\s+(?:go|do|try|hit|head)|heading\s+(?:out|to|over))\b/i.test(body) && !/\b(?:book|flight|hotel|trip|travel)\b/i.test(body)) {
-    return null;
-  }
-  // Self-resolved questions ("ah I realized", "we're all good", "never mind")
-  if (/\b(?:i\s+realized|never\s*mind|nvm|figured\s+(?:it\s+)?out|we'?re\s+all\s+good|all\s+good\s+folks|sorted\s+it)\b/i.test(body)) {
-    return null;
-  }
-  // Asterisk corrections ("*four including me")
-  if (/^\*/.test(body.trim())) {
-    return null;
-  }
-
-  // ─── Off-topic detection — stay silent (P1-6) ──────────────────────────
-  // Questions/statements clearly unrelated to the trip
-  if (/\b(at\s+\w+\s+for\s+the\s+protest|for\s+the\s+protest|out\s+of\s+town\s+(?:at|this)\s+(?:the\s+)?(?:river|lake|beach|mountains?)\s+this\s+weekend|new\s+(?:[\w\s]+\s+)?album\s+alert)\b/i.test(body)) {
-    return null;
-  }
-
-  // ─── Farewell follow-ups (after opt-out) — stay silent ─────────────────
-  if (/^(?:bye+\s*(?:guys+|everyone|y'?all|all)?!*|see\s+y(?:ou|a)|later+!*|peace+!*)$/i.test(body.trim())) {
-    return null;
-  }
+  // ─── Scattered silence filters now handled by message-classifier.ts ────
+  // (compliments, third-party status, emotional reactions, peer-to-peer chat,
+  // during-trip logistics, property questions, activity coordination,
+  // self-resolved questions, asterisk corrections, off-topic, farewells)
 
   // ─── P3-2: Budget info embedded in message — extract and store ──────────
   // "flights ~$325 and villa ~$550/person", "$200 pp for the weekend"
