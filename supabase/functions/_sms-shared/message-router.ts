@@ -677,20 +677,20 @@ async function handlePhaseMessage(
     const isConfirm = /^(y(a+|e+)?s+|yep|yup|yeah+|works?|good|perfect|down|sounds?\s*good|i.?m\s*good|i.?m\s*down|let.?s\s*do\s*it|bet|same|locked|confirmed?)$/i.test(body.trim());
     if (isConfirm) {
       await admin.from('trip_session_participants')
-        .update({ budget_raw: 'PREFILL_CONFIRMED' })
+        .update({ phase_confirmation: 'PREFILL_CONFIRMED' })
         .eq('id', message.participant.id);
 
       const { data: allP } = await admin
         .from('trip_session_participants')
-        .select('budget_raw')
+        .select('phase_confirmation')
         .eq('trip_session_id', session.id)
         .eq('status', 'active');
-      const confirmed = (allP ?? []).filter((p: { budget_raw?: string }) => p.budget_raw === 'PREFILL_CONFIRMED').length;
+      const confirmed = (allP ?? []).filter((p: { phase_confirmation?: string }) => p.phase_confirmation === 'PREFILL_CONFIRMED').length;
       const total = (allP ?? []).length;
 
       if (confirmed >= total) {
         await admin.from('trip_sessions').update({ phase_sub_state: null }).eq('id', session.id);
-        await admin.from('trip_session_participants').update({ budget_raw: null }).eq('trip_session_id', session.id);
+        await admin.from('trip_session_participants').update({ phase_confirmation: null }).eq('trip_session_id', session.id);
         const { data: freshS } = await admin.from('trip_sessions').select('*').eq('id', session.id).single();
         if (freshS) {
           const nextMsg = await advancePhase(admin, freshS);
@@ -840,17 +840,16 @@ async function handlePhaseMessage(
 
     // Check if this is a confirmation when dates have been proposed
     if (subState === 'DATES_PROPOSED' && session.dates && isConfirmation) {
-      // Track confirmation via budget_raw = 'DATE_CONFIRMED'
       await admin.from('trip_session_participants')
-        .update({ budget_raw: 'DATE_CONFIRMED' })
+        .update({ phase_confirmation: 'DATE_CONFIRMED' })
         .eq('id', message.participant.id);
       // Check how many have confirmed
       const { data: allP } = await admin
         .from('trip_session_participants')
-        .select('budget_raw')
+        .select('phase_confirmation')
         .eq('trip_session_id', session.id)
         .eq('status', 'active');
-      const confirmed = (allP ?? []).filter((p: { budget_raw?: string }) => p.budget_raw === 'DATE_CONFIRMED').length;
+      const confirmed = (allP ?? []).filter((p: { phase_confirmation?: string }) => p.phase_confirmation === 'DATE_CONFIRMED').length;
       const total = (allP ?? []).length;
       if (confirmed >= total) {
         // Clear sub_state and advance
@@ -858,9 +857,8 @@ async function handlePhaseMessage(
           phase_sub_state: null,
           updated_at: new Date().toISOString(),
         }).eq('id', session.id);
-        // Clear budget_raw for reuse in budget phase
         await admin.from('trip_session_participants')
-          .update({ budget_raw: null })
+          .update({ phase_confirmation: null })
           .eq('trip_session_id', session.id);
         const nextMsg = await advancePhase(admin, session);
         const dateMsg = `Dates locked in!`;
@@ -910,8 +908,8 @@ async function handlePhaseMessage(
         phase_sub_state: 'DATES_PROPOSED',
         updated_at: new Date().toISOString(),
       }).eq('id', session.id);
-      await admin.from('trip_session_participants').update({ budget_raw: null }).eq('trip_session_id', session.id);
-      await admin.from('trip_session_participants').update({ budget_raw: 'DATE_CONFIRMED' }).eq('id', message.participant.id);
+      await admin.from('trip_session_participants').update({ phase_confirmation: null }).eq('trip_session_id', session.id);
+      await admin.from('trip_session_participants').update({ phase_confirmation: 'DATE_CONFIRMED' }).eq('id', message.participant.id);
 
       const { data: allP } = await admin.from('trip_session_participants').select('id').eq('trip_session_id', session.id).eq('status', 'active');
       const total = (allP ?? []).length;
@@ -993,18 +991,18 @@ async function handlePhaseMessage(
           if (existingStart === startStr && existingEnd === endStr) {
             // Same dates — treat as a confirmation
             await admin.from('trip_session_participants')
-              .update({ budget_raw: 'DATE_CONFIRMED' })
+              .update({ phase_confirmation: 'DATE_CONFIRMED' })
               .eq('id', message.participant.id);
             const { data: allPCheck } = await admin
               .from('trip_session_participants')
-              .select('budget_raw')
+              .select('phase_confirmation')
               .eq('trip_session_id', session.id)
               .eq('status', 'active');
-            const confirmedCount = (allPCheck ?? []).filter((p: { budget_raw?: string }) => p.budget_raw === 'DATE_CONFIRMED').length;
+            const confirmedCount = (allPCheck ?? []).filter((p: { phase_confirmation?: string }) => p.phase_confirmation === 'DATE_CONFIRMED').length;
             const totalCount = (allPCheck ?? []).length;
             if (confirmedCount >= totalCount) {
               await admin.from('trip_sessions').update({ phase_sub_state: null }).eq('id', session.id);
-              await admin.from('trip_session_participants').update({ budget_raw: null }).eq('trip_session_id', session.id);
+              await admin.from('trip_session_participants').update({ phase_confirmation: null }).eq('trip_session_id', session.id);
               const nextMsg = await advancePhase(admin, session);
               return nextMsg ? `Dates locked in!\n\n${nextMsg}` : `Dates locked in!`;
             }
@@ -1032,11 +1030,10 @@ async function handlePhaseMessage(
         }).eq('id', session.id);
         // Reset everyone's confirmation since dates changed
         await admin.from('trip_session_participants')
-          .update({ budget_raw: null })
+          .update({ phase_confirmation: null })
           .eq('trip_session_id', session.id);
-        // Auto-confirm the proposer via budget_raw
         await admin.from('trip_session_participants')
-          .update({ budget_raw: 'DATE_CONFIRMED' })
+          .update({ phase_confirmation: 'DATE_CONFIRMED' })
           .eq('id', message.participant.id);
         // Check total participants
         const { data: allP } = await admin
@@ -1059,12 +1056,12 @@ async function handlePhaseMessage(
     // P1-4: Partial availability — "out for the first two weeks of sept" is a constraint, not opt-out
     const partialAvailMatch = /\b(?:out|busy|unavailable|away|gone|traveling)\s+(?:for\s+)?(?:the\s+)?(?:first|last|second|third|beginning|end)\s+(?:\w+\s+)?(?:weeks?|wks?|days?|half)\s+(?:of\s+|for\s+|in\s+)?(\w+)/i.test(body);
     if (partialAvailMatch && message.participant) {
-      const currentBR = (await admin
+      const currentPC = (await admin
         .from('trip_session_participants')
-        .select('budget_raw')
+        .select('phase_confirmation')
         .eq('id', message.participant.id)
-        .single()).data?.budget_raw;
-      if (currentBR !== 'DATE_CONFIRMED') {
+        .single()).data?.phase_confirmation;
+      if (currentPC !== 'DATE_CONFIRMED') {
         await admin
           .from('trip_session_participants')
           .update({ budget_raw: `CONSTRAINT: ${body.trim()}` })
@@ -1077,14 +1074,14 @@ async function handlePhaseMessage(
     // Only store as date input if it looks like date-related content
     // (contains a month, number, or date-like keyword). Don't overwrite DATE_CONFIRMED.
     const looksLikeDateContent = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december|\d{1,2}|week|month|spring|summer|fall|winter|christmas|thanksgiving|new\s*year)/i.test(body);
-    const currentBudgetRaw = message.participant ? (await admin
+    const currentPhaseConfirm = message.participant ? (await admin
       .from('trip_session_participants')
-      .select('budget_raw')
+      .select('phase_confirmation')
       .eq('id', message.participant.id)
-      .single()).data?.budget_raw : null;
+      .single()).data?.phase_confirmation : null;
 
-    // Don't overwrite DATE_CONFIRMED with off-topic messages
-    if (looksLikeDateContent && currentBudgetRaw !== 'DATE_CONFIRMED') {
+    // Don't overwrite DATE_CONFIRMED status with raw date text
+    if (looksLikeDateContent && currentPhaseConfirm !== 'DATE_CONFIRMED') {
       await admin
         .from('trip_session_participants')
         .update({ budget_raw: body.trim() })
@@ -1502,7 +1499,7 @@ async function handleNext(
       updated_at: new Date().toISOString(),
     }).eq('id', session.id);
     await admin.from('trip_session_participants')
-      .update({ budget_raw: null })
+      .update({ phase_confirmation: null })
       .eq('trip_session_id', session.id);
   }
   if (session.phase === 'DECIDING_DATES' && subState === 'DATES_PROPOSED') {
@@ -1511,7 +1508,7 @@ async function handleNext(
       updated_at: new Date().toISOString(),
     }).eq('id', session.id);
     await admin.from('trip_session_participants')
-      .update({ budget_raw: null })
+      .update({ phase_confirmation: null, budget_raw: null })
       .eq('trip_session_id', session.id);
   }
 
@@ -1595,6 +1592,7 @@ async function handleResetConfirm(
   await admin.from('trip_session_participants').update({
     budget_raw: null,
     budget_normalized: null,
+    phase_confirmation: null,
     origin_city: null,
     origin_airport: null,
     committed: null,
