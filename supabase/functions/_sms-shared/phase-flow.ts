@@ -149,7 +149,7 @@ async function advanceFromCollectingDestinations(
     // Auto-confirm the planner who proposed it
     if (planner) {
       await admin.from('trip_session_participants')
-        .update({ budget_raw: 'PREFILL_CONFIRMED' })
+        .update({ phase_confirmation: 'PREFILL_CONFIRMED' })
         .eq('id', planner.id);
     }
 
@@ -176,6 +176,14 @@ async function advanceFromDecidingDates(
   if (session.budget_median || session.budget_status === 'SKIPPED') {
     return advanceToDestinationVote(admin, session, participants, triggerUserId, triggerMessageSid);
   }
+
+  // Clear any raw date text that was stashed in budget_raw during DECIDING_DATES
+  // so it doesn't leak into the budget poll, and clear per-participant phase
+  // confirmation flags now that we're moving on.
+  await admin
+    .from('trip_session_participants')
+    .update({ budget_raw: null, phase_confirmation: null })
+    .eq('trip_session_id', session.id);
 
   await transitionPhase(admin, session, 'BUDGET_POLL', triggerUserId, triggerMessageSid);
   return formatBudgetPollMessage();
