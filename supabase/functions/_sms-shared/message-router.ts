@@ -1073,9 +1073,18 @@ async function handlePhaseMessage(
       return `${name} — noted, we'll work around that.`;
     }
 
-    // Only store as date input if it looks like date-related content
-    // (contains a month, number, or date-like keyword). Don't overwrite DATE_CONFIRMED.
-    const looksLikeDateContent = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december|\d{1,2}|week|month|spring|summer|fall|winter|christmas|thanksgiving|new\s*year)/i.test(body);
+    // Only store as date input if it really looks like date content.
+    // Previously this matched any message containing "week", "month", or a
+    // 1-2 digit number, which caused off-topic lines like "broke my arm this
+    // week" to get stored + acknowledged. Now we require either:
+    //   (a) a month name AND a day number (e.g. "Nov 12", "sept 5-9"), OR
+    //   (b) an explicit season/holiday phrase on its own
+    //       ("christmas", "new year", "thanksgiving", "spring break",
+    //        "labor day weekend", etc.)
+    const hasMonth = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\b/i.test(body);
+    const hasDayNumber = /\b\d{1,2}(?:st|nd|rd|th)?\b/.test(body);
+    const hasSeasonOrHoliday = /\b(?:christmas|thanksgiving|new\s*year(?:'s)?|spring\s+break|labor\s+day|memorial\s+day|fourth\s+of\s+july|4th\s+of\s+july|summer|fall|winter|spring)\s*(?:break|weekend|holiday)?\b/i.test(body);
+    const looksLikeDateContent = (hasMonth && hasDayNumber) || hasSeasonOrHoliday;
     const currentPhaseConfirm = message.participant ? (await admin
       .from('trip_session_participants')
       .select('phase_confirmation')
