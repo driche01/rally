@@ -68,9 +68,14 @@ for (const scenario of toRun) {
   } catch { /* ignore cleanup errors */ }
 
   try {
+    // 5 min per scenario. Was 120s, which was tight even pre-classifier and
+    // caused scenarios 4 & 6 to flake in bulk runs when accumulated network
+    // latency pushed execution past 2 minutes. Each Haiku classifier call
+    // adds ~500ms-2s, so scenarios with 20+ noisy messages can now legitimately
+    // take 90-180s. 300s gives comfortable headroom without masking real hangs.
     const output = execSync(cmd, {
       encoding: 'utf8',
-      timeout: 120_000,
+      timeout: 300_000,
       env: process.env,
     });
     console.log(output);
