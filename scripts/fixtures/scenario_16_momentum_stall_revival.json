@@ -1,0 +1,58 @@
+{
+  "script_name": "scenario_16_momentum_stall_revival",
+  "description": "Group starts strong, then goes silent for weeks. Someone asks 'is this still happening?'. Planner revives with a status update and deadline. Tests gap handling, momentum checks, and planner-driven urgency. Based on Tulum thread where Ross asked 'is mexico still happening?' after 3 weeks of silence.",
+  "phones": {
+    "planner": "+15551360001",
+    "p2": "+15551360002",
+    "p3": "+15551360003",
+    "p4": "+15551360004",
+    "p5": "+15551360005",
+    "rally": "+18559310010"
+  },
+  "assert_outbound_contains": [
+    "Reply STOP anytime"
+  ],
+  "assert_outbound_does_not_contain": [
+    "Error"
+  ],
+  "messages": [
+    { "from": "+15551360001", "body": "Hey", "delay_ms": 0, "_note": "1:1 planner registration", "_is1to1": true },
+    { "from": "+15551360001", "body": "Caroline - Cabo", "delay_ms": 1000, "_note": "INTRO" },
+    { "from": "+15551360002", "body": "Ross", "delay_ms": 1000 },
+    { "from": "+15551360003", "body": "Abbey", "delay_ms": 1000 },
+    { "from": "+15551360004", "body": "Julia", "delay_ms": 1000 },
+    { "from": "+15551360005", "body": "Mike", "delay_ms": 1000 },
+    { "from": "+15551360001", "body": "that's everyone", "delay_ms": 2000 },
+
+    { "from": "+15551360001", "body": "Thinking sometime in November, maybe Nov 8-12?", "delay_ms": 1000, "_note": "DECIDING_DATES" },
+    { "from": "+15551360002", "body": "works", "delay_ms": 500 },
+    { "from": "+15551360003", "body": "yes", "delay_ms": 500 },
+
+    { "from": "+15551360002", "body": "is cabo still happening?", "delay_ms": 5000, "_note": "MOMENTUM CHECK: someone asking if the trip is dead after silence. Agent should respond with current status" },
+
+    { "from": "+15551360001", "body": "Ofc", "delay_ms": 1000, "_note": "Planner confirms still happening — abbreviation for 'of course'" },
+    { "from": "+15551360001", "body": "We need to look at flights", "delay_ms": 500, "_note": "Planner driving next steps" },
+    { "from": "+15551360001", "body": "I think flights first then villa", "delay_ms": 500, "_note": "Planner sequencing decisions — not a vote" },
+
+    { "from": "+15551360004", "body": "Should we book flights", "delay_ms": 2000, "_note": "Question, not a booking" },
+    { "from": "+15551360005", "body": "Yeah", "delay_ms": 500, "_note": "Agreement to the question, not a booking confirmation" },
+    { "from": "+15551360001", "body": "Defo flights", "delay_ms": 500, "_note": "Slang agreement — 'defo' = definitely. Not a booking" },
+
+    { "from": "+15551360003", "body": "Anyone know anyone who needs a nyc roommate in the fall", "delay_ms": 3000, "_note": "COMPLETELY OFF-TOPIC: personal life question in trip thread. Must be ignored" },
+
+    { "from": "+15551360001", "body": "Do we feel good about a week deadline on this flight? Then consider other options?", "delay_ms": 3000, "_note": "DEADLINE PROPOSAL: planner proposing a deadline informally. Agent should detect" },
+    { "from": "+15551360001", "body": "If not all good but wanna check!", "delay_ms": 500, "_note": "Softening the deadline — not retracting it" },
+
+    { "from": "+15551360003", "body": "I'd like us to figure out soon while I still have a job and income 😄", "delay_ms": 1000, "_note": "Urgency expressed through humor — supports the deadline, not a decision" },
+
+    { "from": "+15551360005", "body": "it was like 300 two weeks ago what happened", "delay_ms": 2000, "_note": "Price commentary — not a decision" },
+
+    { "from": "+15551360001", "body": "Hi friends, checked prices for original nyc flight and they're still high", "delay_ms": 3000, "_note": "Price update after gap" },
+    { "from": "+15551360001", "body": "Options are move dates, or do different flight which would require layover, or pr", "delay_ms": 1000, "_note": "Planner presenting options — multiple paths forward" },
+    { "from": "+15551360005", "body": "can it", "delay_ms": 500, "_note": "Truncated/cryptic response — ignore" },
+    { "from": "+15551360002", "body": "what about different place in Caribbean", "delay_ms": 1000, "_note": "NEW DESTINATION: mid-planning suggestion for entirely different destination" },
+    { "from": "+15551360002", "body": "nassau bahamas could be fun", "delay_ms": 500, "_note": "SPECIFIC ALT DESTINATION: Bahamas proposed" },
+
+    { "from": "+15551360001", "body": "STATUS", "delay_ms": 2000, "_note": "Status check after chaos" }
+  ]
+}

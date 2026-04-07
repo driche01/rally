@@ -1,0 +1,45 @@
+{
+  "script_name": "scenario_19_name_parsing_stress",
+  "description": "Stress-tests the name parser with real-world patterns: names with punctuation, names buried in sentences, names with emoji, multi-word names, corrections, names that look like common words, and people who don't give a name at all. Based on patterns across all 4 threads.",
+  "phones": {
+    "planner": "+15551390001",
+    "p2": "+15551390002",
+    "p3": "+15551390003",
+    "p4": "+15551390004",
+    "p5": "+15551390005",
+    "p6": "+15551390006",
+    "p7": "+15551390007",
+    "p8": "+15551390008",
+    "rally": "+18559310010"
+  },
+  "assert_outbound_contains": [
+    "Reply STOP anytime"
+  ],
+  "assert_outbound_does_not_contain": [
+    "Error"
+  ],
+  "messages": [
+    { "from": "+15551390001", "body": "Hey", "delay_ms": 0, "_note": "1:1 planner registration", "_is1to1": true },
+    { "from": "+15551390001", "body": "Caroline - Tulum", "delay_ms": 1000, "_note": "INTRO: clean name-dash-destination format" },
+
+    { "from": "+15551390002", "body": "Matt B", "delay_ms": 1000, "_note": "NAME: two words with initial. Should parse as 'Matt B'" },
+    { "from": "+15551390003", "body": "It's Sarah!!", "delay_ms": 1000, "_note": "NAME: buried in 'It's X!!' pattern. Should extract 'Sarah'" },
+    { "from": "+15551390004", "body": "hey hey abbey here 🎉", "delay_ms": 1000, "_note": "NAME: buried in sentence with emoji. Should extract 'Abbey'" },
+    { "from": "+15551390005", "body": "yo", "delay_ms": 1000, "_note": "NO NAME: common word, should NOT be parsed as a name. Person hasn't identified themselves" },
+    { "from": "+15551390005", "body": "oh im ross btw", "delay_ms": 1000, "_note": "DELAYED NAME: person gives name in follow-up message. Should extract 'Ross'" },
+    { "from": "+15551390006", "body": "Hi!! I'm Julia 😊", "delay_ms": 1000, "_note": "NAME: 'I'm X' pattern with emoji. Should extract 'Julia'" },
+    { "from": "+15551390007", "body": "Andrew Morgan", "delay_ms": 1000, "_note": "NAME: full name. Should parse as 'Andrew Morgan' or just 'Andrew'" },
+    { "from": "+15551390008", "body": "haha whats up", "delay_ms": 1000, "_note": "NO NAME: casual greeting, not a name" },
+    { "from": "+15551390008", "body": "this is mike a btw", "delay_ms": 1000, "_note": "DELAYED NAME: 'this is X' pattern with initial. Should extract 'Mike A'" },
+
+    { "from": "+15551390002", "body": "wait actually its Matthew", "delay_ms": 2000, "_note": "NAME CORRECTION: changing from Matt B to Matthew. Should update display name" },
+
+    { "from": "+15551390003", "body": "lol", "delay_ms": 1000, "_note": "Common word — should NOT overwrite Sarah's name" },
+    { "from": "+15551390004", "body": "same", "delay_ms": 500, "_note": "Common word — should NOT overwrite Abbey's name" },
+    { "from": "+15551390006", "body": "omg", "delay_ms": 500, "_note": "Common word — should NOT overwrite Julia's name" },
+
+    { "from": "+15551390001", "body": "that's everyone", "delay_ms": 2000, "_note": "INTRO complete" },
+
+    { "from": "+15551390001", "body": "STATUS", "delay_ms": 2000, "_note": "Status should show: Caroline, Matthew (corrected), Sarah, Abbey, Ross, Julia, Andrew Morgan, Mike A — all with correct names" }
+  ]
+}

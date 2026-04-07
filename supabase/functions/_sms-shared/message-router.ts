@@ -195,12 +195,10 @@ export async function routeMessage(
 
 // ─── 1:1 handler ─────────────────────────────────────────────────────────────
 
-async function handle1to1(_admin: SupabaseClient, _user: SmsUser): Promise<string> {
-  return (
-    "Hey! I'm Rally \u2014 I help groups plan trips fast. " +
-    'Add me to a group thread with your crew and I\u2019ll take it from there. ' +
-    'Reply STOP anytime to opt out.'
-  );
+async function handle1to1(_admin: SupabaseClient, _user: SmsUser): Promise<string | null> {
+  // Stay silent on 1:1 messages — Rally only operates in group threads.
+  // The user will get the proper intro when they add Rally to a group.
+  return null;
 }
 
 // ─── Keyword handlers ────────────────────────────────────────────────────────
@@ -421,18 +419,66 @@ async function handlePhaseMessage(
   if (!session) return null;
   const phase = session.phase;
 
+  // ─── System/reaction noise — stay silent in ALL phases ─────────────────
+  // iMessage reactions forwarded as SMS: "Reacted X to ...", "Liked ...", etc.
+  if (/^(?:reacted\s+\S+\s+to\s+["']|liked\s+["']|loved\s+["']|emphasized\s+["']|laughed\s+at\s+["']|questioned\s+["']|disliked\s+["'])/i.test(body.trim())) {
+    return null;
+  }
+  // "You unsent a message" / "X unsent a message" — iMessage system notification
+  if (/^(?:you|[\w\s]+)\s+unsent\s+a\s+message$/i.test(body.trim())) {
+    return null;
+  }
+  // Emoji-only messages (single or repeated emojis, nothing else meaningful)
+  const stripped = body.trim().replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\s\u200d\ufe0f]/gu, '');
+  if (stripped.length === 0 && body.trim().length > 0) {
+    return null;
+  }
+  // ChatGPT-style pasted content (long with "treasure trove", "heritage", "here are some top")
+  if (/\b(?:treasure\s+trove|heritage,\s+offering|here\s+are\s+some\s+top|blend\s+of\s+ancient)\b/i.test(body) && body.length > 100) {
+    return null;
+  }
+
   // During INTRO, collect names and destination ideas
   if (phase === 'INTRO') {
     // Check for "yes", "that's everyone", "we're good", "all here" to advance
     const introUpper = body.trim().toUpperCase();
     const participants = await getParticipants(admin, session.id);
     const namedCount = participants.filter((p) => p.display_name && p.status === 'active').length;
-    if (namedCount >= 2 && (introUpper === 'YES' || introUpper === 'YEP' || introUpper === 'YEAH' ||
-        /\b(that'?s\s*everyone|we'?re\s*(all\s*)?good|all\s*here|that'?s\s*it|let'?s\s*go)\b/i.test(body))) {
+    const activeCount = participants.filter((p) => p.status === 'active').length;
+    const isAdvanceSignal = introUpper === 'YES' || introUpper === 'YEP' || introUpper === 'YEAH' ||
+        /\b(that'?s\s*everyone|we'?re\s*(all\s*)?good|all\s*here|that'?s\s*it|let'?s\s*go)\b/i.test(body);
+    if (namedCount >= 2 && isAdvanceSignal) {
+      // If some active participants haven't given names yet, wait briefly
+      if (namedCount < activeCount) {
+        const unnamedCount = activeCount - namedCount;
+        return `Still waiting on ${unnamedCount} ${unnamedCount === 1 ? 'person' : 'people'} to drop ${unnamedCount === 1 ? 'their' : 'their'} name${unnamedCount === 1 ? '' : 's'}.`;
+      }
       return advancePhase(admin, session);
     }
 
-    // Extract name from "Name — destination" pattern
+    // Name correction: "wait actually its X" / "actually I'm X" / "correction: X"
+    // Applies when a participant already has a name and wants to change it
+    const existingName = message.participant?.display_name;
+    if (existingName) {
+      const correctionMatch = body.match(/(?:wait\s+)?actually\s+(?:its?|i'?m|my\s+name\s+is)\s+([\p{L}][\p{L}'\-]{0,30})/iu)
+        || body.match(/^correction[:\s]+([\p{L}][\p{L}'\-]{0,30})/iu);
+      if (correctionMatch) {
+        const newName = correctionMatch[1].trim();
+        const properName = newName[0].toUpperCase() + newName.slice(1).toLowerCase();
+        await admin.from('trip_session_participants')
+          .update({ display_name: properName })
+          .eq('trip_session_id', session.id)
+          .eq('user_id', fromUser.id);
+        await admin.from('users').update({ display_name: properName }).eq('id', fromUser.id);
+        if (session.trip_id) {
+          await admin.from('respondents').update({ name: properName })
+            .eq('trip_id', session.trip_id).eq('phone', fromUser.phone);
+        }
+        return `Got it — ${properName} it is!`;
+      }
+    }
+
+    // Extract name from "Name — destination" pattern (attempt on every INTRO message)
     const nameMatch = body.match(/^([\p{L}][\p{L}'\-]{0,30})\s*[—–\-]\s*(.+)/u);
     if (nameMatch) {
       const name = nameMatch[1].trim();
@@ -503,8 +549,35 @@ async function handlePhaseMessage(
       return `Hey ${name}!`;
     }
 
+    // Strip trailing emojis/symbols from text before parsing names
+    const cleanBody = body.trim()
+      .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\ufe0f\u200d]+/gu, '')
+      .replace(/[!?.,]+$/, '')
+      .trim();
+
+    // Natural-language name patterns:
+    // "I'm X" / "Im X" / "It's X" / "Its X" / "this is X" / "hey hey abbey here" / "oh im ross btw"
+    // Words that commonly appear AFTER a name but aren't part of it
+    const NAME_SUFFIX_STOPWORDS = /^(btw|here|lol|haha|omg|etc|tho|though|yo)$/i;
+    let extractedName: string | null = null;
+    const naturalPatterns = [
+      /(?:^|\s)(?:i'?m|im|my\s+name\s+is|this\s+is|its?)\s+([\p{L}][\p{L}'\-]{1,20}(?:\s+[\p{L}][\p{L}'\-]{0,20})?)/iu,
+      /^(?:hey\s+hey\s+|hi+\s+|hello+\s+|yo\s+)?([\p{L}][\p{L}'\-]{1,20})\s+here\b/iu,
+      /^it'?s\s+([\p{L}][\p{L}'\-]{1,20})/iu,
+    ];
+    for (const pat of naturalPatterns) {
+      const m = cleanBody.match(pat);
+      if (m) {
+        // Strip trailing stopwords like "btw" from the captured name
+        const captured = m[1].trim().split(/\s+/).filter((w) => !NAME_SUFFIX_STOPWORDS.test(w));
+        if (captured.length > 0) {
+          extractedName = captured.join(' ');
+          break;
+        }
+      }
+    }
+
     // Single-word or two-word name without dash ("Abbey", "Sofia", "Matt B")
-    // Exclude common chat words that aren't names
     const NOT_NAMES = new Set([
       'lol', 'omg', 'wow', 'ok', 'okay', 'yes', 'no', 'yep', 'nah', 'nope',
       'haha', 'hahaha', 'lmao', 'lmfao', 'bruh', 'bro', 'dude', 'same',
@@ -513,11 +586,18 @@ async function handlePhaseMessage(
       'hi', 'hey', 'yo', 'sup', 'sure', 'maybe', 'true', 'right',
       'what', 'huh', 'wait', 'why', 'how', 'who', 'when', 'where',
       'in', 'down', 'go', 'let', 'do', 'up', 'me', 'we', 'he', 'she',
+      'whats', "what's", 'its', "it's", 'im', "i'm", 'thanks', 'ty',
     ]);
-    const wordCount = body.trim().split(/\s+/).length;
-    if (wordCount <= 2 && /^[\p{L}]/u.test(body.trim()) && !/\d/.test(body) &&
-        !NOT_NAMES.has(body.trim().toLowerCase())) {
-      const name = body.trim().split(/\s+/).map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+    const wordCountBody = cleanBody.split(/\s+/).length;
+    if (!extractedName && wordCountBody <= 2 && /^[\p{L}]/u.test(cleanBody) && !/\d/.test(cleanBody) &&
+        !NOT_NAMES.has(cleanBody.toLowerCase()) && !/^(haha|whats\s+up|sup\b)/i.test(cleanBody)) {
+      extractedName = cleanBody;
+    }
+
+    if (extractedName) {
+      // Normalize: title-case, strip trailing non-letters
+      const parts = extractedName.split(/\s+/).filter(Boolean);
+      const name = parts.map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 
       await admin.from('trip_session_participants')
         .update({ display_name: name })

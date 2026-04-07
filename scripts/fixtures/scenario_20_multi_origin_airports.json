@@ -1,0 +1,73 @@
+{
+  "script_name": "scenario_20_multi_origin_airports",
+  "description": "Group has people from 3 different cities, using different airports in the same city (JFK vs LGA vs EWR), some using points, some paying cash, different flight times and layovers. Tests that agent tracks origins correctly and doesn't confuse airport discussions with trip decisions. Based on Tulum thread's NYC airport chaos.",
+  "phones": {
+    "planner": "+15551400001",
+    "p2_nyc": "+15551400002",
+    "p3_nyc": "+15551400003",
+    "p4_boston": "+15551400004",
+    "p5_sf": "+15551400005",
+    "rally": "+18559310010"
+  },
+  "assert_outbound_contains": [
+    "Reply STOP anytime"
+  ],
+  "assert_outbound_does_not_contain": [
+    "Error"
+  ],
+  "messages": [
+    { "from": "+15551400001", "body": "Hey", "delay_ms": 0, "_note": "1:1 planner registration", "_is1to1": true },
+    { "from": "+15551400001", "body": "Caroline - Tulum", "delay_ms": 1000 },
+    { "from": "+15551400002", "body": "Abbey", "delay_ms": 1000 },
+    { "from": "+15551400003", "body": "Ross", "delay_ms": 1000 },
+    { "from": "+15551400004", "body": "Julia", "delay_ms": 1000 },
+    { "from": "+15551400005", "body": "Harry", "delay_ms": 1000 },
+    { "from": "+15551400001", "body": "that's everyone", "delay_ms": 2000 },
+    { "from": "+15551400001", "body": "Nov 12-16", "delay_ms": 1000 },
+    { "from": "+15551400002", "body": "yes", "delay_ms": 500 },
+    { "from": "+15551400003", "body": "yes", "delay_ms": 500 },
+    { "from": "+15551400004", "body": "yes", "delay_ms": 500 },
+    { "from": "+15551400005", "body": "yes", "delay_ms": 500 },
+    { "from": "+15551400001", "body": "NEXT", "delay_ms": 2000 },
+    { "from": "+15551400001", "body": "NEXT", "delay_ms": 2000 },
+
+    { "from": "+15551400001", "body": "New York", "delay_ms": 1000, "_note": "COLLECTING_ORIGINS: planner from NYC" },
+    { "from": "+15551400002", "body": "New York", "delay_ms": 500, "_note": "COLLECTING_ORIGINS: also NYC" },
+    { "from": "+15551400003", "body": "New York", "delay_ms": 500, "_note": "COLLECTING_ORIGINS: also NYC" },
+    { "from": "+15551400004", "body": "Boston", "delay_ms": 500, "_note": "COLLECTING_ORIGINS: different city" },
+    { "from": "+15551400005", "body": "San Francisco", "delay_ms": 500, "_note": "COLLECTING_ORIGINS: west coast" },
+
+    { "from": "+15551400001", "body": "YES", "delay_ms": 2000 },
+    { "from": "+15551400002", "body": "YES", "delay_ms": 500 },
+    { "from": "+15551400003", "body": "YES", "delay_ms": 500 },
+    { "from": "+15551400004", "body": "YES", "delay_ms": 500 },
+    { "from": "+15551400005", "body": "YES", "delay_ms": 500 },
+
+    { "from": "+15551400001", "body": "Okay so let's go with these flights for New York peeps ($378). If this doesn't work for anyone, please speak up by eod! I want us to get flights booked this week", "delay_ms": 3000, "_note": "PLANNER ANNOUNCES FLIGHTS: price for NYC people with deadline. Not a booking, just a plan" },
+
+    { "from": "+15551400004", "body": "The flight from Boston to tulum has the same layover and then on the way back I would take that same flight to Newark", "delay_ms": 2000, "_note": "AIRPORT DETAILS: Julia describing her Boston routing. Not a booking, not a decision for the group" },
+
+    { "from": "+15551400002", "body": "Me and sof are leaving out of LaGuardia but layover is the same", "delay_ms": 1000, "_note": "DIFFERENT AIRPORT: LGA instead of assumed JFK/EWR. Agent should not confuse airport choice with origin city" },
+    { "from": "+15551400002", "body": "Leaves nyc at 7:45 instead of 7 out of Newark", "delay_ms": 500, "_note": "Airport comparison — peer-to-peer info, not a decision" },
+    { "from": "+15551400003", "body": "Same pp?", "delay_ms": 500, "_note": "Price question (pp = per person) — not a booking" },
+    { "from": "+15551400002", "body": "I think so but idk I used points", "delay_ms": 500, "_note": "POINTS VS CASH: person used points so doesn't know cash price. Agent should not try to parse this as a budget amount" },
+
+    { "from": "+15551400004", "body": "I'm using points and there's an LGA 745am w the same layover that I might take", "delay_ms": 2000, "_note": "POINTS + AIRPORT SHOPPING: still undecided. Not a booking" },
+    { "from": "+15551400004", "body": "Ok I think I'm gonna do this one still", "delay_ms": 1000, "_note": "Leaning toward a choice — still not booked" },
+    { "from": "+15551400004", "body": "Bc I can do points with this one", "delay_ms": 500, "_note": "Reasoning — not a booking" },
+
+    { "from": "+15551400003", "body": "did anyone book tickets?", "delay_ms": 3000, "_note": "ACCOUNTABILITY CHECK: asking if others booked. Not a booking itself" },
+    { "from": "+15551400002", "body": "I booked my Flight", "delay_ms": 1000, "_note": "BOOKING: confirmed" },
+    { "from": "+15551400004", "body": "I booked", "delay_ms": 1000, "_note": "BOOKING: confirmed" },
+    { "from": "+15551400003", "body": "Gonna book tn", "delay_ms": 1000, "_note": "FUTURE INTENT: 'tn' = tonight. NOT yet booked" },
+
+    { "from": "+15551400005", "body": "I think I'm just gonna fly out of Boston", "delay_ms": 2000, "_note": "ORIGIN CHANGE: Harry changing from SF to Boston? Or confused? Agent should not overwrite origin without more clarity" },
+    { "from": "+15551400004", "body": "See you guys at jfk 😊😊", "delay_ms": 1000, "_note": "Social — meeting at airport. Not a booking or decision" },
+    { "from": "+15551400001", "body": "Wait I'm confused", "delay_ms": 500, "_note": "Planner confused — peer-to-peer" },
+    { "from": "+15551400004", "body": "The layover is at jfk", "delay_ms": 500, "_note": "Clarification — not a decision" },
+    { "from": "+15551400004", "body": "Sorry did not clarify", "delay_ms": 500, "_note": "Apology — ignore" },
+    { "from": "+15551400001", "body": "Fabu", "delay_ms": 500, "_note": "Slang ('fabulous') — ignore" },
+
+    { "from": "+15551400001", "body": "STATUS", "delay_ms": 2000, "_note": "Status should show origins correctly and who has booked" }
+  ]
+}
