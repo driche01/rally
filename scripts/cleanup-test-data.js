@@ -41,7 +41,6 @@ async function cleanup() {
   await admin.from('trip_sessions').delete().not('parent_session_id', 'is', null);
   await admin.from('trip_sessions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
 
-  await admin.from('pending_planners').delete().neq('phone', '');
   await admin.from('users').delete().like('phone', '+1555%');
 
   console.log('Done — all SMS test data cleaned.');

@@ -160,11 +160,6 @@ async function cleanupPhones(phonePrefix) {
     await admin.from('thread_messages').delete().eq('sender_phone', phone);
   }
 
-  // Delete pending_planners
-  for (const phone of userPhones) {
-    await admin.from('pending_planners').delete().eq('phone', phone);
-  }
-
   // Delete users
   if (userIds.length > 0) {
     await admin.from('users').delete().in('id', userIds);
