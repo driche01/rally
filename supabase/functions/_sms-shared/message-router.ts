@@ -755,8 +755,10 @@ async function handlePhaseMessage(
   }
 
   // ─── P3-4/P3-5: Destination mentions during non-INTRO phases ───────────
-  // Recognize new destination candidates at any point in the planning process
-  if (phase !== 'INTRO') {
+  // Recognize new destination candidates at any point in the planning process.
+  // (INTRO is already handled and returned above; control reaches here only
+  // for non-INTRO phases.)
+  {
     const bodyLower = body.toLowerCase();
     for (const dest of KNOWN_DESTINATIONS) {
       const destRegex = new RegExp(`\\b${dest.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');

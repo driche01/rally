@@ -108,7 +108,7 @@ export async function processInboundMessage(
     // Look for an active session where this sender is already a participant
     const { data: participantRows } = await admin
       .from('trip_session_participants')
-      .select('id, trip_session_id, phone, display_name, status, committed, flight_status, is_planner, user_id, joined_at, updated_at')
+      .select('*')
       .eq('phone', senderPhone)
       .eq('status', 'active')
       .order('joined_at', { ascending: false });
@@ -165,7 +165,7 @@ export async function processInboundMessage(
         // Check if user is already a participant (possibly opted_out)
         const { data: existingP } = await admin
           .from('trip_session_participants')
-          .select('id, trip_session_id, phone, display_name, status, committed, flight_status, is_planner, user_id, joined_at, updated_at')
+          .select('*')
           .eq('trip_session_id', session.id)
           .eq('user_id', user.id)
           .maybeSingle();

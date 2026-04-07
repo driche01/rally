@@ -97,6 +97,13 @@ export interface TripSessionParticipant {
   committed: boolean;
   flight_status: string;
   is_planner: boolean;
+  budget_raw: string | null;
+  budget_normalized: number | null;
+  phase_confirmation: string | null;
+  origin_city: string | null;
+  origin_airport: string | null;
+  flights_link_response: string | null;
+  [key: string]: unknown;
 }
 
 // ─── Session operations ──────────────────────────────────────────────────────
