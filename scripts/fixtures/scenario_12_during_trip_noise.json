@@ -10,7 +10,8 @@
     "rally": "+18559310010"
   },
   "assert_outbound_contains": [
-    "Reply STOP anytime"
+    "Reply STOP anytime",
+    "noted the correction"
   ],
   "assert_outbound_does_not_contain": [
     "Where are you thinking",
@@ -63,6 +64,6 @@
 
     { "from": "+15551320005", "body": "Ambika - hey! David said there might be space. Is it ok if I join?", "delay_ms": 3000, "_note": "LAST-MINUTE ADDITION: someone not in original group. Agent should onboard" },
 
-    { "from": "+15551320004", "body": "*four including me", "delay_ms": 2000, "_note": "ASTERISK CORRECTION: correcting a previous message. Agent should not treat as new statement" }
+    { "from": "+15551320004", "body": "*four including me", "delay_ms": 2000, "_note": "ASTERISK CORRECTION: correcting a previous message. Agent should acknowledge ('noted the correction...') but not treat as a new trip decision" }
   ]
 }

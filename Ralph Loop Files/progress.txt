@@ -1,6 +1,19 @@
 # Rally SMS Agent — Ralph Loop Progress
 
-## Status: ALL 7 SCENARIOS PASSING
+## Status: ALL 15 SCENARIOS PASSING + POST-PRD HARDENING UNDERWAY
+
+## Blockers (external, cannot self-resolve)
+- **iOS group MMS end-to-end test** blocked on Twilio toll-free verification.
+  All testing to date is simulator-based against the live edge function.
+  Once outbound SMS opens, run this manual script:
+  1. Planner adds Rally's Twilio number to a fresh iMessage group with 3+
+     real phones.
+  2. Planner texts `Jake — Tulum, Nov 8-12, $1250pp`.
+  3. Each participant sends their name + YES + origin + YES + BOOKED.
+  4. Verify real SMS delivery of: intro message, pre-fill confirmation,
+     every phase-transition prompt, iMessage reactions silently ignored,
+     PLANNER transfer works on a real device, welcome-back recap fires
+     after a 7+ day pause.
 
 ## Completed Tasks:
 
@@ -70,3 +83,39 @@
 - **message-router.ts**: Graceful opt-out detection, compliment/off-topic/emotional/social filters, during-trip logistics silence, booking phrase detection in AWAITING_FLIGHTS, ambiguous COMMIT_POLL handling, partial availability, weekend-of-M/D dates, multi-date range parsing, budget extraction, destination tracking at any phase, asterisk corrections
 - **inbound-processor.ts**: Fixed opted-out participant re-add bug
 - **KNOWN_DESTINATIONS**: Added lake shasta, nassau, dominican republic, santo domingo
+
+## Post-PRD Hardening (beyond the original Ralph Loop)
+- [x] Haiku classifier replacing regex silence filters (`message-classifier.ts`)
+- [x] Dedicated `phase_confirmation` column; stop reusing `budget_raw` for sub-state flags (migration 030)
+- [x] `pending_planners` table dropped as dead code (migration 031)
+- [x] Scenario 4 & 6 bulk-run flakes fixed (timeout bumped to 300s)
+- [x] `looksLikeDateContent` tightened (month AND day, OR holiday phrase)
+- [x] `deno check` in deploy pipeline (`scripts/deploy-sms.sh`)
+- [x] Pre-existing TS errors in `polls/[pollId]/edit.tsx` swept
+- [x] Asterisk-correction acknowledgment (PRD P5-5 completion): no longer
+  silently ignored — bot now responds with "Got it — noted the correction
+  to ‹prev snippet›…" when a recent prior message from the same sender
+  exists within 2 min. Bare "*…" with no referent still silenced.
+- [x] Welcome-back recap (PRD P3-7 completion): when a participant texts
+  after >7 days of session silence, Rally prepends a short recap
+  (destination, dates, budget, current phase) to whatever response it
+  would send. Rate-limited via `trip_sessions.welcome_back_sent_at` so it
+  only fires once per gap. Migration 033 adds the column.
+- [x] Sentry + PostHog telemetry for Deno edge functions. Lightweight
+  `telemetry.ts` uses fetch directly to Sentry's envelope API and
+  PostHog's capture endpoint; no-ops when `SENTRY_DSN` or `POSTHOG_KEY`
+  env secrets are unset. Call sites: webhook error handler, session
+  creation, STOP, graceful opt-out, BOOKED. `supabase/functions/.env.example`
+  documents all required secrets.
+
+## Unresolved
+- [ ] Real iOS MMS E2E (blocked — see top of file)
+- [ ] 50+ person group stress test (deferred per owner direction)
+
+## Next-session pickup
+- Set production secrets when ready:
+  `npx supabase secrets set SENTRY_DSN=... POSTHOG_KEY=... --project-ref qxpbnixvjtwckuedlrfj`
+- Run migration 033 against production:
+  `npx supabase db push --project-ref qxpbnixvjtwckuedlrfj`
+- Deploy updated edge function:
+  `./scripts/deploy-sms.sh`
