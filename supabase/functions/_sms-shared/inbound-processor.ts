@@ -19,6 +19,7 @@ import {
 } from './trip-session.ts';
 import { routeMessage } from './message-router.ts';
 import type { RoutedMessage } from './message-router.ts';
+import { track } from './telemetry.ts';
 
 export interface ParsedTwilioMessage {
   MessageSid: string;
@@ -103,6 +104,8 @@ export async function processInboundMessage(
   let session = null;
   let participant = null;
   let introResponse: string | null = null;
+  // Captured before touchSession() overwrites it — drives the welcome-back recap.
+  let priorLastMessageAt: string | null = null;
 
   if (!is1to1) {
     // Look for an active session where this sender is already a participant
@@ -132,6 +135,7 @@ export async function processInboundMessage(
     if (foundSession) {
       session = foundSession;
       participant = foundParticipant;
+      priorLastMessageAt = (session as { last_message_at?: string | null }).last_message_at ?? null;
       await touchSession(admin, session.id);
     } else {
       // Check for a recent session where at least one of the message's
@@ -288,6 +292,14 @@ export async function processInboundMessage(
           `Hey! I'm Rally \ud83d\udc4b I help groups plan trips fast. ` +
           `Everyone drop your name and a destination you'd wanna hit \u2014 ` +
           `format it like "Name \u2014 destination". Reply STOP anytime to opt out.`;
+
+        // Telemetry: new SMS session created
+        track('sms_session_created', {
+          distinct_id: session.id,
+          sessionId: session.id,
+          plannerUserId: user.id,
+          threadName: msg.FriendlyName ?? null,
+        }).catch(() => {});
       }
     }
   }
@@ -322,6 +334,32 @@ export async function processInboundMessage(
     response = await routeMessage(admin, routed);
   }
 
+  // ─── Welcome-back recap (P3-7) ─────────────────────────────────────────
+  // If the session was idle >7 days and we haven't already sent a recap
+  // for this gap, prepend a short recap to whatever response we're sending.
+  // Stays silent if the response was silent (we don't spam after long gaps).
+  if (response && session && priorLastMessageAt && !is1to1) {
+    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+    const idleMs = Date.now() - new Date(priorLastMessageAt).getTime();
+    const dormantPhases = ['COMPLETE', 'CANCELLED', 'ABANDONED'];
+    const recapEligible =
+      idleMs >= SEVEN_DAYS_MS &&
+      !dormantPhases.includes(session.phase) &&
+      session.status !== 'RE_ENGAGEMENT_PENDING';
+    if (recapEligible) {
+      const wbSentAt = (session as { welcome_back_sent_at?: string | null }).welcome_back_sent_at;
+      // Only fire once per gap: skip if we already sent a recap AFTER the gap started
+      const alreadySent = wbSentAt && new Date(wbSentAt).getTime() > new Date(priorLastMessageAt).getTime();
+      if (!alreadySent) {
+        const recap = buildWelcomeBackRecap(session);
+        response = `${recap}\n\n${response}`;
+        await admin.from('trip_sessions')
+          .update({ welcome_back_sent_at: new Date().toISOString() })
+          .eq('id', session.id);
+      }
+    }
+  }
+
   // ─── Store outbound message ─────────────────────────────────────────────
   if (response) {
     await admin.from('thread_messages').insert({
@@ -351,4 +389,33 @@ export async function processInboundMessage(
     sessionId: session?.id ?? null,
     phase: currentPhase,
   };
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Build a one-line recap for the "welcome back" prefix shown when a
+ * participant messages after >7 days of silence.
+ */
+function buildWelcomeBackRecap(session: {
+  destination: string | null;
+  dates: { start: string; end: string } | null;
+  budget_median: number | null;
+  phase: string;
+}): string {
+  const parts: string[] = [];
+  if (session.destination) parts.push(session.destination);
+  if (session.dates?.start && session.dates?.end) {
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const start = new Date(session.dates.start + 'T12:00:00');
+    const end = new Date(session.dates.end + 'T12:00:00');
+    parts.push(`${months[start.getMonth()]} ${start.getDate()}\u2013${end.getDate()}`);
+  }
+  if (session.budget_median) parts.push(`~$${session.budget_median}/person`);
+  const ctx = parts.join(', ');
+  const phase = session.phase.replace(/_/g, ' ').toLowerCase();
+  if (ctx) {
+    return `Welcome back! Last we were at: ${ctx} (phase: ${phase}). Picking up where you left off \u2014`;
+  }
+  return `Welcome back! Picking up where you left off (phase: ${phase}) \u2014`;
 }

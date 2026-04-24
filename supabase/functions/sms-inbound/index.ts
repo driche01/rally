@@ -13,6 +13,7 @@
 import { getAdmin } from '../_sms-shared/supabase.ts';
 import { validateTwilioSignature, parseTwilioBody } from '../_sms-shared/twilio.ts';
 import { processInboundMessage } from '../_sms-shared/inbound-processor.ts';
+import { captureError } from '../_sms-shared/telemetry.ts';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -75,6 +76,8 @@ Deno.serve(async (req: Request) => {
     );
   } catch (err) {
     console.error('[sms-inbound] Error:', err);
+    // Fire-and-forget Sentry capture (no-op if SENTRY_DSN unset)
+    captureError(err, { component: 'sms-inbound' }).catch(() => {});
     const errMsg = err instanceof Error ? err.message : String(err);
     return new Response(
       `<?xml version="1.0" encoding="UTF-8"?><Response><Message>Error: ${escapeXml(errMsg.slice(0, 200))}</Message></Response>`,

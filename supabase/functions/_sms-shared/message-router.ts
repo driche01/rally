@@ -26,6 +26,7 @@ import {
 import { handleReEngagementYes } from './post-trip-reengager.ts';
 import { advancePhase, checkAutoAdvance } from './phase-flow.ts';
 import { classifyMessage } from './message-classifier.ts';
+import { track } from './telemetry.ts';
 
 // ─── Keyword detection ───────────────────────────────────────────────────────
 
@@ -296,6 +297,13 @@ async function handleStop(
 
   await admin.from('users').update({ opted_out: true }).eq('id', user.id);
 
+  track('sms_opt_out', {
+    distinct_id: session.id,
+    sessionId: session.id,
+    userId: user.id,
+    via: 'stop_keyword',
+  }).catch(() => {});
+
   return "Got it, I won't message you anymore. The group can still use me.";
 }
 
@@ -392,6 +400,13 @@ async function handleBooked(
     .eq('trip_session_id', session.id)
     .eq('user_id', user.id);
 
+  track('sms_booking_confirmed', {
+    distinct_id: session.id,
+    sessionId: session.id,
+    userId: user.id,
+    kind: 'flight',
+  }).catch(() => {});
+
   const name = user.display_name ?? 'Someone';
   return `${name}'s flights are locked in \ud83d\udd12 who's next?`;
 }
@@ -438,6 +453,32 @@ async function handlePhaseMessage(
       participants: participantsForClassify,
       body,
     });
+    // Asterisk corrections: acknowledge so the sender knows we saw the fix,
+    // even though we don't diff-apply it to prior state (PRD P5-5).
+    // Only ack if there's a recent prior message from the same sender within
+    // 2 minutes — otherwise it's a bare "*..." with no referent.
+    if (
+      classification.category === 'peer_chat' &&
+      classification.reason === 'asterisk_correction'
+    ) {
+      const twoMinAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+      const { data: prior } = await admin
+        .from('thread_messages')
+        .select('body, created_at')
+        .eq('trip_session_id', session.id)
+        .eq('sender_phone', fromUser.phone)
+        .eq('direction', 'inbound')
+        .gte('created_at', twoMinAgo)
+        .order('created_at', { ascending: false })
+        .limit(2); // the current message is already stored, so take the 2nd
+      const priorBody = prior?.[1]?.body ?? null;
+      if (priorBody) {
+        const snippet = priorBody.length > 30 ? priorBody.slice(0, 30).trim() + '…' : priorBody.trim();
+        return `Got it — noted the correction to "${snippet}"`;
+      }
+      return null; // bare "*..." with no prior context
+    }
+
     if (
       classification.category === 'reaction' ||
       classification.category === 'noise' ||
@@ -724,6 +765,13 @@ async function handlePhaseMessage(
         .update({ status: 'opted_out' })
         .eq('trip_session_id', session.id)
         .eq('user_id', fromUser.id);
+
+      track('sms_opt_out', {
+        distinct_id: session.id,
+        sessionId: session.id,
+        userId: fromUser.id,
+        via: 'graceful_phrase',
+      }).catch(() => {});
 
       const name = fromUser.display_name ?? 'friend';
       return `${name} — got it, we'll miss you!`;
