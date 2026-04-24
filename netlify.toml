@@ -2,6 +2,13 @@
   command = "npx expo export --platform web"
   publish = "dist"
 
+# EXPO_PUBLIC_* vars are intentionally public — they're embedded in client-side
+# JS by design. EXPO_PUBLIC_SUPABASE_URL is the project URL (not a secret; the
+# anon key is required to actually query it). EXPO_PUBLIC_POSTHOG_HOST is the
+# standard PostHog cloud endpoint. Tell Netlify's scanner to skip them.
+[build.environment]
+  SECRETS_SCAN_OMIT_KEYS = "EXPO_PUBLIC_POSTHOG_HOST,EXPO_PUBLIC_SUPABASE_URL"
+
 # SPA fallback — all routes serve index.html
 [[redirects]]
   from = "/*"
