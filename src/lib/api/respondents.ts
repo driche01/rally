@@ -169,17 +169,30 @@ export async function getOrCreateRespondent(
     if (existing) return adoptExisting(existing);
   }
 
-  // 4. Genuinely new respondent
+  // 4. Genuinely new respondent — generate the ID client-side so we can skip
+  // INSERT...RETURNING SELECT. The respondents SELECT RLS only allows planners
+  // to read rows, so anon users would get PGRST116 on the RETURNING clause.
+  const newId: string = crypto.randomUUID();
   const newToken = generateToken();
   await setTripSessionToken(tripId, newToken);
 
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from('respondents')
-    .insert({ trip_id: tripId, name, session_token: newToken, ...contactPatch })
-    .select()
-    .single();
+    .insert({ id: newId, trip_id: tripId, name, session_token: newToken, ...contactPatch });
   if (error) throw error;
-  return data;
+
+  return {
+    id: newId,
+    trip_id: tripId,
+    name,
+    session_token: newToken,
+    email: trimmedEmail ?? null,
+    phone: trimmedPhone ?? null,
+    is_planner: false,
+    rsvp: null,
+    preferences: null,
+    created_at: new Date().toISOString(),
+  };
 }
 
 export async function getRespondentForTrip(): Promise<{
