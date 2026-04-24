@@ -14,6 +14,8 @@ import {
   type NudgeScenario,
 } from '@/lib/api/agentCoach';
 
+export type { NudgeScenario };
+
 // ─── Query keys ────────────────────────────────────────────────────────────────
 
 export const agentCoachKeys = {
