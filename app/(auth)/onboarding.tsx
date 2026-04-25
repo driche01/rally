@@ -93,7 +93,7 @@ export default function OnboardingScreen() {
             letterSpacing: -1,
           }}
         >
-          Get the{'\n'}crew{'\n'}sorted.
+          Get your{'\n'}group{'\n'}together.
         </Text>
       </Animated.View>
 
@@ -106,7 +106,7 @@ export default function OnboardingScreen() {
             lineHeight: 26,
           }}
         >
-          Plan ripper trips with your mob —{'\n'}
+          Plan great trips with your group —{'\n'}
           destination, dates, and budget{'\n'}
           locked in with one link.
         </Text>

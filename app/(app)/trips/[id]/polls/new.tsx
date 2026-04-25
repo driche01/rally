@@ -407,7 +407,7 @@ export default function NewPollScreen() {
     });
 
     if (mutations.length === 0) {
-      Alert.alert('Nothing to save', 'Fill in at least one section, legend.');
+      Alert.alert('Nothing to save', 'Fill in at least one section to save.');
       return;
     }
 
@@ -526,7 +526,7 @@ export default function NewPollScreen() {
                 <Text className="text-2xl font-bold text-neutral-800">Almost rallied!</Text>
                 <Text className="text-sm font-semibold text-coral-500">All polls are live or decided</Text>
                 <Text className="text-sm text-center text-neutral-400 px-6" style={{ lineHeight: 20 }}>
-                  The crew is voting — once results are in, call it and lock in the trip!
+                  Your group is voting — once results are in, lock in the trip!
                 </Text>
               </View>
             </View>
@@ -546,7 +546,7 @@ export default function NewPollScreen() {
                 <Text className="text-2xl font-bold text-neutral-800">All polls drafted</Text>
                 <Text className="text-sm font-semibold text-neutral-500">Ready to go live</Text>
                 <Text className="text-sm text-center text-neutral-400 px-6" style={{ lineHeight: 20 }}>
-                  Head back and go live to start getting the crew's votes.
+                  Head back and go live to start getting your group's votes.
                 </Text>
               </View>
             </View>

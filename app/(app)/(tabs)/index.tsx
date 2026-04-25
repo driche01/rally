@@ -208,9 +208,9 @@ export default function HomeScreen() {
           ListEmptyComponent={
             !isLoading ? (
               <View className="items-center py-20 gap-3">
-                <Text className="text-xl font-semibold text-neutral-800">No rallies yet, mate</Text>
+                <Text className="text-xl font-semibold text-neutral-800">No trips yet</Text>
                 <Text className="text-base text-neutral-400 text-center">
-                  Tap + below to kick off your first ripper trip.
+                  Tap + below to start your first trip.
                 </Text>
               </View>
             ) : null
