@@ -444,6 +444,47 @@ export interface AiBlockAlternative {
   reason: string; // one-sentence explanation of why this suits the group
 }
 
+// ─── Join links (1:1 SMS pivot, Phase 1) ────────────────────────────────────
+
+export interface JoinLink {
+  id: string;
+  trip_session_id: string;
+  code: string;
+  created_by_user_id: string | null;
+  expires_at: string;
+  max_uses: number;
+  use_count: number;
+  revoked_at: string | null;
+  created_at: string;
+}
+
+export type JoinLinkSubmissionStatus = 'pending' | 'confirmed' | 'declined' | 'expired';
+
+export interface JoinLinkSubmission {
+  id: string;
+  join_link_id: string;
+  phone: string;
+  display_name: string;
+  email: string | null;
+  status: JoinLinkSubmissionStatus;
+  confirmation_sent_at: string | null;
+  confirmed_at: string | null;
+  declined_at: string | null;
+  expires_at: string;
+  ip_hash: string | null;
+  created_at: string;
+}
+
+export interface JoinLinkPreview {
+  ok: boolean;
+  reason?: string;
+  planner_name: string | null;
+  destination: string | null;
+  dates: { start?: string; end?: string } | null;
+  joined_names: string[];
+  member_count: number;
+}
+
 // ─── Budget tier constants ─────────────────────────────────────────────────────
 
 export const BUDGET_TIERS = [

@@ -109,3 +109,67 @@ export function tripRecapFooter(opts: {
 export function isAppKeyword(body: string): boolean {
   return /^\s*(app|get\s+(the\s+)?app|download(\s+(rally|app))?|rally\s+app)\s*\??\s*$/i.test(body);
 }
+
+// ─── 1:1 pivot templates (Phase 1) ──────────────────────────────────────────
+
+function formatDateRange(dates: { start?: string; end?: string } | null | undefined): string {
+  if (!dates?.start || !dates?.end) return '';
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const s = new Date(dates.start + 'T12:00:00');
+  const e = new Date(dates.end + 'T12:00:00');
+  if (isNaN(s.getTime()) || isNaN(e.getTime())) return '';
+  return `${months[s.getMonth()]} ${s.getDate()}\u2013${e.getDate()}`;
+}
+
+/**
+ * The SMS sent to a phone after they fill out the /join/[code] form.
+ * The recipient must reply YES (or NO/STOP) to be promoted from a
+ * pending submission to an active trip session participant.
+ *
+ * Trust framing: lead with planner name + relationship cue ("added you")
+ * so the recipient understands this is a friend invite, not a cold blast.
+ */
+export function joinConfirmationSms(opts: {
+  recipientName: string;
+  plannerName: string | null;
+  destination?: string | null;
+  dates?: { start?: string; end?: string } | null;
+}): string {
+  const planner = opts.plannerName ?? 'A friend';
+  const dest = opts.destination ? ` to ${opts.destination}` : '';
+  const range = formatDateRange(opts.dates);
+  const datesPart = range ? ` (${range})` : '';
+  return (
+    `Hey ${opts.recipientName} \u2014 ${planner} added you to a trip${dest}${datesPart}. ` +
+    `I'm Rally, I help plan it over text. ` +
+    `Reply YES to join, or STOP to opt out.`
+  );
+}
+
+/**
+ * Sent immediately after a participant replies YES to join confirmation.
+ * Marks the start of their 1:1 thread with Rally for this trip.
+ */
+export function joinKickoffSms(opts: {
+  plannerName: string | null;
+  destination?: string | null;
+}): string {
+  const planner = opts.plannerName ?? 'Your friend';
+  const dest = opts.destination ? ` to ${opts.destination}` : '';
+  return (
+    `You're in. ${planner} is planning a trip${dest}. ` +
+    `I'll text you here as decisions come up \u2014 reply HELP anytime to see what I can do.`
+  );
+}
+
+/**
+ * Sent to the planner after they create a join link. Hand-off copy for
+ * the planner to forward to friends. Phase 1 doesn't auto-send this yet;
+ * it's exercised from the simulator and (later) the dashboard.
+ */
+export function joinLinkPlannerShare(opts: { url: string }): string {
+  return (
+    `Share this link with your friends: ${opts.url}\n\n` +
+    `They fill it out, reply YES to confirm, and I'll add them to the trip.`
+  );
+}

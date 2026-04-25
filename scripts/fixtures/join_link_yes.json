@@ -1,0 +1,24 @@
+{
+  "script_name": "join_link_yes",
+  "_purpose": "Verifies the 1:1 join-link confirmation handshake (Phase 1 of the 1:1 SMS pivot). Pre-requisite: a join_link_submission row in 'pending' status for +15551310099 must already exist (use scripts/seed-join-submission.js). Sends YES from that phone 1:1 to Rally and asserts the participant is promoted to active.",
+  "phones": {
+    "joiner": "+15551310099",
+    "rally": "+16624283059"
+  },
+  "_pre_run": "node scripts/seed-join-submission.js --phone +15551310099 --name Sarah",
+  "_post_run_assertions": [
+    "join_link_submissions.status = 'confirmed' for the joiner phone",
+    "trip_session_participants has joiner with is_attending = true",
+    "join_links.use_count incremented by 1",
+    "outbound thread_messages includes the joinKickoffSms body for thread_id 1to1_+15551310099"
+  ],
+  "messages": [
+    {
+      "from": "+15551310099",
+      "body": "YES",
+      "delay_ms": 0,
+      "_is1to1": true,
+      "_note": "1:1 YES from a phone with a live pending join_link_submission — should be promoted, not routed to existing session logic"
+    }
+  ]
+}

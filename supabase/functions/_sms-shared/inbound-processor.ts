@@ -25,7 +25,10 @@ import {
   plannerWelcomeOneToOne,
   appKeywordReply,
   isAppKeyword,
+  joinKickoffSms,
 } from './templates.ts';
+import { matchJoinConfirmIntent } from './join-intent.ts';
+import { sendDm } from './dm-sender.ts';
 
 // Read lazily so tests / alternate deployments can set this dynamically.
 function getAppDownloadUrl(): string | null {
@@ -103,6 +106,88 @@ export async function processInboundMessage(
     });
     if (hasClaim === true) {
       return { response: null, sessionId: null, phase: null };
+    }
+  }
+
+  // ─── Join-link confirmation short-circuit (Phase 1 of 1:1 pivot) ───────
+  // If the sender has a live pending join_link_submission and the body is a
+  // YES/NO intent, run confirm_join_submission and short-circuit. Anything
+  // else falls through to existing routing — including STOP, which is
+  // handled by the keyword router so opt-out semantics stay consistent.
+  // This intentionally runs before the legacy session-lookup so a brand-new
+  // participant's first YES doesn't get treated as a new session intro.
+  if (is1to1) {
+    const intent = matchJoinConfirmIntent(trimmedBody);
+    if (intent) {
+      const { data: confirmResult } = await admin.rpc('confirm_join_submission', {
+        p_phone: senderPhone,
+        p_decision: intent,
+      });
+      const cr = confirmResult as
+        | { ok: true; reason: 'confirmed'; trip_session_id: string; user_id: string;
+            display_name: string; planner_name: string | null; destination: string | null }
+        | { ok: true; reason: 'declined' }
+        | { ok: false; reason: string }
+        | null;
+
+      if (cr?.ok && cr.reason === 'confirmed') {
+        const oneToOneThreadId = `1to1_${senderPhone}`;
+        // Store the inbound YES so the participant's thread has a complete log.
+        await admin.from('thread_messages').insert({
+          thread_id: oneToOneThreadId,
+          trip_session_id: cr.trip_session_id,
+          direction: 'inbound',
+          sender_phone: senderPhone,
+          sender_role: 'participant',
+          body: trimmedBody,
+          message_sid: msg.MessageSid,
+        });
+
+        const kickoffBody = joinKickoffSms({
+          plannerName: cr.planner_name,
+          destination: cr.destination,
+        });
+        await sendDm(admin, senderPhone, kickoffBody, {
+          tripSessionId: cr.trip_session_id,
+          idempotencyKey: `join_kickoff_${cr.trip_session_id}_${senderPhone}`,
+        });
+
+        track('join_link_confirmed', {
+          distinct_id: cr.trip_session_id,
+          tripSessionId: cr.trip_session_id,
+          userId: cr.user_id,
+        }).catch(() => {});
+
+        return { response: null, sessionId: cr.trip_session_id, phase: 'INTRO' };
+      }
+
+      if (cr?.ok && cr.reason === 'declined') {
+        const oneToOneThreadId = `1to1_${senderPhone}`;
+        await admin.from('thread_messages').insert({
+          thread_id: oneToOneThreadId,
+          trip_session_id: null,
+          direction: 'inbound',
+          sender_phone: senderPhone,
+          sender_role: 'participant',
+          body: trimmedBody,
+          message_sid: msg.MessageSid,
+        });
+        const declineReply = "No problem — you won't hear from me about this trip.";
+        await admin.from('thread_messages').insert({
+          thread_id: oneToOneThreadId,
+          trip_session_id: null,
+          direction: 'outbound',
+          sender_phone: null,
+          sender_role: 'rally',
+          body: declineReply,
+          message_sid: null,
+        });
+        track('join_link_declined', {
+          distinct_id: senderPhone,
+        }).catch(() => {});
+        return { response: declineReply, sessionId: null, phase: null };
+      }
+      // No pending submission, expired, etc. — fall through to existing routing.
     }
   }
 
