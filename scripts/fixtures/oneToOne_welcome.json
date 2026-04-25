@@ -1,0 +1,21 @@
+{
+  "script_name": "oneToOne_welcome",
+  "_purpose": "Verifies the planner 1:1 welcome (added 2026-04-24). When a phone brand-new to Rally messages the Rally number 1:1, Rally replies with a welcome + install CTA. Idempotent — second 1:1 message must NOT re-send the welcome.",
+  "phones": {
+    "planner": "+15551310001",
+    "rally": "+18559310010"
+  },
+  "assert_outbound_contains": [
+    "I help groups plan trips over text",
+    "add me to a group chat",
+    "Get the app:",
+    "Reply STOP anytime to opt out"
+  ],
+  "assert_outbound_does_not_contain": [
+    "wanna hit"
+  ],
+  "messages": [
+    { "from": "+15551310001", "body": "Hey", "delay_ms": 0, "_note": "1:1 first message from a fresh planner — welcome + CTA expected" },
+    { "from": "+15551310001", "body": "ok cool", "delay_ms": 1000, "_note": "1:1 follow-up — welcome should NOT repeat (silent or contextual response only)" }
+  ]
+}
