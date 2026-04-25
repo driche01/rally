@@ -256,7 +256,7 @@ export function DatesSection({
         </View>
 
         {/* Custom duration: number + unit picker */}
-        <View className="flex-row items-center gap-2">
+        <View className="flex-row items-center flex-wrap gap-2">
           <TextInput
             value={customDurationInput}
             onChangeText={(t) => onCustomDurationInputChange(t.replace(/[^0-9]/g, ''))}
@@ -265,36 +265,48 @@ export function DatesSection({
             keyboardType="number-pad"
             placeholder="e.g. 5"
             maxLength={3}
-            className="w-20 min-h-[44px] rounded-2xl border border-line bg-cream-warm px-4 py-2 text-sm text-ink text-center"
-            placeholderTextColor="#A8A8A8"
+            className="w-20 min-h-[44px] rounded-full border border-line bg-cream-warm px-4 py-2 text-sm text-ink text-center"
+            placeholderTextColor="#9DA8A0"
           />
+          {/* Unit chips — same md size as the preset duration pills above so
+              they line up visually as one chip family. */}
           {DURATION_UNITS.map((u) => {
             const sel = customDurationUnit === u;
             return (
-              <View key={u} style={{ flex: 1 }}>
-                <Pill
-                  onPress={() => onCustomDurationUnitChange(u)}
-                  selected={sel}
-                  size="sm"
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected: sel }}
-                  accessibilityLabel={u}
-                >
-                  {u}
-                </Pill>
-              </View>
+              <Pill
+                key={u}
+                onPress={() => onCustomDurationUnitChange(u)}
+                selected={sel}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: sel }}
+                accessibilityLabel={u}
+              >
+                {u}
+              </Pill>
             );
           })}
-          {/* FUTURE: icon-only Button variant */}
+          {/* Add button — branded green pill with icon + label so the
+              affordance is unmistakable. Disabled = lowered opacity (still
+              reads as a button), not dimmed-gray. */}
+          {/* FUTURE: icon-only Button variant + integrate this into <Button> */}
           <Pressable
             onPress={onCustomDurationAdd}
             disabled={!customDurationInput.trim()}
-            className="h-11 w-11 items-center justify-center rounded-full"
-            style={{ backgroundColor: customDurationInput.trim() ? accentColor : '#E7DDCF' }}
+            style={({ pressed }) => ({
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 4,
+              paddingHorizontal: 14,
+              paddingVertical: 8,
+              borderRadius: 999,
+              backgroundColor: '#0F3F2E',
+              opacity: !customDurationInput.trim() ? 0.4 : pressed ? 0.85 : 1,
+            })}
             accessibilityRole="button"
             accessibilityLabel="Add custom duration"
           >
-            <Ionicons name="add" size={22} color={customDurationInput.trim() ? '#F4ECDF' : '#A8A8A8'} />
+            <Ionicons name="add" size={16} color="#FFFFFF" />
+            <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '600' }}>Add</Text>
           </Pressable>
         </View>
       </View>
