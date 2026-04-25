@@ -10,21 +10,34 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#FAFAFA"
+      "backgroundColor": "#FBF7EF"
     },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "io.rallyapp.app",
+      "associatedDomains": ["applinks:rallysurveys.netlify.app"],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#D85A30",
+        "backgroundColor": "#0F3F2E",
         "foregroundImage": "./assets/android-icon-foreground.png"
       },
-      "package": "io.rallyapp.app"
+      "package": "io.rallyapp.app",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            { "scheme": "https", "host": "rallysurveys.netlify.app", "pathPattern": "/t/.*" },
+            { "scheme": "https", "host": "rallysurveys.netlify.app", "pathPattern": "/respond/.*" },
+            { "scheme": "https", "host": "rallysurveys.netlify.app", "pathPattern": "/download" }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -45,7 +58,7 @@
       [
         "expo-notifications",
         {
-          "color": "#D85A30"
+          "color": "#0F3F2E"
         }
       ],
       [
