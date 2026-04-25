@@ -39,12 +39,14 @@ type MarkedDates = Record<string, {
 
 function buildMarkedDates(start: string | null, end: string | null): MarkedDates {
   if (!start) return {};
-  const coral = '#D85A30';
-  const coralLight = '#FDEBD6';
+  // Range endpoints render in brand green; in-between days use green-soft so
+  // the selected range reads as a continuous green band on the calendar.
+  const accentDark = '#0F3F2E';   // T.green
+  const accentLight = '#DFE8D2';  // T.greenSoft
 
   if (!end || start === end) {
     return {
-      [start]: { startingDay: true, endingDay: true, color: coral, textColor: '#fff' },
+      [start]: { startingDay: true, endingDay: true, color: accentDark, textColor: '#fff' },
     };
   }
 
@@ -56,11 +58,11 @@ function buildMarkedDates(start: string | null, end: string | null): MarkedDates
   for (let ms = startMs; ms <= endMs; ms += dayMs) {
     const d = new Date(ms).toISOString().slice(0, 10);
     if (d === start) {
-      marks[d] = { startingDay: true, color: coral, textColor: '#fff' };
+      marks[d] = { startingDay: true, color: accentDark, textColor: '#fff' };
     } else if (d === end) {
-      marks[d] = { endingDay: true, color: coral, textColor: '#fff' };
+      marks[d] = { endingDay: true, color: accentDark, textColor: '#fff' };
     } else {
-      marks[d] = { color: coralLight, textColor: '#262626' };
+      marks[d] = { color: accentLight, textColor: '#163026' };
     }
   }
   return marks;
@@ -182,15 +184,15 @@ export function DateRangePicker({
           onDayPress={handleDayPress}
           minDate={allowPastDates ? undefined : today}
           theme={{
-            calendarBackground: '#fff',
-            textSectionTitleColor: '#737373',
-            selectedDayBackgroundColor: '#D85A30',
-            selectedDayTextColor: '#fff',
-            todayTextColor: '#D85A30',
-            dayTextColor: '#262626',
-            textDisabledColor: '#d4d4d4',
-            arrowColor: '#D85A30',
-            monthTextColor: '#262626',
+            calendarBackground: '#FFFCF6',          // T.card
+            textSectionTitleColor: '#5F685F',       // T.muted
+            selectedDayBackgroundColor: '#0F3F2E',  // T.green
+            selectedDayTextColor: '#FFFFFF',
+            todayTextColor: '#0F3F2E',              // T.green
+            dayTextColor: '#163026',                // T.ink
+            textDisabledColor: '#9DA8A0',           // muted (legible disabled)
+            arrowColor: '#0F3F2E',                  // T.green
+            monthTextColor: '#163026',              // T.ink
             textDayFontWeight: '500',
             textMonthFontWeight: '600',
             textDayHeaderFontWeight: '500',
@@ -214,8 +216,10 @@ export function DateRangePicker({
   );
 }
 
+// Brand tokens (T.* equivalents — duplicated as hex here so the styles
+// can be StyleSheet.create-d at module scope without a runtime import).
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: '#FFFCF6' },           // T.card
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -223,9 +227,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 16,
   },
-  cancelBtn: { fontSize: 16, color: '#737373' },
-  clearBtn: { fontSize: 16, color: '#D85A30' },
-  title: { fontSize: 17, fontWeight: '600', color: '#262626' },
+  cancelBtn: { fontSize: 16, color: '#5F685F' },                // T.muted
+  clearBtn:  { fontSize: 16, color: '#0F3F2E' },                // T.green
+  title:     { fontSize: 17, fontWeight: '600', color: '#163026' }, // T.ink
 
   summary: {
     flexDirection: 'row',
@@ -237,17 +241,21 @@ const styles = StyleSheet.create({
   summaryBox: {
     flex: 1, padding: 12,
     borderRadius: 12, borderWidth: 1.5,
-    borderColor: '#e5e5e5', backgroundColor: '#fafafa',
+    borderColor: '#D9CCB6',                                      // T.line
+    backgroundColor: '#EFE3D0',                                  // T.creamWarm
   },
-  summaryBoxActive: { borderColor: '#D85A30', backgroundColor: '#fff5f2' },
-  summaryLabel: { fontSize: 11, color: '#737373', fontWeight: '500', marginBottom: 2 },
-  summaryDate: { fontSize: 14, fontWeight: '600', color: '#262626' },
-  summaryPlaceholder: { color: '#a3a3a3', fontWeight: '400' },
+  summaryBoxActive: {
+    borderColor: '#0F3F2E',                                      // T.green
+    backgroundColor: '#DFE8D2',                                  // T.greenSoft (was coral wash)
+  },
+  summaryLabel: { fontSize: 11, color: '#5F685F', fontWeight: '500', marginBottom: 2 },
+  summaryDate:  { fontSize: 14, fontWeight: '600', color: '#163026' },
+  summaryPlaceholder: { color: '#9DA8A0', fontWeight: '400' },
 
   instruction: {
     textAlign: 'center',
     fontSize: 13,
-    color: '#a3a3a3',
+    color: '#5F685F',                                            // T.muted (was light gray)
     marginBottom: 8,
   },
 
@@ -255,11 +263,13 @@ const styles = StyleSheet.create({
 
   footer: { paddingHorizontal: 20, paddingTop: 16 },
   confirmBtn: {
-    backgroundColor: '#D85A30',
+    backgroundColor: '#0F3F2E',                                  // T.green
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: 'center',
   },
-  confirmBtnDisabled: { backgroundColor: '#e5e5e5' },
-  confirmText: { fontSize: 16, fontWeight: '600', color: '#fff' },
+  // Disabled primary uses a desaturated sage rather than cool gray —
+  // reads as "muted brand" not "broken."
+  confirmBtnDisabled: { backgroundColor: '#A0C0B2' },
+  confirmText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
 });

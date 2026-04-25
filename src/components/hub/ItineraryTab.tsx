@@ -89,7 +89,7 @@ const LOADING_MESSAGES = [
 ];
 
 const AI_OPTION_STYLES: Record<string, { accent: string; badge: string }> = {
-  Packed:   { accent: '#1A4060', badge: '#D8E4EE' },
+  Packed:   { accent: '#0F3F2E', badge: '#DDE8D8' },
   Balanced: { accent: '#235C38', badge: '#DDE8D8' },
   Relaxed:  { accent: '#7A4C1E', badge: '#F2E5D8' },
 };
@@ -167,7 +167,7 @@ function TpColumn({ items, initialIndex, onChange }: TpColumnProps) {
               style={{
                 fontSize: 24,
                 fontWeight: activeIdx === i ? '700' : '400',
-                color: activeIdx === i ? '#163026' : '#C8C8C8',
+                color: activeIdx === i ? '#163026' : '#9DA8A0',
               }}
             >
               {pad2(v)}
@@ -197,7 +197,7 @@ function InlineTimePicker({ field, initialTime, onConfirm, onClear, onBack }: In
       {/* Back header */}
       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
         <Pressable onPress={onBack} hitSlop={8} style={{ padding: 2 }}>
-          <Ionicons name="chevron-back" size={22} color="#737373" />
+          <Ionicons name="chevron-back" size={22} color="#5F685F" />
         </Pressable>
         <Text style={{ flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '700', color: '#163026' }}>
           {field === 'start' ? 'Start time' : 'End time'}
@@ -217,7 +217,7 @@ function InlineTimePicker({ field, initialTime, onConfirm, onClear, onBack }: In
               left: -24,
               right: -24,
               height: TP_ITEM_H,
-              backgroundColor: '#F4F4F2',
+              backgroundColor: '#EFE3D0',
               borderRadius: 14,
             }}
           />
@@ -256,7 +256,7 @@ function InlineTimePicker({ field, initialTime, onConfirm, onClear, onBack }: In
       </Pressable>
 
       <Pressable onPress={onClear} style={{ marginTop: 12, alignItems: 'center' }}>
-        <Text style={{ fontSize: 14, color: '#A3A3A3' }}>Clear time</Text>
+        <Text style={{ fontSize: 14, color: '#9DA8A0' }}>Clear time</Text>
       </Pressable>
     </View>
   );
@@ -338,7 +338,7 @@ function BlockCard({
     >
       {/* Type icon */}
       <View className={`mt-0.5 h-8 w-8 items-center justify-center rounded-xl ${colors.bg}`}>
-        <Ionicons name={icon} size={16} color={colors.text.replace('text-', '').includes('coral') ? '#0F3F2E' : undefined} style={colors.text.includes('blue') ? { color: '#2563EB' } : colors.text.includes('orange') ? { color: '#EA580C' } : colors.text.includes('purple') ? { color: '#9333EA' } : colors.text.includes('coral') ? { color: '#0F3F2E' } : { color: '#16A34A' }} />
+        <Ionicons name={icon} size={16} color={colors.text.replace('text-', '').includes('coral') ? '#0F3F2E' : undefined} style={colors.text.includes('blue') ? { color: '#0F3F2E' } : colors.text.includes('orange') ? { color: '#7A4C1E' } : colors.text.includes('purple') ? { color: '#0F3F2E' } : colors.text.includes('coral') ? { color: '#0F3F2E' } : { color: '#0F3F2E' }} />
       </View>
 
       {/* Content */}
@@ -353,7 +353,7 @@ function BlockCard({
           ) : null}
           {block.location ? (
             <View className="flex-row items-center gap-0.5">
-              <Ionicons name="location-outline" size={10} color="#A3A3A3" />
+              <Ionicons name="location-outline" size={10} color="#9DA8A0" />
               <Text className="text-xs text-muted" numberOfLines={1}>
                 {block.location}
               </Text>
@@ -361,14 +361,14 @@ function BlockCard({
           ) : null}
           {attendeeCount != null ? (
             <View className="flex-row items-center gap-0.5">
-              <Ionicons name="people-outline" size={10} color="#A3A3A3" />
+              <Ionicons name="people-outline" size={10} color="#9DA8A0" />
               <Text className="text-xs text-muted">{attendeeCount}</Text>
             </View>
           ) : null}
         </View>
       </View>
 
-      <Ionicons name="chevron-forward" size={14} color="#D4D4D4" />
+      <Ionicons name="chevron-forward" size={14} color="#9DA8A0" />
     </Pressable>
   );
 }
@@ -416,8 +416,8 @@ function DaySection({
             onPress={() => onAddBlock(day.date)}
             className="mb-2 items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-line py-5"
           >
-            <Ionicons name="add-circle-outline" size={18} color="#D4D4D4" />
-            <Text style={{ fontSize: 12, color: '#D0D0D0' }}>Tap to add activities</Text>
+            <Ionicons name="add-circle-outline" size={18} color="#9DA8A0" />
+            <Text style={{ fontSize: 12, color: '#9DA8A0' }}>Tap to add activities</Text>
           </Pressable>
         ) : (
           <View className="mb-2 items-center justify-center rounded-2xl border-2 border-dashed border-line py-4">
@@ -481,8 +481,8 @@ function DaySection({
             marginTop: 4,
           }}
         >
-          <Ionicons name="add-circle-outline" size={14} color="#D4D4D4" />
-          <Text style={{ fontSize: 12, color: '#D0D0D0' }}>Add block</Text>
+          <Ionicons name="add-circle-outline" size={14} color="#9DA8A0" />
+          <Text style={{ fontSize: 12, color: '#9DA8A0' }}>Add block</Text>
         </Pressable>
       ) : null}
     </View>
@@ -596,7 +596,7 @@ function BlockEditorModal({
                     {editor.mode === 'create' ? 'Add block' : 'Edit block'}
                   </Text>
                   {editor.dayDate ? (
-                    <Text style={{ fontSize: 13, color: '#A3A3A3' }}>
+                    <Text style={{ fontSize: 13, color: '#9DA8A0' }}>
                       {formatDayLabel(editor.dayDate)}
                     </Text>
                   ) : null}
@@ -617,10 +617,10 @@ function BlockEditorModal({
                             borderRadius: 20,
                             borderWidth: 1.5,
                             borderColor: active ? '#0F3F2E' : '#D9CCB6',
-                            backgroundColor: active ? '#FFF1F0' : 'white',
+                            backgroundColor: active ? '#DFE8D2' : 'white',
                           }}
                         >
-                          <Text style={{ fontSize: 13, fontWeight: '600', color: active ? '#0F3F2E' : '#737373' }}>
+                          <Text style={{ fontSize: 13, fontWeight: '600', color: active ? '#0F3F2E' : '#5F685F' }}>
                             {BLOCK_TYPE_LABELS[t]}
                           </Text>
                         </Pressable>
@@ -631,12 +631,12 @@ function BlockEditorModal({
 
                 {/* Title */}
                 <View>
-                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Title *</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#5F685F', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Title *</Text>
                   <TextInput
                     value={state.title}
                     onChangeText={(v) => set('title', v)}
                     placeholder="e.g. Dinner at The Bistro"
-                    placeholderTextColor="#A3A3A3"
+                    placeholderTextColor="#9DA8A0"
                     style={{ borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026' }}
                     autoFocus={editor.mode === 'create'}
                     maxLength={100}
@@ -649,10 +649,10 @@ function BlockEditorModal({
                     onPress={() => openTimePicker('start')}
                     style={{ flex: 1, borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12 }}
                   >
-                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#A3A3A3', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#9DA8A0', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
                       Start time
                     </Text>
-                    <Text style={{ fontSize: 15, color: state.startTime ? '#163026' : '#C8C8C8', fontWeight: state.startTime ? '500' : '400' }}>
+                    <Text style={{ fontSize: 15, color: state.startTime ? '#163026' : '#9DA8A0', fontWeight: state.startTime ? '500' : '400' }}>
                       {state.startTime ? formatTime(state.startTime) : 'Set time'}
                     </Text>
                   </Pressable>
@@ -660,10 +660,10 @@ function BlockEditorModal({
                     onPress={() => openTimePicker('end')}
                     style={{ flex: 1, borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12 }}
                   >
-                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#A3A3A3', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#9DA8A0', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
                       End time
                     </Text>
-                    <Text style={{ fontSize: 15, color: state.endTime ? '#163026' : '#C8C8C8', fontWeight: state.endTime ? '500' : '400' }}>
+                    <Text style={{ fontSize: 15, color: state.endTime ? '#163026' : '#9DA8A0', fontWeight: state.endTime ? '500' : '400' }}>
                       {state.endTime ? formatTime(state.endTime) : 'Set time'}
                     </Text>
                   </Pressable>
@@ -671,12 +671,12 @@ function BlockEditorModal({
 
                 {/* Location */}
                 <View>
-                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Location</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#5F685F', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Location</Text>
                   <TextInput
                     value={state.location}
                     onChangeText={(v) => { set('location', v); setRestaurantInfo(null); }}
                     placeholder="Address or place name"
-                    placeholderTextColor="#A3A3A3"
+                    placeholderTextColor="#9DA8A0"
                     style={{ borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026' }}
                     maxLength={200}
                   />
@@ -699,7 +699,7 @@ function BlockEditorModal({
                           borderRadius: 12,
                           borderWidth: 1.5,
                           borderColor: restaurantLoading ? '#D9CCB6' : '#0F3F2E',
-                          backgroundColor: restaurantLoading ? '#F9F9F9' : '#FFF1F0',
+                          backgroundColor: restaurantLoading ? '#EFE3D0' : '#DFE8D2',
                         }}
                       >
                         {restaurantLoading ? (
@@ -707,13 +707,13 @@ function BlockEditorModal({
                         ) : (
                           <Ionicons name="storefront-outline" size={15} color="#0F3F2E" />
                         )}
-                        <Text style={{ fontSize: 13, fontWeight: '600', color: restaurantLoading ? '#A3A3A3' : '#0F3F2E' }}>
+                        <Text style={{ fontSize: 13, fontWeight: '600', color: restaurantLoading ? '#9DA8A0' : '#0F3F2E' }}>
                           {restaurantLoading ? 'Looking up…' : 'Look up restaurant info'}
                         </Text>
                       </Pressable>
                     ) : (
                       /* Restaurant info card */
-                      <View style={{ backgroundColor: '#FFF8F7', borderRadius: 14, borderWidth: 1.5, borderColor: '#FFD5CF', padding: 14, gap: 10 }}>
+                      <View style={{ backgroundColor: '#EFE3D0', borderRadius: 14, borderWidth: 1.5, borderColor: '#D9CCB6', padding: 14, gap: 10 }}>
                         {/* Name + dismiss */}
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                           <Text style={{ fontSize: 14, fontWeight: '700', color: '#163026', flex: 1 }} numberOfLines={1}>
@@ -728,7 +728,7 @@ function BlockEditorModal({
                         <View style={{ flexDirection: 'row', gap: 16 }}>
                           {restaurantInfo.price_display ? (
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                              <Ionicons name="cash-outline" size={13} color="#737373" />
+                              <Ionicons name="cash-outline" size={13} color="#5F685F" />
                               <Text style={{ fontSize: 13, color: '#525252', fontWeight: '600' }}>
                                 {restaurantInfo.price_display}
                               </Text>
@@ -736,7 +736,7 @@ function BlockEditorModal({
                           ) : null}
                           {restaurantInfo.hours_today ? (
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                              <Ionicons name="time-outline" size={13} color="#737373" />
+                              <Ionicons name="time-outline" size={13} color="#5F685F" />
                               <Text style={{ fontSize: 13, color: '#525252' }}>
                                 {restaurantInfo.hours_today.all_day
                                   ? 'Open 24 hrs'
@@ -766,12 +766,12 @@ function BlockEditorModal({
 
                 {/* Notes */}
                 <View>
-                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Notes</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#5F685F', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Notes</Text>
                   <TextInput
                     value={state.notes}
                     onChangeText={(v) => set('notes', v)}
                     placeholder="Any details…"
-                    placeholderTextColor="#A3A3A3"
+                    placeholderTextColor="#9DA8A0"
                     multiline
                     numberOfLines={2}
                     style={{ borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026', minHeight: 72, textAlignVertical: 'top' }}
@@ -785,7 +785,7 @@ function BlockEditorModal({
                     <Pressable
                       onPress={onDelete}
                       disabled={deleting}
-                      style={{ flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#FCA5A5', alignItems: 'center', justifyContent: 'center' }}
+                      style={{ flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#D9CCB6', alignItems: 'center', justifyContent: 'center' }}
                     >
                       {deleting ? (
                         <ActivityIndicator size="small" color="#EF4444" />
@@ -805,7 +805,7 @@ function BlockEditorModal({
                   <Pressable
                     onPress={() => canSave && onSave(state)}
                     disabled={!canSave || saving}
-                    style={{ flex: 2, paddingVertical: 14, borderRadius: 14, backgroundColor: canSave ? '#0F3F2E' : '#FCA99F', alignItems: 'center', justifyContent: 'center' }}
+                    style={{ flex: 2, paddingVertical: 14, borderRadius: 14, backgroundColor: canSave ? '#0F3F2E' : '#A0C0B2', alignItems: 'center', justifyContent: 'center' }}
                   >
                     {saving ? (
                       <ActivityIndicator size="small" color="white" />
@@ -916,17 +916,17 @@ function AiItineraryBanner({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 10,
-        backgroundColor: '#EEF3F8',
+        backgroundColor: '#EFE3D0',
         borderRadius: 16,
         paddingHorizontal: 16,
         paddingVertical: 14,
         marginBottom: 16,
         borderWidth: 1,
-        borderColor: '#D8E4EE',
+        borderColor: '#DDE8D8',
       }}>
         <ActivityIndicator size="small" color="#1A4060" />
         <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 14, fontWeight: '600', color: '#1A4060' }}>
+          <Text style={{ fontSize: 14, fontWeight: '600', color: '#0F3F2E' }}>
             {LOADING_MESSAGES[loadingMsgIdx]}
           </Text>
           <Text style={{ fontSize: 12, color: '#4A6E8A', marginTop: 2 }}>
@@ -946,19 +946,19 @@ function AiItineraryBanner({
           flexDirection: 'row',
           alignItems: 'center',
           gap: 12,
-          backgroundColor: '#EEF3F8',
+          backgroundColor: '#EFE3D0',
           borderRadius: 16,
           paddingHorizontal: 16,
           paddingVertical: 14,
           marginBottom: 16,
           borderWidth: 1,
-          borderColor: '#1A4060',
+          borderColor: '#0F3F2E',
         }}
         accessibilityRole="button"
       >
         <Ionicons name="sparkles" size={20} color="#1A4060" />
         <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 14, fontWeight: '700', color: '#1A4060' }}>
+          <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F3F2E' }}>
             3 itinerary options ready
           </Text>
           <Text style={{ fontSize: 12, color: '#4A6E8A', marginTop: 2 }}>
@@ -974,17 +974,17 @@ function AiItineraryBanner({
   if (blocksEmpty) {
     return (
       <View style={{
-        backgroundColor: '#EEF3F8',
+        backgroundColor: '#EFE3D0',
         borderRadius: 16,
         padding: 16,
         marginBottom: 16,
         borderWidth: 1,
-        borderColor: '#D8E4EE',
+        borderColor: '#DDE8D8',
         gap: 10,
       }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Ionicons name="sparkles-outline" size={18} color="#1A4060" />
-          <Text style={{ fontSize: 14, fontWeight: '700', color: '#1A4060' }}>
+          <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F3F2E' }}>
             Generate AI itinerary options
           </Text>
         </View>
@@ -994,7 +994,7 @@ function AiItineraryBanner({
         <Pressable
           onPress={() => generate.mutate({})}
           style={{
-            backgroundColor: '#1A4060',
+            backgroundColor: '#0F3F2E',
             borderRadius: 12,
             paddingVertical: 12,
             alignItems: 'center',
@@ -1238,7 +1238,7 @@ export function ItineraryTab({ tripId, isPlanner = true }: { tripId: string; isP
       <View className="flex-row items-center justify-between px-6 pt-4 pb-3">
         <Text className="text-base font-bold text-ink">Itinerary</Text>
         <Pressable onPress={handleShare} className="p-1 active:opacity-60">
-          <Ionicons name="share-outline" size={20} color="#737373" />
+          <Ionicons name="share-outline" size={20} color="#5F685F" />
         </Pressable>
       </View>
 
@@ -1287,7 +1287,7 @@ export function ItineraryTab({ tripId, isPlanner = true }: { tripId: string; isP
             onPress={() => setDateSheetVisible(true)}
             className="mt-2 flex-row items-center gap-1 self-center"
           >
-            <Ionicons name="pencil-outline" size={12} color="#A3A3A3" />
+            <Ionicons name="pencil-outline" size={12} color="#9DA8A0" />
             <Text className="text-xs text-muted">Edit trip dates</Text>
           </Pressable>
 
