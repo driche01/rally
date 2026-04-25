@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, Switch, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
+import { Input, Toggle } from '@/components/ui';
 import type { CustomPoll } from '@/types/polls';
 
 // ── CustomSection ─────────────────────────────────────────────────────────────
@@ -98,13 +99,11 @@ export function CustomSection({
             </View>
 
             {/* Question input */}
-            <TextInput
+            <Input
               value={cp.question}
               onChangeText={(v) => onQuestionChange(cp.id, v)}
               placeholder="e.g. What vibe are we going for?"
               maxLength={80}
-              className="min-h-[48px] rounded-2xl border border-line bg-cream px-4 py-3 text-base text-ink"
-              placeholderTextColor="#A8A8A8"
             />
 
             {/* Options */}
@@ -115,14 +114,14 @@ export function CustomSection({
               </Text>
               {cp.options.map((opt, optIdx) => (
                 <View key={optIdx} className="flex-row items-center gap-2">
-                  <TextInput
-                    value={opt}
-                    onChangeText={(v) => onOptionChange(cp.id, optIdx, v)}
-                    placeholder={`Option ${optIdx + 1}${optIdx < 2 ? ' *' : ''}`}
-                    maxLength={60}
-                    className="flex-1 min-h-[44px] rounded-2xl border border-line bg-cream px-4 py-2.5 text-sm text-ink"
-                    placeholderTextColor="#A8A8A8"
-                  />
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      value={opt}
+                      onChangeText={(v) => onOptionChange(cp.id, optIdx, v)}
+                      placeholder={`Option ${optIdx + 1}${optIdx < 2 ? ' *' : ''}`}
+                      maxLength={60}
+                    />
+                  </View>
                   {cp.options.length > 2 ? (
                     <Pressable
                       onPress={() => onOptionRemove(cp.id, optIdx)}
@@ -149,11 +148,9 @@ export function CustomSection({
             {/* Allow multi toggle */}
             <View className="flex-row items-center justify-between pt-1 border-t border-line">
               <Text className="text-sm text-ink">Allow multiple picks</Text>
-              <Switch
+              <Toggle
                 value={cp.allowMulti}
                 onValueChange={() => onMultiToggle(cp.id)}
-                trackColor={{ false: '#E8E8E8', true: accentColor }}
-                thumbColor="white"
               />
             </View>
           </View>

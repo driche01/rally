@@ -11,6 +11,7 @@ import { useAuthStore } from '@/stores/authStore';
 import type { TripWithRespondentCount } from '@/lib/api/trips';
 import { getTripStage, STAGES, STAGE_LABEL } from '@/lib/tripStage';
 import { T } from '@/theme';
+import { EmptyState } from '@/components/ui';
 
 const SEASON_ICON: Record<string, React.ComponentProps<typeof Ionicons>['name']> = {
   Winter: 'snow-outline',
@@ -212,12 +213,11 @@ export default function HomeScreen() {
           }
           ListEmptyComponent={
             !isLoading ? (
-              <View className="items-center py-20 gap-3">
-                <Text className="text-xl font-semibold text-ink">No trips yet</Text>
-                <Text className="text-base text-muted text-center">
-                  Tap + below to start your first trip.
-                </Text>
-              </View>
+              <EmptyState
+                icon="airplane-outline"
+                title="No trips yet"
+                body="Tap + below to start your first trip."
+              />
             ) : null
           }
           renderItem={({ item }) => (
