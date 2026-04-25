@@ -23,7 +23,7 @@ export function ProgressBar({ value, max = 100, label, showPercent = false }: Pr
       ) : null}
       <View className="h-2 overflow-hidden rounded-full bg-neutral-100">
         <View
-          className="h-full rounded-full bg-coral-500"
+          className="h-full rounded-full bg-green"
           style={{ width: `${percent}%` }}
         />
       </View>

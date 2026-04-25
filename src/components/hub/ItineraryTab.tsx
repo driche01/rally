@@ -41,6 +41,7 @@ import { lookupRestaurantDetails, type RestaurantDetails } from '@/lib/api/resta
 import { useAuthStore } from '@/stores/authStore';
 import type { BlockType, ItineraryBlock, ItineraryDay } from '@/types/database';
 import type { CreateBlockInput } from '@/lib/api/itinerary';
+import { Button } from '@/components/ui';
 import { DateRangePicker } from '@/components/DateRangePicker';
 import { BlockAlternativesSheet } from '@/components/hub/BlockAlternativesSheet';
 import { useAiItineraryDraft, useGenerateAiItinerary } from '@/hooks/useAiItinerary';
@@ -66,19 +67,20 @@ const BLOCK_TYPE_ICONS: Record<BlockType, React.ComponentProps<typeof Ionicons>[
   free_time: 'sunny-outline',
 };
 
-// Block-type pill colors. Brand-coherent variants (no blue/purple) that
-// still give each type a visually distinct identity:
+// Block-type pill colors. Brand-coherent variants (no blue/purple/coral)
+// that still give each type a visually distinct identity:
 //   activity      → green-soft   (primary action — "doing stuff")
-//   meal          → gold/40       (food reads warmly as gold)
-//   travel        → cream-warm    (transit is the "in between")
-//   accommodation → green-soft    (sleeping = restful green)
-//   free_time     → coral-50      (the one allowed coral accent — play/fun)
+//   meal          → gold/40      (food reads warmly as gold)
+//   travel        → cream-warm   (transit is the "in between")
+//   accommodation → green-soft   (sleeping = restful green)
+//   free_time     → gold/40      (warm highlight — same as meal,
+//                                  acceptable since they're rarely adjacent)
 const BLOCK_TYPE_COLORS: Record<BlockType, { bg: string; text: string; pill: string }> = {
   activity:      { bg: 'bg-green-soft', text: 'text-green-dark', pill: 'bg-green-soft' },
   meal:          { bg: 'bg-gold/40',    text: 'text-ink',         pill: 'bg-gold/40' },
   travel:        { bg: 'bg-cream-warm', text: 'text-ink',         pill: 'bg-cream-warm' },
   accommodation: { bg: 'bg-green-soft', text: 'text-green-dark', pill: 'bg-green-soft' },
-  free_time:     { bg: 'bg-coral-50',   text: 'text-coral-700',  pill: 'bg-coral-50' },
+  free_time:     { bg: 'bg-gold/40',   text: 'text-ink',  pill: 'bg-gold/40' },
 };
 
 const LOADING_MESSAGES = [
@@ -779,42 +781,37 @@ function BlockEditorModal({
                   />
                 </View>
 
-                {/* Actions */}
+                {/* Actions — uses centralized Button so brand updates flow */}
                 <View style={{ flexDirection: 'row', gap: 10 }}>
-                  {editor.mode === 'edit' ? (
-                    <Pressable
-                      onPress={onDelete}
-                      disabled={deleting}
-                      style={{ flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#D9CCB6', alignItems: 'center', justifyContent: 'center' }}
-                    >
-                      {deleting ? (
-                        <ActivityIndicator size="small" color="#EF4444" />
-                      ) : (
-                        <Text style={{ fontSize: 15, fontWeight: '600', color: '#EF4444' }}>Delete</Text>
-                      )}
-                    </Pressable>
-                  ) : (
-                    <Pressable
-                      onPress={onClose}
-                      style={{ flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#D9CCB6', alignItems: 'center' }}
-                    >
-                      <Text style={{ fontSize: 15, fontWeight: '600', color: '#525252' }}>Cancel</Text>
-                    </Pressable>
-                  )}
-
-                  <Pressable
-                    onPress={() => canSave && onSave(state)}
-                    disabled={!canSave || saving}
-                    style={{ flex: 2, paddingVertical: 14, borderRadius: 14, backgroundColor: canSave ? '#0F3F2E' : '#A0C0B2', alignItems: 'center', justifyContent: 'center' }}
-                  >
-                    {saving ? (
-                      <ActivityIndicator size="small" color="white" />
+                  <View style={{ flex: 1 }}>
+                    {editor.mode === 'edit' ? (
+                      <Button
+                        variant="destructive"
+                        onPress={onDelete}
+                        loading={deleting}
+                        disabled={deleting}
+                        fullWidth
+                      >
+                        Delete
+                      </Button>
                     ) : (
-                      <Text style={{ fontSize: 15, fontWeight: '600', color: 'white' }}>
-                        {editor.mode === 'create' ? 'Add block' : 'Save changes'}
-                      </Text>
+                      <Button variant="secondary" onPress={onClose} fullWidth>
+                        Cancel
+                      </Button>
                     )}
-                  </Pressable>
+                  </View>
+
+                  <View style={{ flex: 2 }}>
+                    <Button
+                      variant="primary"
+                      onPress={() => canSave && onSave(state)}
+                      loading={saving}
+                      disabled={!canSave || saving}
+                      fullWidth
+                    >
+                      {editor.mode === 'create' ? 'Add block' : 'Save changes'}
+                    </Button>
+                  </View>
                 </View>
               </>
             )}

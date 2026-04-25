@@ -8,18 +8,19 @@ interface BadgeProps {
   variant?: BadgeVariant;
 }
 
-// Brand semantics (2026-04-24):
+// Brand semantics (updated 2026-04-25 — coral retired):
 //   default = neutral / closed states     → cream-warm fill, ink text
 //   success = active / live states        → green-soft fill, green-dark text
 //   warning = attention                   → gold-tinted fill, ink text
-//   coral   = celebratory / decided       → coral-soft fill, coral-700 text
-//                                            (only allowed coral accent — see brand rules)
+//   coral   = celebratory / decided       → gold-tinted fill, ink text
+//                                            (legacy variant name kept for
+//                                             callers; visually = warning)
 //   muted   = inactive / draft            → cream fill, muted text
 const variantClasses: Record<BadgeVariant, { container: string; text: string }> = {
   default: { container: 'bg-cream-warm',   text: 'text-ink' },
   success: { container: 'bg-green-soft',   text: 'text-green-dark' },
   warning: { container: 'bg-gold/40',      text: 'text-ink' },
-  coral:   { container: 'bg-coral-50',     text: 'text-coral-700' },
+  coral:   { container: 'bg-gold/40',     text: 'text-ink' },
   muted:   { container: 'bg-cream',        text: 'text-muted' },
 };
 

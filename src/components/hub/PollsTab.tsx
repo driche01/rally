@@ -200,7 +200,7 @@ function PollResultBar({
       </View>
       <View className="h-2 overflow-hidden rounded-full bg-neutral-100">
         <View
-          className={['h-full rounded-full', isLeading || isDecided ? 'bg-coral-500' : 'bg-neutral-300'].join(' ')}
+          className={['h-full rounded-full', isLeading || isDecided ? 'bg-green' : 'bg-neutral-300'].join(' ')}
           style={{ width: `${pct}%` }}
         />
       </View>
@@ -298,7 +298,7 @@ const PollCard = memo(function PollCard({
                 { text: 'Cancel', style: 'cancel' },
                 { text: 'Go live', onPress: () => updateStatus.mutate({ pollId: poll.id, status: 'live' }, { onError: mutationError('go live') }) },
               ])}
-              className="rounded-xl bg-coral-500 px-3 py-1.5"
+              className="rounded-xl bg-green px-3 py-1.5"
             >
               <Text className="text-xs font-semibold text-white">Go live</Text>
             </Pressable>
@@ -343,8 +343,8 @@ const PollCard = memo(function PollCard({
       </View>
 
       {poll.status === 'decided' && decidedLabel ? (
-        <View className="mt-3 rounded-xl bg-coral-50 px-3 py-2.5">
-          <Text className="text-sm font-semibold text-coral-700">✓ Decided: {decidedLabel}</Text>
+        <View className="mt-3 rounded-xl bg-gold/40 px-3 py-2.5">
+          <Text className="text-sm font-semibold text-ink">✓ Decided: {decidedLabel}</Text>
         </View>
       ) : null}
 
