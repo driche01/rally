@@ -53,13 +53,40 @@ export default function SignupScreen() {
     if (!validate()) return;
     setLoading(true);
     try {
-      await signUp(
+      const result = await signUp(
         firstName.trim(),
         lastName.trim(),
         email.trim().toLowerCase(),
         phone.trim(),
         password,
       );
+
+      // Phase 3 — if we found unclaimed SMS/survey history for this phone,
+      // fire off an OTP and route to the claim screen. The OTP send is
+      // best-effort: if it fails we still let signup continue (the user
+      // can re-trigger from the claim screen via Resend).
+      if (result.claimAvailable && result.normalizedPhone) {
+        try {
+          await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/claim-otp`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? ''}`,
+            },
+            body: JSON.stringify({ phone: result.normalizedPhone }),
+          });
+        } catch {
+          // Silent — claim screen has Resend
+        }
+        router.replace({
+          pathname: '/(auth)/claim-phone' as Parameters<typeof router.replace>[0] extends string
+            ? string
+            : never,
+          params: { phone: result.normalizedPhone },
+        } as unknown as Parameters<typeof router.replace>[0]);
+        return;
+      }
+
       router.replace('/(app)/(tabs)');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Signup failed.';

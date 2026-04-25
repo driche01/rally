@@ -91,6 +91,21 @@ export async function processInboundMessage(
   // ─── Resolve user ───────────────────────────────────────────────────────
   const user = await findOrCreateUser(admin, senderPhone);
 
+  // ─── Claim-OTP echo short-circuit ───────────────────────────────────────
+  // If the sender has a live phone_claim_tokens row and the body is just a
+  // 6-digit code, they're echoing the OTP back into the planning thread
+  // instead of typing it into the app. Drop silently — don't let the
+  // destination/budget parsers eat "123456" as a Tulum-like name.
+  const trimmedBody = msg.Body.trim();
+  if (/^\d{6}$/.test(trimmedBody)) {
+    const { data: hasClaim } = await admin.rpc('has_active_claim_token', {
+      p_phone: senderPhone,
+    });
+    if (hasClaim === true) {
+      return { response: null, sessionId: null, phase: null };
+    }
+  }
+
   // ─── APP keyword short-circuit ──────────────────────────────────────────
   // Works in any context (1:1 or group, any session state). Always available
   // so anyone in a Rally-planned thread can pull the install link on demand.

@@ -6,6 +6,7 @@ import { useAuthStore } from '../stores/authStore';
 import { identify, reset } from '../lib/analytics';
 import { setUser as setSentryUser, clearUser as clearSentryUser } from '../lib/sentry';
 import { registerPushToken, deregisterPushToken } from '../lib/notifications';
+import { normalizePhone } from '../lib/phone';
 
 // Required for expo-auth-session to close the browser on web after OAuth redirect
 WebBrowser.maybeCompleteAuthSession();
@@ -64,15 +65,36 @@ export function useSignUp() {
     });
     if (error) throw error;
 
+    const normalizedPhone = phone ? normalizePhone(phone) : null;
+
     // Create profile immediately (session is available when email confirmation is off)
     if (data.user) {
       const { error: profileError } = await supabase
         .from('profiles')
-        .upsert({ id: data.user.id, name: firstName, last_name: lastName || null, email, phone: phone || null });
+        .upsert({
+          id:        data.user.id,
+          name:      firstName,
+          last_name: lastName || null,
+          email,
+          phone:     normalizedPhone ?? phone ?? null,
+        });
       if (profileError) throw profileError;
     }
 
-    return data;
+    // Phase 3 — phone claim probe.
+    // Check whether Rally already has SMS/survey history for this phone
+    // that we should offer to merge into the new account. The actual OTP
+    // send + claim-phone routing happens in the signup screen so we don't
+    // couple the auth hook to navigation.
+    let claimAvailable = false;
+    if (normalizedPhone) {
+      const { data: claimable } = await supabase.rpc('check_claim_available', {
+        p_phone: normalizedPhone,
+      });
+      claimAvailable = claimable === true;
+    }
+
+    return { ...data, claimAvailable, normalizedPhone };
   };
 }
 
