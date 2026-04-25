@@ -141,7 +141,22 @@ export async function getOrCreateRespondent(
       .eq('trip_id', tripId)
       .eq('session_token', tripToken)
       .maybeSingle();
-    if (existing) return adoptExisting(existing);
+    if (existing) {
+      // Phase 2: backfill `users` link for returning respondents who now
+      // (or already) have a phone. Token-match path bypasses the RPC for
+      // adoption logic but still routes through it for the user link.
+      if (normalizedPhone) {
+        await supabase.rpc('ensure_respondent_user', {
+          p_trip_id: tripId,
+          p_phone: normalizedPhone,
+          p_name: name,
+          p_email: trimmedEmail,
+          p_session_token: existing.session_token,
+          p_existing_respondent_id: existing.id,
+        });
+      }
+      return adoptExisting(existing);
+    }
     // Token present but row gone — fall through
   }
 
@@ -179,13 +194,51 @@ export async function getOrCreateRespondent(
     if (existing) return adoptExisting(existing);
   }
 
-  // 4. Genuinely new respondent — generate the ID client-side so we can skip
-  // INSERT...RETURNING SELECT. The respondents SELECT RLS only allows planners
-  // to read rows, so anon users would get PGRST116 on the RETURNING clause.
-  const newId: string = crypto.randomUUID();
+  // 4. Genuinely new respondent.
+  //
+  // Phase 2: when a phone is supplied, route through the
+  // `ensure_respondent_user` RPC. It runs SECURITY DEFINER so it can
+  // create/link a `users` row for the phone identity (which anon users
+  // can't touch directly under RLS) — this makes survey-only respondents
+  // discoverable by the future Phase 3 claim flow.
   const newToken = generateToken();
   await setTripSessionToken(tripId, newToken);
 
+  if (normalizedPhone) {
+    const { data: rpcResult, error: rpcError } = await supabase.rpc('ensure_respondent_user', {
+      p_trip_id: tripId,
+      p_phone: normalizedPhone,
+      p_name: name,
+      p_email: trimmedEmail,
+      p_session_token: newToken,
+    });
+    if (rpcError) throw rpcError;
+    const result = rpcResult as { respondent_id: string; session_token: string; user_id: string };
+    // RPC may have adopted an existing (trip_id, phone) row — adopt its
+    // session_token client-side so subsequent visits dedupe.
+    if (result.session_token && result.session_token !== newToken) {
+      await setTripSessionToken(tripId, result.session_token);
+    }
+    return {
+      id:            result.respondent_id,
+      trip_id:       tripId,
+      name,
+      session_token: result.session_token ?? newToken,
+      email:         trimmedEmail ?? null,
+      phone:         normalizedPhone,
+      is_planner:    false,
+      rsvp:          null,
+      preferences:   null,
+      created_at:    new Date().toISOString(),
+    };
+  }
+
+  // No phone — keep the legacy client-side insert path. (We can't link
+  // a `users` row without a phone identity, so the RPC has nothing to
+  // do anyway.) Generate the ID client-side so we can skip INSERT...
+  // RETURNING SELECT — respondents SELECT RLS only allows planners to
+  // read rows, so anon users would get PGRST116 on the RETURNING clause.
+  const newId: string = crypto.randomUUID();
   const { error } = await supabase
     .from('respondents')
     .insert({ id: newId, trip_id: tripId, name, session_token: newToken, ...contactPatch });
