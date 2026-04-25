@@ -14,6 +14,28 @@ import { transitionPhase, getParticipants } from './trip-session.ts';
 import { createPoll, formatPollMessage, formatBudgetPollMessage } from './poll-engine.ts';
 import { launchCommitPoll } from './commit-poll-engine.ts';
 import { estimateFlightCost, formatCostSummary, type FlightEstimate } from './cost-estimator.ts';
+import { broadcast, shortHash } from './dm-sender.ts';
+
+/**
+ * Fan out a phase-transition announcement to every active+attending participant
+ * other than the triggering user (who'll receive the same body via TwiML reply
+ * in the same HTTP cycle). Phase 3 of the 1:1 SMS pivot.
+ *
+ * Best-effort. Idempotency-keyed by (sessionId, body-hash) so a duplicate
+ * inbound webhook from Twilio doesn't re-broadcast.
+ */
+async function announceTransition(
+  admin: SupabaseClient,
+  sessionId: string,
+  body: string,
+  triggerUserId?: string,
+): Promise<void> {
+  const seedHash = await shortHash(body);
+  await broadcast(admin, sessionId, body, {
+    excludeUserId: triggerUserId ?? null,
+    idempotencyKey: `phase_transition:${sessionId}:${seedHash}`,
+  });
+}
 
 /**
  * Advance the session to the next phase and return the prompt message.
@@ -104,17 +126,25 @@ async function advanceFromIntro(
     if (candidates.length === 1) {
       // Lock in the destination immediately
       await admin.from('trip_sessions').update({ destination: candidates[0].label }).eq('id', session.id);
-      return `${list} it is! \ud83c\udf89\n\n${datesMsg}`;
+      const msg = `${list} it is! \ud83c\udf89\n\n${datesMsg}`;
+      await announceTransition(admin, session.id, msg, triggerUserId);
+      return msg;
     }
-    return `${list} on the table \u2014 we'll nail down dates and budget first, then vote on where.\n\n${datesMsg}`;
+    const msg = `${list} on the table \u2014 we'll nail down dates and budget first, then vote on where.\n\n${datesMsg}`;
+    await announceTransition(admin, session.id, msg, triggerUserId);
+    return msg;
   }
 
   if (candidates.length > 0) {
     const list = candidates.map((c) => c.label).join(', ');
-    return `Great \u2014 so far I'm hearing: ${list}. Anyone else have ideas? Drop them now or I'll move to dates in a bit.`;
+    const msg = `Great \u2014 so far I'm hearing: ${list}. Anyone else have ideas? Drop them now or I'll move to dates in a bit.`;
+    await announceTransition(admin, session.id, msg, triggerUserId);
+    return msg;
   }
 
-  return "Where are you thinking? Drop your destination ideas \u2014 we'll vote once everyone's weighed in.";
+  const msg = "Where are you thinking? Drop your destination ideas \u2014 we'll vote once everyone's weighed in.";
+  await announceTransition(admin, session.id, msg, triggerUserId);
+  return msg;
 }
 
 // ─── COLLECTING_DESTINATIONS → DECIDING_DATES ───────────────────────────────
@@ -157,10 +187,14 @@ async function advanceFromCollectingDestinations(
       phase_sub_state: 'PREFILL_CONFIRMATION',
     }).eq('id', session.id);
 
-    return `${plannerName} proposed ${parts.join(', ')}. Everyone good? Reply YES to confirm or suggest changes.`;
+    const msg = `${plannerName} proposed ${parts.join(', ')}. Everyone good? Reply YES to confirm or suggest changes.`;
+    await announceTransition(admin, session.id, msg, triggerUserId);
+    return msg;
   }
 
-  return "When are you thinking? Drop your dates \u2014 exact or rough both work.";
+  const msg = "When are you thinking? Drop your dates \u2014 exact or rough both work.";
+  await announceTransition(admin, session.id, msg, triggerUserId);
+  return msg;
 }
 
 // ─── DECIDING_DATES → BUDGET_POLL or DECIDING_DESTINATION ───────────────────
@@ -186,7 +220,9 @@ async function advanceFromDecidingDates(
     .eq('trip_session_id', session.id);
 
   await transitionPhase(admin, session, 'BUDGET_POLL', triggerUserId, triggerMessageSid);
-  return formatBudgetPollMessage();
+  const msg = formatBudgetPollMessage();
+  await announceTransition(admin, session.id, msg, triggerUserId);
+  return msg;
 }
 
 // ─── BUDGET_POLL → DECIDING_DESTINATION ──────────────────────────────────────
@@ -228,7 +264,9 @@ async function advanceToDestinationVote(
     // Transition through DECIDING_DESTINATION → COLLECTING_ORIGINS
     await transitionPhase(admin, session, 'DECIDING_DESTINATION', triggerUserId, triggerMessageSid);
     await transitionPhase(admin, session, 'COLLECTING_ORIGINS', triggerUserId, triggerMessageSid);
-    return `Only one destination on the table \u2014 ${candidates[0].label} it is! Where is everyone flying from? Reply with your city or airport code.`;
+    const msg = `Only one destination on the table \u2014 ${candidates[0].label} it is! Where is everyone flying from? Reply with your city or airport code.`;
+    await announceTransition(admin, session.id, msg, triggerUserId);
+    return msg;
   }
 
   // #62 — Zero destinations suggested: don't close brainstorm, prompt for ideas
@@ -241,7 +279,9 @@ async function advanceToDestinationVote(
   const labels = candidates.map((c) => c.label);
   const { poll } = await createPoll(admin, session, 'destination_vote', 'Where are we going?', labels);
 
-  return formatPollMessage('Time to vote \u2014 where are we going?', labels);
+  const msg = formatPollMessage('Time to vote \u2014 where are we going?', labels);
+  await announceTransition(admin, session.id, msg, triggerUserId);
+  return msg;
 }
 
 // ─── DECIDING_DESTINATION → COLLECTING_ORIGINS ──────────────────────────────
@@ -255,7 +295,9 @@ async function advanceFromDecidingDestination(
 ): Promise<string | null> {
   await transitionPhase(admin, session, 'COLLECTING_ORIGINS', triggerUserId, triggerMessageSid);
 
-  return `${session.destination} is locked! Where is everyone flying from? Reply with your city or airport code \u2014 you've got 2 hours.`;
+  const msg = `${session.destination} is locked! Where is everyone flying from? Reply with your city or airport code \u2014 you've got 2 hours.`;
+  await announceTransition(admin, session.id, msg, triggerUserId);
+  return msg;
 }
 
 // ─── COLLECTING_ORIGINS → ESTIMATING_COSTS ──────────────────────────────────
@@ -332,7 +374,9 @@ async function advanceFromCollectingOrigins(
     costNote = `Couldn't pull live prices right now \u2014 check Google Flights for ${destination}. I'll keep trying.`;
   }
 
-  return commitMsg ? costNote + '\n\n' + commitMsg : costNote;
+  const msg = commitMsg ? costNote + '\n\n' + commitMsg : costNote;
+  await announceTransition(admin, session.id, msg, triggerUserId);
+  return msg;
 }
 
 // ─── ESTIMATING_COSTS → COMMIT_POLL ─────────────────────────────────────────
@@ -345,7 +389,9 @@ async function advanceFromEstimatingCosts(
   triggerMessageSid?: string,
 ): Promise<string | null> {
   await transitionPhase(admin, session, 'COMMIT_POLL', triggerUserId, triggerMessageSid);
-  return launchCommitPoll(admin, session, participants);
+  const msg = await launchCommitPoll(admin, session, participants);
+  if (msg) await announceTransition(admin, session.id, msg, triggerUserId);
+  return msg;
 }
 
 // ─── COMMIT_POLL → AWAITING_FLIGHTS ─────────────────────────────────────────
@@ -389,7 +435,9 @@ async function advanceFromAwaitingFlights(
   // #55 — Urgency note if trip is within 7 days
   const urgency = getUrgencyNote(session);
 
-  return summary + '\n\nMoving to lodging \u2014 how are we handling it?\n\n1. Staying together (group rental)\n2. Booking separately\n3. Flights only (skip lodging)' + (urgency ? '\n\n' + urgency : '');
+  const msg = summary + '\n\nMoving to lodging \u2014 how are we handling it?\n\n1. Staying together (group rental)\n2. Booking separately\n3. Flights only (skip lodging)' + (urgency ? '\n\n' + urgency : '');
+  await announceTransition(admin, session.id, msg, triggerUserId);
+  return msg;
 }
 
 // ─── DECIDING_LODGING_TYPE → next phase based on choice ─────────────────────
@@ -409,20 +457,26 @@ async function advanceFromDecidingLodgingType(
   if (lodgingType === 'GROUP') {
     await transitionPhase(admin, session, 'AWAITING_GROUP_BOOKING', triggerUserId, triggerMessageSid);
     const planner = participants.find((p) => p.is_planner);
-    const msg = `Group rental it is! ${planner?.display_name ?? 'Planner'} \u2014 book when you're ready and text "Booked [property] for $[total]" when it's done.`;
-    return urgency ? msg + '\n\n' + urgency : msg;
+    const base = `Group rental it is! ${planner?.display_name ?? 'Planner'} \u2014 book when you're ready and text "Booked [property] for $[total]" when it's done.`;
+    const msg = urgency ? base + '\n\n' + urgency : base;
+    await announceTransition(admin, session.id, msg, triggerUserId);
+    return msg;
   }
 
   if (lodgingType === 'INDIVIDUAL') {
     await transitionPhase(admin, session, 'AWAITING_INDIVIDUAL_LODGING', triggerUserId, triggerMessageSid);
-    const msg = 'Everyone booking their own \u2014 text BOOKED when you\'ve sorted yours.';
-    return urgency ? msg + '\n\n' + urgency : msg;
+    const base = 'Everyone booking their own \u2014 text BOOKED when you\'ve sorted yours.';
+    const msg = urgency ? base + '\n\n' + urgency : base;
+    await announceTransition(admin, session.id, msg, triggerUserId);
+    return msg;
   }
 
   // Flights only
   await transitionPhase(admin, session, 'AWAITING_INDIVIDUAL_FLIGHTS', triggerUserId, triggerMessageSid);
-  const msg = 'Flights only \u2014 text BOOKED when you\'ve got yours sorted.';
-  return urgency ? msg + '\n\n' + urgency : msg;
+  const base = 'Flights only \u2014 text BOOKED when you\'ve got yours sorted.';
+  const msg = urgency ? base + '\n\n' + urgency : base;
+  await announceTransition(admin, session.id, msg, triggerUserId);
+  return msg;
 }
 
 // ─── #55 Helper: urgency note for trips starting within 7 days ──────────────

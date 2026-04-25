@@ -27,6 +27,24 @@ import { handleReEngagementYes } from './post-trip-reengager.ts';
 import { advancePhase, checkAutoAdvance } from './phase-flow.ts';
 import { classifyMessage } from './message-classifier.ts';
 import { track } from './telemetry.ts';
+import { broadcast, shortHash } from './dm-sender.ts';
+
+/**
+ * Fan out an announcement to all active+attending participants other than
+ * the triggering user. Phase 3 of the 1:1 SMS pivot. Best-effort.
+ */
+async function announceDecision(
+  admin: SupabaseClient,
+  sessionId: string,
+  body: string,
+  triggerUserId: string,
+): Promise<void> {
+  const seedHash = await shortHash(body);
+  await broadcast(admin, sessionId, body, {
+    excludeUserId: triggerUserId,
+    idempotencyKey: `decision:${sessionId}:${seedHash}`,
+  });
+}
 
 // ─── Keyword detection ───────────────────────────────────────────────────────
 
@@ -209,9 +227,9 @@ async function handleKeyword(
     case 'FOCUS':
       return handleStatus(admin, session);
     case 'PAUSE':
-      return handlePause(admin, session);
+      return handlePause(admin, session, fromUser);
     case 'RESUME':
-      return handleResume(admin, session);
+      return handleResume(admin, session, fromUser);
     case 'BOOKED':
       return handleBooked(admin, session, fromUser);
     case 'PAID STATUS':
@@ -219,7 +237,7 @@ async function handleKeyword(
     case 'NEXT':
       return handleNext(admin, session, fromUser);
     case 'RESET':
-      return handleReset(admin, session);
+      return handleReset(admin, session, fromUser);
     case 'SPLIT':
       return handleSplitKeyword(admin, session, fromUser, args);
     case 'PROPOSE':
@@ -236,7 +254,7 @@ async function handleKeyword(
 async function handlePlannerTransfer(
   admin: SupabaseClient,
   session: TripSession,
-  _user: SmsUser,
+  user: SmsUser,
   args: string,
 ): Promise<string> {
   const targetName = args.trim();
@@ -265,7 +283,9 @@ async function handlePlannerTransfer(
     .update({ planner_user_id: target.user_id })
     .eq('id', session.id);
 
-  return `${target.display_name} is now the trip planner.`;
+  const msg = `${target.display_name} is now the trip planner.`;
+  await announceDecision(admin, session.id, msg, user.id);
+  return msg;
 }
 
 async function handleStop(
@@ -339,7 +359,11 @@ async function handleStatus(admin: SupabaseClient, session: TripSession): Promis
   return parts.join('\n') || 'No decisions locked yet.';
 }
 
-async function handlePause(admin: SupabaseClient, session: TripSession): Promise<string> {
+async function handlePause(
+  admin: SupabaseClient,
+  session: TripSession,
+  user: SmsUser,
+): Promise<string> {
   await admin
     .from('trip_sessions')
     .update({ paused: true, paused_at: new Date().toISOString() })
@@ -352,10 +376,16 @@ async function handlePause(admin: SupabaseClient, session: TripSession): Promise
     .eq('trip_session_id', session.id)
     .is('executed_at', null);
 
-  return 'Paused \u2014 text RESUME whenever you\u2019re ready to pick up where you left off.';
+  const msg = 'Paused \u2014 text RESUME whenever you\u2019re ready to pick up where you left off.';
+  await announceDecision(admin, session.id, msg, user.id);
+  return msg;
 }
 
-async function handleResume(admin: SupabaseClient, session: TripSession): Promise<string> {
+async function handleResume(
+  admin: SupabaseClient,
+  session: TripSession,
+  user: SmsUser,
+): Promise<string> {
   // Check if dates have passed
   if (session.dates?.start) {
     const start = new Date(session.dates.start);
@@ -370,7 +400,9 @@ async function handleResume(admin: SupabaseClient, session: TripSession): Promis
     .eq('id', session.id);
 
   const status = await handleStatus(admin, session);
-  return `We\u2019re back! \ud83d\ude4c\n${status}`;
+  const msg = `We\u2019re back! \ud83d\ude4c\n${status}`;
+  await announceDecision(admin, session.id, msg, user.id);
+  return msg;
 }
 
 async function handleBooked(
@@ -894,9 +926,13 @@ async function handlePhaseMessage(
         await admin.from('trip_session_participants')
           .update({ phase_confirmation: null })
           .eq('trip_session_id', session.id);
-        const nextMsg = await advancePhase(admin, session);
+        const nextMsg = await advancePhase(admin, session, fromUser.id);
         const dateMsg = `Dates locked in!`;
-        return nextMsg ? dateMsg + '\n\n' + nextMsg : dateMsg;
+        const fullMsg = nextMsg ? dateMsg + '\n\n' + nextMsg : dateMsg;
+        // Broadcast just the lock-in announcement; the next-phase prompt is
+        // already broadcast separately by phase-flow.ts via announceTransition.
+        await announceDecision(admin, session.id, dateMsg, fromUser.id);
+        return fullMsg;
       }
       const dateLabel = formatSessionDates(session);
       return `${message.participant.display_name ?? 'Got it'} \u2014 ${dateLabel} ${confirmed}/${total} confirmed. Waiting on the rest.`;
@@ -1037,8 +1073,10 @@ async function handlePhaseMessage(
             if (confirmedCount >= totalCount) {
               await admin.from('trip_sessions').update({ phase_sub_state: null }).eq('id', session.id);
               await admin.from('trip_session_participants').update({ phase_confirmation: null }).eq('trip_session_id', session.id);
-              const nextMsg = await advancePhase(admin, session);
-              return nextMsg ? `Dates locked in!\n\n${nextMsg}` : `Dates locked in!`;
+              const nextMsg = await advancePhase(admin, session, fromUser.id);
+              const lockMsg = `Dates locked in!`;
+              await announceDecision(admin, session.id, lockMsg, fromUser.id);
+              return nextMsg ? `${lockMsg}\n\n${nextMsg}` : lockMsg;
             }
             const dateLabel2 = formatSessionDates(session);
             return `${message.participant.display_name ?? 'Got it'} \u2014 ${dateLabel2} ${confirmedCount}/${totalCount} confirmed.`;
@@ -1342,7 +1380,9 @@ async function handlePhaseMessage(
       const committed = allP.filter((p) => p.committed || p.status === 'active');
       const perPerson = committed.length > 0 ? Math.round(cost / committed.length) : cost;
 
-      return `You're booked! \u{1F389} ${property} for $${cost} total ($${perPerson}/person for ${committed.length}).`;
+      const bookMsg = `You're booked! \u{1F389} ${property} for $${cost} total ($${perPerson}/person for ${committed.length}).`;
+      await announceDecision(admin, session.id, bookMsg, fromUser.id);
+      return bookMsg;
     }
   }
 
@@ -1369,7 +1409,9 @@ async function handlePhaseMessage(
           updated_at: new Date().toISOString(),
         }).eq('id', session.id);
 
-        return "Everyone's booked! \u{1F389} First booking is locked. Trip is happening!";
+        const everyoneBookedMsg = "Everyone's booked! \u{1F389} First booking is locked. Trip is happening!";
+        await announceDecision(admin, session.id, everyoneBookedMsg, fromUser.id);
+        return everyoneBookedMsg;
       }
 
       const name = fromUser.display_name ?? 'Someone';
@@ -1410,8 +1452,9 @@ async function handlePhaseMessage(
           }).eq('id', session.id);
 
           const { data: updS } = await admin.from('trip_sessions').select('*').eq('id', session.id).single();
-          const nextMsg = updS ? await advancePhase(admin, updS) : null;
+          const nextMsg = updS ? await advancePhase(admin, updS, fromUser.id) : null;
           const readyMsg = `Budget set to $${lowest}/person. Moving on.`;
+          await announceDecision(admin, session.id, readyMsg, fromUser.id);
           return nextMsg ? readyMsg + '\n\n' + nextMsg : readyMsg;
         }
         return "I didn't catch a specific number from the discussion. Planner can text BUDGET SET $[amount] to lock it in.";
@@ -1436,8 +1479,9 @@ async function handlePhaseMessage(
       }).eq('id', session.id);
 
       const { data: updS } = await admin.from('trip_sessions').select('*').eq('id', session.id).single();
-      const nextMsg = updS ? await advancePhase(admin, updS) : null;
+      const nextMsg = updS ? await advancePhase(admin, updS, fromUser.id) : null;
       const setMsg = `Budget locked at $${bAmount}/person.`;
+      await announceDecision(admin, session.id, setMsg, fromUser.id);
       return nextMsg ? setMsg + '\n\n' + nextMsg : setMsg;
     }
 
@@ -1588,7 +1632,9 @@ async function handleNext(
       ? "Everyone's in! Moving on to flights."
       : `Moving on with ${committed.length} of ${participants.length}. ${droppedNames ? droppedNames + ' didn\u2019t respond \u2014 they can rejoin later.' : ''}`;
 
-    return msg + '\n\nHave you booked your flights? Reply YES, NOT YET, or DRIVING.';
+    const fullMsg = msg + '\n\nHave you booked your flights? Reply YES, NOT YET, or DRIVING.';
+    await announceDecision(admin, session.id, fullMsg, user.id);
+    return fullMsg;
   }
 
   const result = await advancePhase(admin, session, user.id);
@@ -1600,6 +1646,7 @@ async function handleNext(
 async function handleReset(
   admin: SupabaseClient,
   session: TripSession,
+  user: SmsUser,
 ): Promise<string> {
   // Set sub_state to track that we're awaiting reset confirmation
   await admin.from('trip_sessions').update({
@@ -1607,7 +1654,9 @@ async function handleReset(
     updated_at: new Date().toISOString(),
   }).eq('id', session.id);
 
-  return 'Reset everything? I\u2019ll keep the group but clear all decisions. Reply YES to confirm.';
+  const msg = 'Reset everything? I\u2019ll keep the group but clear all decisions. Reply YES to confirm.';
+  await announceDecision(admin, session.id, msg, user.id);
+  return msg;
 }
 
 async function handleResetConfirm(
