@@ -433,7 +433,8 @@ interface IntentHints {
 
 const PLANNING_VERBS = /\b(plan|planning|organize|coordinate|set\s*up|sort)\b/i;
 const TRIP_NOUNS = /\b(trip|getaway|vacation|holiday|weekend|adventure)\b/i;
-const DESTINATION_PREP = /\bto\s+([A-Z][\p{L}\-' ]{1,40})/u;
+const DESTINATION_AFTER_TO = /\bto\s+([A-Z][\p{L}\-' ]{1,40}?)(?=\s+(?:in|on|for|with|next|this|by|the|\d)|[.,!?]|$)/u;
+const DESTINATION_BEFORE_TRIP = /\b(?:a|the|our|my)?\s*([A-Z][\p{L}\-']{2,40})\s+(?:trip|getaway|vacation|holiday|weekend|adventure)\b/u;
 
 /**
  * Light-touch intent detector. Returns hints if the body looks like a planner
@@ -498,15 +499,26 @@ function detectPlanningIntent(body: string): IntentHints | null {
     // Name-only like "Sarah — hi" doesn't count as intent.
   }
 
-  // Format B: planning verb + trip noun
+  // Format B: planning verb + trip noun. Try "to <Place>" first, then
+  // "<Place> trip" (destination preceding the trip noun, e.g. "Plan a
+  // Yosemite trip with my friends").
   if (PLANNING_VERBS.test(trimmed) && TRIP_NOUNS.test(trimmed)) {
-    const destMatch = trimmed.match(DESTINATION_PREP);
-    return {
-      plannerName: null,
-      destination: destMatch ? destMatch[1].trim().replace(/[.,!?]+$/, '') : null,
-      dates: null,
-      budget: null,
-    };
+    let destination: string | null = null;
+    const afterTo = trimmed.match(DESTINATION_AFTER_TO);
+    if (afterTo) {
+      destination = afterTo[1].trim().replace(/[.,!?]+$/, '');
+    } else {
+      const beforeTrip = trimmed.match(DESTINATION_BEFORE_TRIP);
+      if (beforeTrip) {
+        const candidate = beforeTrip[1].trim();
+        // Reject if the captured word is a noise filler ("our", "my", etc.
+        // still get caught by the regex when capitalized at sentence start).
+        if (!/^(our|my|the|a|an)$/i.test(candidate)) {
+          destination = candidate;
+        }
+      }
+    }
+    return { plannerName: null, destination, dates: null, budget: null };
   }
 
   // Format C: bare "trip to <Place>"
