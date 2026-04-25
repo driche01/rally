@@ -1,4 +1,6 @@
 {
+  "_obsolete": true,
+  "_obsolete_reason": "Group-MMS routing was retired in Phase 2 of the 1:1 SMS pivot. Rewrite required for Phase 7.",
   "script_name": "keyword_commands",
   "phones": {
     "planner": "+15551120001",
@@ -14,12 +16,41 @@
     "/person"
   ],
   "messages": [
-    { "from": "+15551120001", "body": "Alice — trip planning", "delay_ms": 0, "_note": "Create group" },
-    { "from": "+15551120002", "body": "STOP", "delay_ms": 1000 },
-    { "from": "+15551120002", "body": "REJOIN", "delay_ms": 1000 },
-    { "from": "+15551120001", "body": "SPLIT $150 3 ways dinner", "delay_ms": 1000 },
-    { "from": "+15551120003", "body": "HELP", "delay_ms": 500 },
-    { "from": "+15551120001", "body": "PAUSE", "delay_ms": 500 },
-    { "from": "+15551120001", "body": "RESUME", "delay_ms": 500 }
+    {
+      "from": "+15551120001",
+      "body": "Alice — trip planning",
+      "delay_ms": 0,
+      "_note": "Create group"
+    },
+    {
+      "from": "+15551120002",
+      "body": "STOP",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551120002",
+      "body": "REJOIN",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551120001",
+      "body": "SPLIT $150 3 ways dinner",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551120003",
+      "body": "HELP",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551120001",
+      "body": "PAUSE",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551120001",
+      "body": "RESUME",
+      "delay_ms": 500
+    }
   ]
 }

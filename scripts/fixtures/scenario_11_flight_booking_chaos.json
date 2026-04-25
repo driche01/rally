@@ -1,4 +1,6 @@
 {
+  "_obsolete": true,
+  "_obsolete_reason": "Group-MMS routing was retired in Phase 2 of the 1:1 SMS pivot. Rewrite required for Phase 7.",
   "script_name": "scenario_11_flight_booking_chaos",
   "description": "Group in AWAITING_FLIGHTS phase. People from different cities, varied booking confirmations, deadline pressure, off-topic messages, someone already booked while others are undecided. Based on real Tulum trip text.",
   "phones": {
@@ -17,57 +19,266 @@
     "Error"
   ],
   "messages": [
-    { "from": "+15551310001", "body": "Hey", "delay_ms": 0, "_note": "1:1 planner registration", "_is1to1": true },
-    { "from": "+15551310001", "body": "Caroline - Tulum", "delay_ms": 1000, "_note": "INTRO" },
-    { "from": "+15551310002", "body": "Mike", "delay_ms": 1000 },
-    { "from": "+15551310003", "body": "Julia", "delay_ms": 1000 },
-    { "from": "+15551310004", "body": "Abbey", "delay_ms": 1000 },
-    { "from": "+15551310005", "body": "Ross", "delay_ms": 1000 },
-    { "from": "+15551310006", "body": "Sofia", "delay_ms": 1000 },
-    { "from": "+15551310001", "body": "that's everyone", "delay_ms": 2000, "_note": "INTRO complete" },
-    { "from": "+15551310001", "body": "Nov 12-16 works for everyone?", "delay_ms": 1000 },
-    { "from": "+15551310002", "body": "works", "delay_ms": 500 },
-    { "from": "+15551310003", "body": "yep", "delay_ms": 500 },
-    { "from": "+15551310004", "body": "yes", "delay_ms": 500 },
-    { "from": "+15551310005", "body": "yes", "delay_ms": 500 },
-    { "from": "+15551310006", "body": "yes", "delay_ms": 500 },
-    { "from": "+15551310001", "body": "NEXT", "delay_ms": 2000, "_note": "Advance through phases to get to flights" },
-    { "from": "+15551310001", "body": "NEXT", "delay_ms": 2000 },
-    { "from": "+15551310002", "body": "New York", "delay_ms": 1000, "_note": "COLLECTING_ORIGINS" },
-    { "from": "+15551310003", "body": "Boston", "delay_ms": 1000 },
-    { "from": "+15551310004", "body": "New York", "delay_ms": 1000 },
-    { "from": "+15551310005", "body": "New York", "delay_ms": 1000 },
-    { "from": "+15551310006", "body": "New York", "delay_ms": 1000 },
-    { "from": "+15551310001", "body": "New York", "delay_ms": 1000 },
-    { "from": "+15551310001", "body": "YES", "delay_ms": 2000, "_note": "Commit poll" },
-    { "from": "+15551310002", "body": "YES", "delay_ms": 500 },
-    { "from": "+15551310003", "body": "YES", "delay_ms": 500 },
-    { "from": "+15551310004", "body": "YES", "delay_ms": 500 },
-    { "from": "+15551310005", "body": "YES", "delay_ms": 500 },
-    { "from": "+15551310006", "body": "YES", "delay_ms": 500 },
-
-    { "from": "+15551310003", "body": "Flights", "delay_ms": 3000, "_note": "AWAITING_FLIGHTS: single word, not a booking confirmation" },
-    { "from": "+15551310003", "body": "Tonight?", "delay_ms": 500, "_note": "Asking if people are booking tonight — not a booking" },
-    { "from": "+15551310002", "body": "y'all gotta get yours before the price go up", "delay_ms": 1000, "_note": "Urging others — not a booking" },
-    { "from": "+15551310003", "body": "Did you actually book it", "delay_ms": 1000, "_note": "Asking someone else — not a booking" },
-    { "from": "+15551310002", "body": "mine are actually booked", "delay_ms": 1000, "_note": "BOOKING CONFIRMATION: varied phrasing. Should be detected as BOOKED" },
-    { "from": "+15551310005", "body": "can we actually book", "delay_ms": 1000, "_note": "Question, not a booking" },
-    { "from": "+15551310001", "body": "Okay I'm down to book tonight", "delay_ms": 1000, "_note": "FUTURE INTENT: not yet booked. Should NOT mark as booked" },
-
-    { "from": "+15551310005", "body": "can someone send me the flights", "delay_ms": 2000, "_note": "Request for info — agent should stay silent" },
-    { "from": "+15551310004", "body": "It's expensive", "delay_ms": 1000, "_note": "Commentary — not a booking" },
-    { "from": "+15551310005", "body": "how much?", "delay_ms": 500, "_note": "Question — not a booking" },
-    { "from": "+15551310004", "body": "440", "delay_ms": 500, "_note": "Price info — not a booking" },
-
-    { "from": "+15551310006", "body": "NEW SABRINA CARPENTER ALBUM ALERT", "delay_ms": 3000, "_note": "COMPLETELY OFF-TOPIC: must be ignored" },
-    { "from": "+15551310006", "body": "Thanks Harry", "delay_ms": 500, "_note": "Off-topic follow-up" },
-
-    { "from": "+15551310001", "body": "Important announcement! This weekend has been declared flight purchasing weekend. Anyone who doesn't buy a flight this weekend is not guaranteed their sleeping arrangement", "delay_ms": 3000, "_note": "DEADLINE: planner sets booking deadline with playful urgency" },
-    { "from": "+15551310004", "body": "I booked my Flight", "delay_ms": 2000, "_note": "BOOKING: capitalized Flight, should still be detected" },
-    { "from": "+15551310006", "body": "I may or may not have also booked my flight", "delay_ms": 1000, "_note": "AMBIGUOUS BOOKING: playful phrasing. Should probably be treated as booked" },
-    { "from": "+15551310003", "body": "I booked", "delay_ms": 1000, "_note": "BOOKING: clean confirmation" },
-    { "from": "+15551310004", "body": "Gonna book tn", "delay_ms": 1000, "_note": "FUTURE INTENT: 'tn' = tonight. NOT yet booked" },
-
-    { "from": "+15551310001", "body": "STATUS", "delay_ms": 2000, "_note": "Status should show who has booked vs not" }
+    {
+      "from": "+15551310001",
+      "body": "Hey",
+      "delay_ms": 0,
+      "_note": "1:1 planner registration",
+      "_is1to1": true
+    },
+    {
+      "from": "+15551310001",
+      "body": "Caroline - Tulum",
+      "delay_ms": 1000,
+      "_note": "INTRO"
+    },
+    {
+      "from": "+15551310002",
+      "body": "Mike",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551310003",
+      "body": "Julia",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551310004",
+      "body": "Abbey",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551310005",
+      "body": "Ross",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551310006",
+      "body": "Sofia",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551310001",
+      "body": "that's everyone",
+      "delay_ms": 2000,
+      "_note": "INTRO complete"
+    },
+    {
+      "from": "+15551310001",
+      "body": "Nov 12-16 works for everyone?",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551310002",
+      "body": "works",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551310003",
+      "body": "yep",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551310004",
+      "body": "yes",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551310005",
+      "body": "yes",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551310006",
+      "body": "yes",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551310001",
+      "body": "NEXT",
+      "delay_ms": 2000,
+      "_note": "Advance through phases to get to flights"
+    },
+    {
+      "from": "+15551310001",
+      "body": "NEXT",
+      "delay_ms": 2000
+    },
+    {
+      "from": "+15551310002",
+      "body": "New York",
+      "delay_ms": 1000,
+      "_note": "COLLECTING_ORIGINS"
+    },
+    {
+      "from": "+15551310003",
+      "body": "Boston",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551310004",
+      "body": "New York",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551310005",
+      "body": "New York",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551310006",
+      "body": "New York",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551310001",
+      "body": "New York",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551310001",
+      "body": "YES",
+      "delay_ms": 2000,
+      "_note": "Commit poll"
+    },
+    {
+      "from": "+15551310002",
+      "body": "YES",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551310003",
+      "body": "YES",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551310004",
+      "body": "YES",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551310005",
+      "body": "YES",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551310006",
+      "body": "YES",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551310003",
+      "body": "Flights",
+      "delay_ms": 3000,
+      "_note": "AWAITING_FLIGHTS: single word, not a booking confirmation"
+    },
+    {
+      "from": "+15551310003",
+      "body": "Tonight?",
+      "delay_ms": 500,
+      "_note": "Asking if people are booking tonight — not a booking"
+    },
+    {
+      "from": "+15551310002",
+      "body": "y'all gotta get yours before the price go up",
+      "delay_ms": 1000,
+      "_note": "Urging others — not a booking"
+    },
+    {
+      "from": "+15551310003",
+      "body": "Did you actually book it",
+      "delay_ms": 1000,
+      "_note": "Asking someone else — not a booking"
+    },
+    {
+      "from": "+15551310002",
+      "body": "mine are actually booked",
+      "delay_ms": 1000,
+      "_note": "BOOKING CONFIRMATION: varied phrasing. Should be detected as BOOKED"
+    },
+    {
+      "from": "+15551310005",
+      "body": "can we actually book",
+      "delay_ms": 1000,
+      "_note": "Question, not a booking"
+    },
+    {
+      "from": "+15551310001",
+      "body": "Okay I'm down to book tonight",
+      "delay_ms": 1000,
+      "_note": "FUTURE INTENT: not yet booked. Should NOT mark as booked"
+    },
+    {
+      "from": "+15551310005",
+      "body": "can someone send me the flights",
+      "delay_ms": 2000,
+      "_note": "Request for info — agent should stay silent"
+    },
+    {
+      "from": "+15551310004",
+      "body": "It's expensive",
+      "delay_ms": 1000,
+      "_note": "Commentary — not a booking"
+    },
+    {
+      "from": "+15551310005",
+      "body": "how much?",
+      "delay_ms": 500,
+      "_note": "Question — not a booking"
+    },
+    {
+      "from": "+15551310004",
+      "body": "440",
+      "delay_ms": 500,
+      "_note": "Price info — not a booking"
+    },
+    {
+      "from": "+15551310006",
+      "body": "NEW SABRINA CARPENTER ALBUM ALERT",
+      "delay_ms": 3000,
+      "_note": "COMPLETELY OFF-TOPIC: must be ignored"
+    },
+    {
+      "from": "+15551310006",
+      "body": "Thanks Harry",
+      "delay_ms": 500,
+      "_note": "Off-topic follow-up"
+    },
+    {
+      "from": "+15551310001",
+      "body": "Important announcement! This weekend has been declared flight purchasing weekend. Anyone who doesn't buy a flight this weekend is not guaranteed their sleeping arrangement",
+      "delay_ms": 3000,
+      "_note": "DEADLINE: planner sets booking deadline with playful urgency"
+    },
+    {
+      "from": "+15551310004",
+      "body": "I booked my Flight",
+      "delay_ms": 2000,
+      "_note": "BOOKING: capitalized Flight, should still be detected"
+    },
+    {
+      "from": "+15551310006",
+      "body": "I may or may not have also booked my flight",
+      "delay_ms": 1000,
+      "_note": "AMBIGUOUS BOOKING: playful phrasing. Should probably be treated as booked"
+    },
+    {
+      "from": "+15551310003",
+      "body": "I booked",
+      "delay_ms": 1000,
+      "_note": "BOOKING: clean confirmation"
+    },
+    {
+      "from": "+15551310004",
+      "body": "Gonna book tn",
+      "delay_ms": 1000,
+      "_note": "FUTURE INTENT: 'tn' = tonight. NOT yet booked"
+    },
+    {
+      "from": "+15551310001",
+      "body": "STATUS",
+      "delay_ms": 2000,
+      "_note": "Status should show who has booked vs not"
+    }
   ]
 }

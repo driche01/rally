@@ -1,4 +1,6 @@
 {
+  "_obsolete": true,
+  "_obsolete_reason": "Group-MMS routing was retired in Phase 2 of the 1:1 SMS pivot. Rewrite required for Phase 7.",
   "script_name": "scenario_21_planner_monologue",
   "description": "Planner sends 4-5 messages in a row as a wall of info: destination pitch, dates, budget, lodging links, rules. Tests that agent processes multi-message monologues correctly without responding to each one individually or getting confused by the sequence. Based on Bri's Shasta opening and Caroline's Tulum pitch.",
   "phones": {
@@ -16,30 +18,122 @@
     "Could not parse"
   ],
   "messages": [
-    { "from": "+15551410001", "body": "Hey", "delay_ms": 0, "_note": "1:1 planner registration", "_is1to1": true },
-    { "from": "+15551410001", "body": "Bri - Lake Shasta", "delay_ms": 1000, "_note": "INTRO: planner names self + destination" },
-    { "from": "+15551410002", "body": "Nikki", "delay_ms": 1000 },
-    { "from": "+15551410003", "body": "Farah", "delay_ms": 1000 },
-    { "from": "+15551410004", "body": "Hannah", "delay_ms": 1000 },
-    { "from": "+15551410001", "body": "that's everyone", "delay_ms": 2000 },
-
-    { "from": "+15551410001", "body": "Hello friends! This is the crew that completed the Shasta houseboat interest survey approximately 4 months ago (+ a few I'm adding back in the hopes that momentum might encourage participation)", "delay_ms": 2000, "_note": "MONOLOGUE MSG 1: context-setting. No decision content — agent should not respond" },
-    { "from": "+15551410001", "body": "Based on responses, September seemed to be our best bet. Checked on availability with Holiday Harbors (which Nick + Amanda used) and seems like there is still good availability", "delay_ms": 500, "_note": "MONOLOGUE MSG 2: references prior survey + vendor. Contains month preference but no exact dates" },
-    { "from": "+15551410001", "body": "I'd like to propose the weekend of 9/12 - like this if interested!", "delay_ms": 500, "_note": "MONOLOGUE MSG 3: actual date proposal (Sep 12). Agent should detect this one as the date" },
-    { "from": "+15551410001", "body": "Price pp will depend on exact #s but it looks to be less than $200 pp for the weekend for the boat (+ whatever it costs for gas for boat / transit there / food, etc.)", "delay_ms": 500, "_note": "MONOLOGUE MSG 4: budget info. Agent should extract ~$200pp" },
-    { "from": "+15551410001", "body": "In the offseason they say minimum three nights but I feel like we could still pay for three nights and do two if preferred? Can confirm if helpful!", "delay_ms": 500, "_note": "MONOLOGUE MSG 5: logistics detail about minimum stay. No decision needed from group" },
-    { "from": "+15551410001", "body": "It will be somewhat rustic - but here are the boats if you want to check it out", "delay_ms": 500, "_note": "MONOLOGUE MSG 6: lodging description" },
-    { "from": "+15551410001", "body": "https://lakeshasta.com/houseboats/", "delay_ms": 500, "_note": "MONOLOGUE MSG 7: URL shared. Agent should ignore links" },
-    { "from": "+15551410001", "body": "Amanda noted these boats weren't as fancy as some others but they have better reviews as does the harbor", "delay_ms": 500, "_note": "MONOLOGUE MSG 8: third-party opinion. Ignore" },
-    { "from": "+15551410001", "body": "Feel free to leave the chat if not interested or not free!", "delay_ms": 500, "_note": "MONOLOGUE MSG 9: opt-out instruction. Agent should NOT treat this as the planner leaving" },
-
-    { "from": "+15551410002", "body": "Bless you Bri for being an organizer. Also love the use of rustic", "delay_ms": 2000, "_note": "Compliment — not a date vote or trip decision" },
-    { "from": "+15551410003", "body": "A Bri bday boat I c u", "delay_ms": 1000, "_note": "Slang commentary — not a decision" },
-
-    { "from": "+15551410004", "body": "bri you planning rockstar. i'm sadly out for the first two wks for sept!", "delay_ms": 2000, "_note": "Compliment + partial availability constraint" },
-
-    { "from": "+15551410001", "body": "Also flexible weekend of 9/5 if better", "delay_ms": 2000, "_note": "SECOND DATE OPTION: planner adding alternative. Agent should track both 9/12 and 9/5" },
-
-    { "from": "+15551410001", "body": "STATUS", "delay_ms": 2000, "_note": "Status check: should show destination (Lake Shasta), two date options, ~$200pp budget, and any constraints" }
+    {
+      "from": "+15551410001",
+      "body": "Hey",
+      "delay_ms": 0,
+      "_note": "1:1 planner registration",
+      "_is1to1": true
+    },
+    {
+      "from": "+15551410001",
+      "body": "Bri - Lake Shasta",
+      "delay_ms": 1000,
+      "_note": "INTRO: planner names self + destination"
+    },
+    {
+      "from": "+15551410002",
+      "body": "Nikki",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551410003",
+      "body": "Farah",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551410004",
+      "body": "Hannah",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551410001",
+      "body": "that's everyone",
+      "delay_ms": 2000
+    },
+    {
+      "from": "+15551410001",
+      "body": "Hello friends! This is the crew that completed the Shasta houseboat interest survey approximately 4 months ago (+ a few I'm adding back in the hopes that momentum might encourage participation)",
+      "delay_ms": 2000,
+      "_note": "MONOLOGUE MSG 1: context-setting. No decision content — agent should not respond"
+    },
+    {
+      "from": "+15551410001",
+      "body": "Based on responses, September seemed to be our best bet. Checked on availability with Holiday Harbors (which Nick + Amanda used) and seems like there is still good availability",
+      "delay_ms": 500,
+      "_note": "MONOLOGUE MSG 2: references prior survey + vendor. Contains month preference but no exact dates"
+    },
+    {
+      "from": "+15551410001",
+      "body": "I'd like to propose the weekend of 9/12 - like this if interested!",
+      "delay_ms": 500,
+      "_note": "MONOLOGUE MSG 3: actual date proposal (Sep 12). Agent should detect this one as the date"
+    },
+    {
+      "from": "+15551410001",
+      "body": "Price pp will depend on exact #s but it looks to be less than $200 pp for the weekend for the boat (+ whatever it costs for gas for boat / transit there / food, etc.)",
+      "delay_ms": 500,
+      "_note": "MONOLOGUE MSG 4: budget info. Agent should extract ~$200pp"
+    },
+    {
+      "from": "+15551410001",
+      "body": "In the offseason they say minimum three nights but I feel like we could still pay for three nights and do two if preferred? Can confirm if helpful!",
+      "delay_ms": 500,
+      "_note": "MONOLOGUE MSG 5: logistics detail about minimum stay. No decision needed from group"
+    },
+    {
+      "from": "+15551410001",
+      "body": "It will be somewhat rustic - but here are the boats if you want to check it out",
+      "delay_ms": 500,
+      "_note": "MONOLOGUE MSG 6: lodging description"
+    },
+    {
+      "from": "+15551410001",
+      "body": "https://lakeshasta.com/houseboats/",
+      "delay_ms": 500,
+      "_note": "MONOLOGUE MSG 7: URL shared. Agent should ignore links"
+    },
+    {
+      "from": "+15551410001",
+      "body": "Amanda noted these boats weren't as fancy as some others but they have better reviews as does the harbor",
+      "delay_ms": 500,
+      "_note": "MONOLOGUE MSG 8: third-party opinion. Ignore"
+    },
+    {
+      "from": "+15551410001",
+      "body": "Feel free to leave the chat if not interested or not free!",
+      "delay_ms": 500,
+      "_note": "MONOLOGUE MSG 9: opt-out instruction. Agent should NOT treat this as the planner leaving"
+    },
+    {
+      "from": "+15551410002",
+      "body": "Bless you Bri for being an organizer. Also love the use of rustic",
+      "delay_ms": 2000,
+      "_note": "Compliment — not a date vote or trip decision"
+    },
+    {
+      "from": "+15551410003",
+      "body": "A Bri bday boat I c u",
+      "delay_ms": 1000,
+      "_note": "Slang commentary — not a decision"
+    },
+    {
+      "from": "+15551410004",
+      "body": "bri you planning rockstar. i'm sadly out for the first two wks for sept!",
+      "delay_ms": 2000,
+      "_note": "Compliment + partial availability constraint"
+    },
+    {
+      "from": "+15551410001",
+      "body": "Also flexible weekend of 9/5 if better",
+      "delay_ms": 2000,
+      "_note": "SECOND DATE OPTION: planner adding alternative. Agent should track both 9/12 and 9/5"
+    },
+    {
+      "from": "+15551410001",
+      "body": "STATUS",
+      "delay_ms": 2000,
+      "_note": "Status check: should show destination (Lake Shasta), two date options, ~$200pp budget, and any constraints"
+    }
   ]
 }

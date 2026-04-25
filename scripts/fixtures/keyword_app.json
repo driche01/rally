@@ -1,4 +1,6 @@
 {
+  "_obsolete": true,
+  "_obsolete_reason": "Group-MMS routing was retired in Phase 2 of the 1:1 SMS pivot. Rewrite required for Phase 7.",
   "script_name": "keyword_app",
   "_purpose": "Verifies the APP keyword reply (added 2026-04-24). Anyone in any thread can text APP / GET APP / DOWNLOAD to receive the install link. Silent fallback if APP_DOWNLOAD_URL secret is unset — these assertions assume the secret IS configured.",
   "phones": {
@@ -11,9 +13,29 @@
     "You'll see your trips, polls, and everything we're planning here"
   ],
   "messages": [
-    { "from": "+15551300001", "body": "APP", "delay_ms": 0, "_note": "1:1 APP keyword from a fresh phone" },
-    { "from": "+15551300001", "body": "Jamie — Tulum", "delay_ms": 1000, "_note": "Group thread starts" },
-    { "from": "+15551300002", "body": "GET APP", "delay_ms": 1000, "_note": "Mid-conversation APP request from a participant" },
-    { "from": "+15551300002", "body": "download rally", "delay_ms": 500, "_note": "Casing variant" }
+    {
+      "from": "+15551300001",
+      "body": "APP",
+      "delay_ms": 0,
+      "_note": "1:1 APP keyword from a fresh phone"
+    },
+    {
+      "from": "+15551300001",
+      "body": "Jamie — Tulum",
+      "delay_ms": 1000,
+      "_note": "Group thread starts"
+    },
+    {
+      "from": "+15551300002",
+      "body": "GET APP",
+      "delay_ms": 1000,
+      "_note": "Mid-conversation APP request from a participant"
+    },
+    {
+      "from": "+15551300002",
+      "body": "download rally",
+      "delay_ms": 500,
+      "_note": "Casing variant"
+    }
   ]
 }

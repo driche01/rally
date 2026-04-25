@@ -24,8 +24,13 @@ const onlyScenario = onlyIdx !== -1 ? parseInt(args[onlyIdx + 1]) : null;
 
 const baseUrlIdx = args.indexOf('--base-url');
 const baseUrlArg = baseUrlIdx !== -1 ? `--base-url ${args[baseUrlIdx + 1]}` : '';
+const includeObsoleteArg = args.includes('--include-obsolete') ? '--include-obsolete' : '';
 
 const SCENARIOS = [
+  // 1:1 pivot scenarios (Phase 2). Run by default.
+  { id: 100, file: '1to1_planner_kickoff.json', name: '1:1 Planner Kickoff' },
+  { id: 101, file: '1to1_planner_followup.json', name: '1:1 Planner Follow-up' },
+  // Legacy group-MMS scenarios (skipped unless --include-obsolete).
   { id: 1, file: 'scenario_1_late_joiner.json', name: 'The Late Joiner' },
   { id: 2, file: 'scenario_2_indecisive_group.json', name: 'The Indecisive Group' },
   { id: 3, file: 'scenario_3_budget_blowup.json', name: 'Budget Blowup' },
@@ -54,7 +59,7 @@ const cleanupScript = path.join(__dirname, 'cleanup-between-scenarios.js');
 
 for (const scenario of toRun) {
   const fixturePath = path.join(__dirname, 'fixtures', scenario.file);
-  const cmd = `node ${path.join(__dirname, 'simulate.js')} --script ${fixturePath} ${baseUrlArg}`.trim();
+  const cmd = `node ${path.join(__dirname, 'simulate.js')} --script ${fixturePath} ${baseUrlArg} ${includeObsoleteArg}`.trim();
 
   console.log(`\n${'─'.repeat(50)}`);
   console.log(`  Scenario ${scenario.id}: ${scenario.name}`);

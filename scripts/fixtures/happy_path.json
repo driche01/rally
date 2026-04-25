@@ -1,4 +1,6 @@
 {
+  "_obsolete": true,
+  "_obsolete_reason": "Group-MMS routing was retired in Phase 2 of the 1:1 SMS pivot. Rewrite required for Phase 7.",
   "script_name": "happy_path",
   "phones": {
     "planner": "+15551110001",
@@ -11,11 +13,37 @@
     "drop your name"
   ],
   "messages": [
-    { "from": "+15551110001", "body": "Hey", "delay_ms": 0, "_note": "1:1 planner registration" },
-    { "from": "+15551110001", "body": "Jake — Tulum, Nov 8-12", "delay_ms": 1000, "_note": "Group thread created" },
-    { "from": "+15551110002", "body": "Sarah — Tulum works!", "delay_ms": 1000 },
-    { "from": "+15551110003", "body": "Mike — yes Tulum", "delay_ms": 1000 },
-    { "from": "+15551110002", "body": "STATUS", "delay_ms": 1000 },
-    { "from": "+15551110001", "body": "HELP", "delay_ms": 500 }
+    {
+      "from": "+15551110001",
+      "body": "Hey",
+      "delay_ms": 0,
+      "_note": "1:1 planner registration"
+    },
+    {
+      "from": "+15551110001",
+      "body": "Jake — Tulum, Nov 8-12",
+      "delay_ms": 1000,
+      "_note": "Group thread created"
+    },
+    {
+      "from": "+15551110002",
+      "body": "Sarah — Tulum works!",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551110003",
+      "body": "Mike — yes Tulum",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551110002",
+      "body": "STATUS",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551110001",
+      "body": "HELP",
+      "delay_ms": 500
+    }
   ]
 }

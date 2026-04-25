@@ -173,3 +173,35 @@ export function joinLinkPlannerShare(opts: { url: string }): string {
     `They fill it out, reply YES to confirm, and I'll add them to the trip.`
   );
 }
+
+/**
+ * Reply to a fresh planner who texts Rally with planning intent
+ * ("Plan a Yosemite trip with my friends"). Phase 2 of the 1:1 pivot:
+ * we auto-create the session + mint a join link in the same turn so the
+ * planner can immediately share it. Includes the URL prominently and a
+ * one-line explainer of the model.
+ */
+export function plannerKickoffWithLink(opts: {
+  url: string;
+  destination?: string | null;
+}): string {
+  const dest = opts.destination ? ` to ${opts.destination}` : '';
+  return (
+    `Got it \u2014 starting a trip${dest}. Share this link with your friends: ${opts.url}\n\n` +
+    `They fill it out, reply YES to confirm, and I'll text each of them as we plan. ` +
+    `Reply HELP anytime for what I can do.`
+  );
+}
+
+/**
+ * Soft fallback when a phone with no active session texts something that
+ * isn't planning intent and isn't a greeting (the welcome path runs via
+ * plannerWelcomeOneToOne). Keep it short — this is the "I don't know what
+ * to do with this" reply, not a sales pitch.
+ */
+export function noActiveSessionFallback(): string {
+  return (
+    `I don't have a trip with you yet. ` +
+    `Reply with a destination (e.g. "Plan a Tulum trip") to start one, or HELP to see commands.`
+  );
+}

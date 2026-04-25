@@ -56,14 +56,13 @@ const PREFIX_KEYWORDS: Record<string, { plannerOnly: boolean }> = {
 };
 
 export interface RoutedMessage {
-  type: 'keyword' | 'phase' | '1to1' | 'new_session';
+  type: 'keyword' | 'phase' | 'new_session';
   keyword?: string;
   keywordArgs?: string;
   body: string;
   fromUser: SmsUser;
   session: TripSession | null;
   participant: TripSessionParticipant | null;
-  is1to1: boolean;
 }
 
 // Helper: format session dates for display in confirmation messages
@@ -149,18 +148,11 @@ export async function routeMessage(
   admin: SupabaseClient,
   message: RoutedMessage,
 ): Promise<string | null> {
-  const { session, fromUser, body, is1to1 } = message;
+  const { session, body, fromUser } = message;
 
-  // ─── 1:1 message (no group thread) ─────────────────────────────────────
-  if (is1to1) {
-    return handle1to1(admin, fromUser);
-  }
-
-  // ─── No existing session — new group thread ────────────────────────────
-  if (!session) {
-    // This is handled by the webhook receiver (creates session + routes back)
-    return null;
-  }
+  // No active session — inbound-processor handles new-planner kickoff +
+  // welcome path before this is called. Defensive null-return for safety.
+  if (!session) return null;
 
   // ─── Re-engagement YES ────────────────────────────────────────────────
   if (session.status === 'RE_ENGAGEMENT_PENDING' && body.trim().toUpperCase() === 'YES') {
@@ -193,14 +185,6 @@ export async function routeMessage(
 
   // ─── Phase-based routing ───────────────────────────────────────────────
   return handlePhaseMessage(admin, message);
-}
-
-// ─── 1:1 handler ─────────────────────────────────────────────────────────────
-
-async function handle1to1(_admin: SupabaseClient, _user: SmsUser): Promise<string | null> {
-  // Stay silent on 1:1 messages — Rally only operates in group threads.
-  // The user will get the proper intro when they add Rally to a group.
-  return null;
 }
 
 // ─── Keyword handlers ────────────────────────────────────────────────────────

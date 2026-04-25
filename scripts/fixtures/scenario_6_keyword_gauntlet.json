@@ -1,4 +1,6 @@
 {
+  "_obsolete": true,
+  "_obsolete_reason": "Group-MMS routing was retired in Phase 2 of the 1:1 SMS pivot. Rewrite required for Phase 7.",
   "script_name": "scenario_6_keyword_gauntlet",
   "description": "HELP, STATUS, FOCUS, PAUSE, RESUME, STOP, REJOIN, BOOKED, RESET all fired in sequence. Tests every keyword in the system.",
   "phones": {
@@ -17,35 +19,135 @@
   ],
   "assert_outbound_does_not_contain": [],
   "messages": [
-    { "from": "+15551260001", "body": "Hey", "delay_ms": 0, "_note": "1:1 planner registration" },
-    { "from": "+15551260001", "body": "Jake — Tulum trip", "delay_ms": 1000, "_note": "INTRO: create group" },
-    { "from": "+15551260002", "body": "Sarah — in", "delay_ms": 1000 },
-    { "from": "+15551260003", "body": "Mike — in", "delay_ms": 1000 },
-
-    { "from": "+15551260002", "body": "HELP", "delay_ms": 1000, "_note": "HELP: anyone can use. Should show current phase and available commands." },
-    { "from": "+15551260001", "body": "STATUS", "delay_ms": 500, "_note": "STATUS: shows trip summary" },
-    { "from": "+15551260002", "body": "FOCUS", "delay_ms": 500, "_note": "FOCUS: same as STATUS, re-anchors the group" },
-
-    { "from": "+15551260001", "body": "PAUSE", "delay_ms": 1000, "_note": "PAUSE (planner-only): suspends session" },
-    { "from": "+15551260002", "body": "RESUME", "delay_ms": 1000, "_note": "RESUME attempted by non-planner: should be rejected" },
-    { "from": "+15551260001", "body": "RESUME", "delay_ms": 500, "_note": "RESUME by planner: reactivates" },
-
-    { "from": "+15551260002", "body": "STOP", "delay_ms": 1000, "_note": "STOP: p2 opts out" },
-    { "from": "+15551260002", "body": "REJOIN", "delay_ms": 1000, "_note": "REJOIN: p2 opts back in" },
-
-    { "from": "+15551260003", "body": "BOOKED", "delay_ms": 1000, "_note": "BOOKED: p3 marks flights as confirmed" },
-
-    { "from": "+15551260002", "body": "RESET", "delay_ms": 1000, "_note": "RESET attempted by non-planner: should be rejected" },
-    { "from": "+15551260001", "body": "RESET", "delay_ms": 500, "_note": "RESET by planner: confirms before executing" },
-    { "from": "+15551260001", "body": "YES", "delay_ms": 500, "_note": "RESET confirmed" },
-
-    { "from": "+15551260001", "body": "DEADLINE flights Sep 1", "delay_ms": 1000, "_note": "DEADLINE (planner-only): sets a deadline" },
-    { "from": "+15551260001", "body": "DESTINATION Cancun", "delay_ms": 1000, "_note": "DESTINATION (planner-only): changes destination" },
-
-    { "from": "+15551260001", "body": "PAID STATUS", "delay_ms": 500, "_note": "PAID STATUS: check split payment status (none expected)" },
-
-    { "from": "+15551260001", "body": "STAUS", "delay_ms": 500, "_note": "TYPO: STAUS → STATUS. Fuzzy matching should correct." },
-    { "from": "+15551260002", "body": "HLEP", "delay_ms": 500, "_note": "TYPO: HLEP → HELP. Fuzzy matching should correct." },
-    { "from": "+15551260003", "body": "BOKKED", "delay_ms": 500, "_note": "TYPO: BOKKED → BOOKED. Fuzzy matching should correct." }
+    {
+      "from": "+15551260001",
+      "body": "Hey",
+      "delay_ms": 0,
+      "_note": "1:1 planner registration"
+    },
+    {
+      "from": "+15551260001",
+      "body": "Jake — Tulum trip",
+      "delay_ms": 1000,
+      "_note": "INTRO: create group"
+    },
+    {
+      "from": "+15551260002",
+      "body": "Sarah — in",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551260003",
+      "body": "Mike — in",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551260002",
+      "body": "HELP",
+      "delay_ms": 1000,
+      "_note": "HELP: anyone can use. Should show current phase and available commands."
+    },
+    {
+      "from": "+15551260001",
+      "body": "STATUS",
+      "delay_ms": 500,
+      "_note": "STATUS: shows trip summary"
+    },
+    {
+      "from": "+15551260002",
+      "body": "FOCUS",
+      "delay_ms": 500,
+      "_note": "FOCUS: same as STATUS, re-anchors the group"
+    },
+    {
+      "from": "+15551260001",
+      "body": "PAUSE",
+      "delay_ms": 1000,
+      "_note": "PAUSE (planner-only): suspends session"
+    },
+    {
+      "from": "+15551260002",
+      "body": "RESUME",
+      "delay_ms": 1000,
+      "_note": "RESUME attempted by non-planner: should be rejected"
+    },
+    {
+      "from": "+15551260001",
+      "body": "RESUME",
+      "delay_ms": 500,
+      "_note": "RESUME by planner: reactivates"
+    },
+    {
+      "from": "+15551260002",
+      "body": "STOP",
+      "delay_ms": 1000,
+      "_note": "STOP: p2 opts out"
+    },
+    {
+      "from": "+15551260002",
+      "body": "REJOIN",
+      "delay_ms": 1000,
+      "_note": "REJOIN: p2 opts back in"
+    },
+    {
+      "from": "+15551260003",
+      "body": "BOOKED",
+      "delay_ms": 1000,
+      "_note": "BOOKED: p3 marks flights as confirmed"
+    },
+    {
+      "from": "+15551260002",
+      "body": "RESET",
+      "delay_ms": 1000,
+      "_note": "RESET attempted by non-planner: should be rejected"
+    },
+    {
+      "from": "+15551260001",
+      "body": "RESET",
+      "delay_ms": 500,
+      "_note": "RESET by planner: confirms before executing"
+    },
+    {
+      "from": "+15551260001",
+      "body": "YES",
+      "delay_ms": 500,
+      "_note": "RESET confirmed"
+    },
+    {
+      "from": "+15551260001",
+      "body": "DEADLINE flights Sep 1",
+      "delay_ms": 1000,
+      "_note": "DEADLINE (planner-only): sets a deadline"
+    },
+    {
+      "from": "+15551260001",
+      "body": "DESTINATION Cancun",
+      "delay_ms": 1000,
+      "_note": "DESTINATION (planner-only): changes destination"
+    },
+    {
+      "from": "+15551260001",
+      "body": "PAID STATUS",
+      "delay_ms": 500,
+      "_note": "PAID STATUS: check split payment status (none expected)"
+    },
+    {
+      "from": "+15551260001",
+      "body": "STAUS",
+      "delay_ms": 500,
+      "_note": "TYPO: STAUS → STATUS. Fuzzy matching should correct."
+    },
+    {
+      "from": "+15551260002",
+      "body": "HLEP",
+      "delay_ms": 500,
+      "_note": "TYPO: HLEP → HELP. Fuzzy matching should correct."
+    },
+    {
+      "from": "+15551260003",
+      "body": "BOKKED",
+      "delay_ms": 500,
+      "_note": "TYPO: BOKKED → BOOKED. Fuzzy matching should correct."
+    }
   ]
 }

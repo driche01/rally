@@ -1,4 +1,6 @@
 {
+  "_obsolete": true,
+  "_obsolete_reason": "Group-MMS routing was retired in Phase 2 of the 1:1 SMS pivot. Rewrite required for Phase 7.",
   "script_name": "scenario_22_full_lifecycle_chaos",
   "description": "A single realistic trip from INTRO through post-booking that includes: messy name intros, off-topic banter mixed with decisions, someone dropping mid-planning, date negotiation with pushback, someone booking ahead of the group, planner setting deadlines, varied BOOKED phrasings, and post-booking payment coordination. The hardest possible end-to-end test. Synthesized from all 4 real conversations.",
   "phones": {
@@ -20,68 +22,290 @@
     "I won't message you anymore"
   ],
   "messages": [
-    { "from": "+15551420001", "body": "Hey", "delay_ms": 0, "_note": "1:1 planner registration", "_is1to1": true },
-    { "from": "+15551420001", "body": "Caroline - Tulum", "delay_ms": 1000, "_note": "INTRO: planner with destination" },
-    { "from": "+15551420002", "body": "hey hey abbey here 🎉", "delay_ms": 1000, "_note": "INTRO: name buried in sentence with emoji" },
-    { "from": "+15551420003", "body": "Ross", "delay_ms": 1000, "_note": "INTRO: clean name" },
-    { "from": "+15551420004", "body": "yo", "delay_ms": 1000, "_note": "INTRO: no name given" },
-    { "from": "+15551420004", "body": "oh im mike btw", "delay_ms": 500, "_note": "INTRO: delayed name" },
-    { "from": "+15551420005", "body": "Julia 💕", "delay_ms": 1000, "_note": "INTRO: name with emoji" },
-    { "from": "+15551420006", "body": "Noah", "delay_ms": 1000, "_note": "INTRO: ghost participant" },
-    { "from": "+15551420001", "body": "that's everyone", "delay_ms": 2000 },
-
-    { "from": "+15551420003", "body": "What city?", "delay_ms": 1000, "_note": "Out-of-order: destination was already mentioned" },
-    { "from": "+15551420001", "body": "Have been looking at Tulum", "delay_ms": 500 },
-    { "from": "+15551420004", "body": "is place like this gonna be conducive to like seeing mexico and stuff or is this more resort style", "delay_ms": 1000, "_note": "Activity question — not a destination vote. Ignore" },
-    { "from": "+15551420003", "body": "tulum itself is a beach party vibe", "delay_ms": 500, "_note": "Answer to Mike — peer-to-peer. Ignore" },
-
-    { "from": "+15551420001", "body": "probs about three full days, maybe Nov 8-12? maybe Nov 12-16?", "delay_ms": 2000, "_note": "DECIDING_DATES: two date ranges" },
-    { "from": "+15551420005", "body": "Nov 11th is Veterans Day so idk if people have that off also", "delay_ms": 1000, "_note": "Contextual date info — not a vote" },
-    { "from": "+15551420004", "body": "good shout", "delay_ms": 500, "_note": "Social acknowledgment — ignore" },
-    { "from": "+15551420003", "body": "As long as I don't have an exam either of the dates work", "delay_ms": 1000, "_note": "Conditional yes" },
-    { "from": "+15551420002", "body": "both work for me!", "delay_ms": 500, "_note": "Flexible yes" },
-    { "from": "+15551420005", "body": "works for me", "delay_ms": 500, "_note": "Confirmation" },
-
-    { "from": "+15551420001", "body": "Okay y'all, votes are in. Nov 12-16", "delay_ms": 2000, "_note": "PLANNER DECLARES DATES: unilateral decision based on reactions they counted outside SMS" },
-
-    { "from": "+15551420004", "body": "Reacted 🤔 to \"Okay y'all, votes are in. Nov 12-16\"", "delay_ms": 1000, "_note": "REACTION AS TEXT: must be ignored" },
-
-    { "from": "+15551420002", "body": "omg wait Anyone know anyone who needs a nyc roommate in the fall 😤", "delay_ms": 2000, "_note": "COMPLETELY OFF-TOPIC: personal life question" },
-
-    { "from": "+15551420001", "body": "im seeing flights ~$325 and villa ~$550/person", "delay_ms": 2000, "_note": "BUDGET INFO: embedded in message" },
-
-    { "from": "+15551420005", "body": "Should we book flights", "delay_ms": 3000, "_note": "Question — not a booking" },
-    { "from": "+15551420004", "body": "y'all gotta get yours before the price go up", "delay_ms": 1000, "_note": "Urgency — not a booking" },
-    { "from": "+15551420004", "body": "mine are actually booked", "delay_ms": 1000, "_note": "EARLY BOOKING: Mike booked before group decided. Should be recorded" },
-
-    { "from": "+15551420001", "body": "Tulum ridiculously expensive rn, so we can either wait a bit longer or look somewhere else", "delay_ms": 3000, "_note": "PRICE CONCERN: planner floating alternatives" },
-    { "from": "+15551420003", "body": "we can get to dominican republic for 380", "delay_ms": 1000, "_note": "ALT DESTINATION: Dominican Republic proposed" },
-    { "from": "+15551420005", "body": "I'm good w either place we might end up going to!", "delay_ms": 1000, "_note": "FLEXIBLE: open to any destination" },
-    { "from": "+15551420002", "body": "My vote is Tulum same dates", "delay_ms": 1000, "_note": "VOTE: Tulum" },
-
-    { "from": "+15551420001", "body": "If we're cool w it, I think layover to Tulum is easiest to organize", "delay_ms": 2000, "_note": "PLANNER DECIDES: Tulum with layover" },
-
-    { "from": "+15551420001", "body": "Important announcement! This weekend has been declared flight purchasing weekend. Anyone who doesn't buy a flight this weekend is not guaranteed their sleeping arrangement", "delay_ms": 3000, "_note": "DEADLINE: playful urgency" },
-    { "from": "+15551420006", "body": "Yikes, I'm definitely out, thought I said that at some point... sorry!", "delay_ms": 2000, "_note": "LATE OPT-OUT: Noah was ghost, now formally out" },
-    { "from": "+15551420001", "body": "All good!", "delay_ms": 500 },
-
-    { "from": "+15551420002", "body": "I booked my Flight", "delay_ms": 2000, "_note": "BOOKING" },
-    { "from": "+15551420005", "body": "I booked", "delay_ms": 1000, "_note": "BOOKING" },
-    { "from": "+15551420003", "body": "Gonna book tn", "delay_ms": 1000, "_note": "FUTURE INTENT: not yet booked" },
-
-    { "from": "+15551420007", "body": "Andy - hey can I still join this trip?", "delay_ms": 3000, "_note": "LATE JOINER: new person after bookings started" },
-
-    { "from": "+15551420001", "body": "Reservation confirmed 😎", "delay_ms": 3000, "_note": "POST-BOOKING: planner booked Airbnb" },
-    { "from": "+15551420001", "body": "$370.83/person, no rush to Venmo and all good if you wanna pay in parts", "delay_ms": 1000, "_note": "SPLIT: per-person cost" },
-    { "from": "+15551420002", "body": "Will you cover me?", "delay_ms": 1000, "_note": "JOKE: not a real payment request" },
-    { "from": "+15551420001", "body": "Not covering you xoxo", "delay_ms": 500, "_note": "Joke response" },
-    { "from": "+15551420004", "body": "NEW SABRINA CARPENTER ALBUM ALERT", "delay_ms": 2000, "_note": "COMPLETELY OFF-TOPIC" },
-
-    { "from": "+15551420001", "body": "Hi friends, waiting on three Airbnb venmos. No rush, just a reminder!", "delay_ms": 3000, "_note": "PAYMENT REMINDER" },
-    { "from": "+15551420002", "body": "Wait can you tell me if I paid you or not", "delay_ms": 1000, "_note": "Payment question — peer-to-peer" },
-    { "from": "+15551420002", "body": "Bc I don't remember", "delay_ms": 500 },
-    { "from": "+15551420003", "body": "i will pay you now ❤️", "delay_ms": 1000, "_note": "Payment intent — not a PAID STATUS response" },
-
-    { "from": "+15551420001", "body": "STATUS", "delay_ms": 2000, "_note": "Final status: should show everything correctly after all the chaos" }
+    {
+      "from": "+15551420001",
+      "body": "Hey",
+      "delay_ms": 0,
+      "_note": "1:1 planner registration",
+      "_is1to1": true
+    },
+    {
+      "from": "+15551420001",
+      "body": "Caroline - Tulum",
+      "delay_ms": 1000,
+      "_note": "INTRO: planner with destination"
+    },
+    {
+      "from": "+15551420002",
+      "body": "hey hey abbey here 🎉",
+      "delay_ms": 1000,
+      "_note": "INTRO: name buried in sentence with emoji"
+    },
+    {
+      "from": "+15551420003",
+      "body": "Ross",
+      "delay_ms": 1000,
+      "_note": "INTRO: clean name"
+    },
+    {
+      "from": "+15551420004",
+      "body": "yo",
+      "delay_ms": 1000,
+      "_note": "INTRO: no name given"
+    },
+    {
+      "from": "+15551420004",
+      "body": "oh im mike btw",
+      "delay_ms": 500,
+      "_note": "INTRO: delayed name"
+    },
+    {
+      "from": "+15551420005",
+      "body": "Julia 💕",
+      "delay_ms": 1000,
+      "_note": "INTRO: name with emoji"
+    },
+    {
+      "from": "+15551420006",
+      "body": "Noah",
+      "delay_ms": 1000,
+      "_note": "INTRO: ghost participant"
+    },
+    {
+      "from": "+15551420001",
+      "body": "that's everyone",
+      "delay_ms": 2000
+    },
+    {
+      "from": "+15551420003",
+      "body": "What city?",
+      "delay_ms": 1000,
+      "_note": "Out-of-order: destination was already mentioned"
+    },
+    {
+      "from": "+15551420001",
+      "body": "Have been looking at Tulum",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551420004",
+      "body": "is place like this gonna be conducive to like seeing mexico and stuff or is this more resort style",
+      "delay_ms": 1000,
+      "_note": "Activity question — not a destination vote. Ignore"
+    },
+    {
+      "from": "+15551420003",
+      "body": "tulum itself is a beach party vibe",
+      "delay_ms": 500,
+      "_note": "Answer to Mike — peer-to-peer. Ignore"
+    },
+    {
+      "from": "+15551420001",
+      "body": "probs about three full days, maybe Nov 8-12? maybe Nov 12-16?",
+      "delay_ms": 2000,
+      "_note": "DECIDING_DATES: two date ranges"
+    },
+    {
+      "from": "+15551420005",
+      "body": "Nov 11th is Veterans Day so idk if people have that off also",
+      "delay_ms": 1000,
+      "_note": "Contextual date info — not a vote"
+    },
+    {
+      "from": "+15551420004",
+      "body": "good shout",
+      "delay_ms": 500,
+      "_note": "Social acknowledgment — ignore"
+    },
+    {
+      "from": "+15551420003",
+      "body": "As long as I don't have an exam either of the dates work",
+      "delay_ms": 1000,
+      "_note": "Conditional yes"
+    },
+    {
+      "from": "+15551420002",
+      "body": "both work for me!",
+      "delay_ms": 500,
+      "_note": "Flexible yes"
+    },
+    {
+      "from": "+15551420005",
+      "body": "works for me",
+      "delay_ms": 500,
+      "_note": "Confirmation"
+    },
+    {
+      "from": "+15551420001",
+      "body": "Okay y'all, votes are in. Nov 12-16",
+      "delay_ms": 2000,
+      "_note": "PLANNER DECLARES DATES: unilateral decision based on reactions they counted outside SMS"
+    },
+    {
+      "from": "+15551420004",
+      "body": "Reacted 🤔 to \"Okay y'all, votes are in. Nov 12-16\"",
+      "delay_ms": 1000,
+      "_note": "REACTION AS TEXT: must be ignored"
+    },
+    {
+      "from": "+15551420002",
+      "body": "omg wait Anyone know anyone who needs a nyc roommate in the fall 😤",
+      "delay_ms": 2000,
+      "_note": "COMPLETELY OFF-TOPIC: personal life question"
+    },
+    {
+      "from": "+15551420001",
+      "body": "im seeing flights ~$325 and villa ~$550/person",
+      "delay_ms": 2000,
+      "_note": "BUDGET INFO: embedded in message"
+    },
+    {
+      "from": "+15551420005",
+      "body": "Should we book flights",
+      "delay_ms": 3000,
+      "_note": "Question — not a booking"
+    },
+    {
+      "from": "+15551420004",
+      "body": "y'all gotta get yours before the price go up",
+      "delay_ms": 1000,
+      "_note": "Urgency — not a booking"
+    },
+    {
+      "from": "+15551420004",
+      "body": "mine are actually booked",
+      "delay_ms": 1000,
+      "_note": "EARLY BOOKING: Mike booked before group decided. Should be recorded"
+    },
+    {
+      "from": "+15551420001",
+      "body": "Tulum ridiculously expensive rn, so we can either wait a bit longer or look somewhere else",
+      "delay_ms": 3000,
+      "_note": "PRICE CONCERN: planner floating alternatives"
+    },
+    {
+      "from": "+15551420003",
+      "body": "we can get to dominican republic for 380",
+      "delay_ms": 1000,
+      "_note": "ALT DESTINATION: Dominican Republic proposed"
+    },
+    {
+      "from": "+15551420005",
+      "body": "I'm good w either place we might end up going to!",
+      "delay_ms": 1000,
+      "_note": "FLEXIBLE: open to any destination"
+    },
+    {
+      "from": "+15551420002",
+      "body": "My vote is Tulum same dates",
+      "delay_ms": 1000,
+      "_note": "VOTE: Tulum"
+    },
+    {
+      "from": "+15551420001",
+      "body": "If we're cool w it, I think layover to Tulum is easiest to organize",
+      "delay_ms": 2000,
+      "_note": "PLANNER DECIDES: Tulum with layover"
+    },
+    {
+      "from": "+15551420001",
+      "body": "Important announcement! This weekend has been declared flight purchasing weekend. Anyone who doesn't buy a flight this weekend is not guaranteed their sleeping arrangement",
+      "delay_ms": 3000,
+      "_note": "DEADLINE: playful urgency"
+    },
+    {
+      "from": "+15551420006",
+      "body": "Yikes, I'm definitely out, thought I said that at some point... sorry!",
+      "delay_ms": 2000,
+      "_note": "LATE OPT-OUT: Noah was ghost, now formally out"
+    },
+    {
+      "from": "+15551420001",
+      "body": "All good!",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551420002",
+      "body": "I booked my Flight",
+      "delay_ms": 2000,
+      "_note": "BOOKING"
+    },
+    {
+      "from": "+15551420005",
+      "body": "I booked",
+      "delay_ms": 1000,
+      "_note": "BOOKING"
+    },
+    {
+      "from": "+15551420003",
+      "body": "Gonna book tn",
+      "delay_ms": 1000,
+      "_note": "FUTURE INTENT: not yet booked"
+    },
+    {
+      "from": "+15551420007",
+      "body": "Andy - hey can I still join this trip?",
+      "delay_ms": 3000,
+      "_note": "LATE JOINER: new person after bookings started"
+    },
+    {
+      "from": "+15551420001",
+      "body": "Reservation confirmed 😎",
+      "delay_ms": 3000,
+      "_note": "POST-BOOKING: planner booked Airbnb"
+    },
+    {
+      "from": "+15551420001",
+      "body": "$370.83/person, no rush to Venmo and all good if you wanna pay in parts",
+      "delay_ms": 1000,
+      "_note": "SPLIT: per-person cost"
+    },
+    {
+      "from": "+15551420002",
+      "body": "Will you cover me?",
+      "delay_ms": 1000,
+      "_note": "JOKE: not a real payment request"
+    },
+    {
+      "from": "+15551420001",
+      "body": "Not covering you xoxo",
+      "delay_ms": 500,
+      "_note": "Joke response"
+    },
+    {
+      "from": "+15551420004",
+      "body": "NEW SABRINA CARPENTER ALBUM ALERT",
+      "delay_ms": 2000,
+      "_note": "COMPLETELY OFF-TOPIC"
+    },
+    {
+      "from": "+15551420001",
+      "body": "Hi friends, waiting on three Airbnb venmos. No rush, just a reminder!",
+      "delay_ms": 3000,
+      "_note": "PAYMENT REMINDER"
+    },
+    {
+      "from": "+15551420002",
+      "body": "Wait can you tell me if I paid you or not",
+      "delay_ms": 1000,
+      "_note": "Payment question — peer-to-peer"
+    },
+    {
+      "from": "+15551420002",
+      "body": "Bc I don't remember",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551420003",
+      "body": "i will pay you now ❤️",
+      "delay_ms": 1000,
+      "_note": "Payment intent — not a PAID STATUS response"
+    },
+    {
+      "from": "+15551420001",
+      "body": "STATUS",
+      "delay_ms": 2000,
+      "_note": "Final status: should show everything correctly after all the chaos"
+    }
   ]
 }

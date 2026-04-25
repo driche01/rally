@@ -1,4 +1,6 @@
 {
+  "_obsolete": true,
+  "_obsolete_reason": "Group-MMS routing was retired in Phase 2 of the 1:1 SMS pivot. Rewrite required for Phase 7.",
   "script_name": "scenario_3_budget_blowup",
   "description": "One person says $500, another says $4,000. Does the DISPUTED status fire? Does the group discussion flow work?",
   "phones": {
@@ -13,27 +15,107 @@
   ],
   "assert_outbound_does_not_contain": [],
   "messages": [
-    { "from": "+15551230001", "body": "Hey", "delay_ms": 0, "_note": "1:1 planner registration" },
-    { "from": "+15551230001", "body": "Jake — Tulum", "delay_ms": 1000, "_note": "INTRO" },
-    { "from": "+15551230002", "body": "Sarah — Tulum", "delay_ms": 1000 },
-    { "from": "+15551230003", "body": "Mike — Tulum", "delay_ms": 1000 },
-    { "from": "+15551230004", "body": "Emma — Tulum", "delay_ms": 1000 },
-    { "from": "+15551230001", "body": "that's everyone", "delay_ms": 2000, "_note": "Advance from INTRO" },
-
-    { "from": "+15551230001", "body": "Nov 8-12", "delay_ms": 2000, "_note": "DECIDING_DATES" },
-    { "from": "+15551230002", "body": "works", "delay_ms": 1000 },
-    { "from": "+15551230003", "body": "good", "delay_ms": 1000 },
-    { "from": "+15551230004", "body": "perfect", "delay_ms": 1000 },
-
-    { "from": "+15551230001", "body": "1", "delay_ms": 3000, "_note": "BUDGET_POLL: tier 1 = Under $500 (=$250 normalized)" },
-    { "from": "+15551230002", "body": "1", "delay_ms": 1000, "_note": "BUDGET_POLL: tier 1 = Under $500" },
-    { "from": "+15551230003", "body": "3", "delay_ms": 1000, "_note": "BUDGET_POLL: tier 3 = $1k-$2k (=$1500 normalized)" },
-    { "from": "+15551230004", "body": "$4000", "delay_ms": 1000, "_note": "BUDGET_POLL: raw amount $4000. Spread is $250-$4000 — ratio 16:1 >> 2.0 threshold. DISPUTED should fire." },
-
-    { "from": "+15551230002", "body": "ok I can do $1000 if we find something good", "delay_ms": 3000, "_note": "BUDGET_DISCUSSION: group negotiates" },
-    { "from": "+15551230004", "body": "yeah I was being ambitious, $1500 works", "delay_ms": 1000, "_note": "BUDGET_DISCUSSION: high-spender compromises" },
-    { "from": "+15551230001", "body": "READY", "delay_ms": 2000, "_note": "BUDGET_DISCUSSION→DECIDING_DESTINATION: planner resolves dispute with READY" },
-
-    { "from": "+15551230001", "body": "STATUS", "delay_ms": 1000, "_note": "Verify budget is resolved and destination phase is active" }
+    {
+      "from": "+15551230001",
+      "body": "Hey",
+      "delay_ms": 0,
+      "_note": "1:1 planner registration"
+    },
+    {
+      "from": "+15551230001",
+      "body": "Jake — Tulum",
+      "delay_ms": 1000,
+      "_note": "INTRO"
+    },
+    {
+      "from": "+15551230002",
+      "body": "Sarah — Tulum",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551230003",
+      "body": "Mike — Tulum",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551230004",
+      "body": "Emma — Tulum",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551230001",
+      "body": "that's everyone",
+      "delay_ms": 2000,
+      "_note": "Advance from INTRO"
+    },
+    {
+      "from": "+15551230001",
+      "body": "Nov 8-12",
+      "delay_ms": 2000,
+      "_note": "DECIDING_DATES"
+    },
+    {
+      "from": "+15551230002",
+      "body": "works",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551230003",
+      "body": "good",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551230004",
+      "body": "perfect",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551230001",
+      "body": "1",
+      "delay_ms": 3000,
+      "_note": "BUDGET_POLL: tier 1 = Under $500 (=$250 normalized)"
+    },
+    {
+      "from": "+15551230002",
+      "body": "1",
+      "delay_ms": 1000,
+      "_note": "BUDGET_POLL: tier 1 = Under $500"
+    },
+    {
+      "from": "+15551230003",
+      "body": "3",
+      "delay_ms": 1000,
+      "_note": "BUDGET_POLL: tier 3 = $1k-$2k (=$1500 normalized)"
+    },
+    {
+      "from": "+15551230004",
+      "body": "$4000",
+      "delay_ms": 1000,
+      "_note": "BUDGET_POLL: raw amount $4000. Spread is $250-$4000 — ratio 16:1 >> 2.0 threshold. DISPUTED should fire."
+    },
+    {
+      "from": "+15551230002",
+      "body": "ok I can do $1000 if we find something good",
+      "delay_ms": 3000,
+      "_note": "BUDGET_DISCUSSION: group negotiates"
+    },
+    {
+      "from": "+15551230004",
+      "body": "yeah I was being ambitious, $1500 works",
+      "delay_ms": 1000,
+      "_note": "BUDGET_DISCUSSION: high-spender compromises"
+    },
+    {
+      "from": "+15551230001",
+      "body": "READY",
+      "delay_ms": 2000,
+      "_note": "BUDGET_DISCUSSION→DECIDING_DESTINATION: planner resolves dispute with READY"
+    },
+    {
+      "from": "+15551230001",
+      "body": "STATUS",
+      "delay_ms": 1000,
+      "_note": "Verify budget is resolved and destination phase is active"
+    }
   ]
 }

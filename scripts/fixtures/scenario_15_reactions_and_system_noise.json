@@ -1,4 +1,6 @@
 {
+  "_obsolete": true,
+  "_obsolete_reason": "Group-MMS routing was retired in Phase 2 of the 1:1 SMS pivot. Rewrite required for Phase 7.",
   "script_name": "scenario_15_reactions_and_system_noise",
   "description": "Tests that the agent ignores iMessage-style reaction texts ('Reacted 🤔 to...'), system messages ('X named the conversation', 'X added Y'), unsent messages, group renames, and emoji-only messages. All of these show up as real SMS in group threads. Based on Tulum and Tahoe threads.",
   "phones": {
@@ -18,36 +20,152 @@
     "treasure trove"
   ],
   "messages": [
-    { "from": "+15551350001", "body": "Hey", "delay_ms": 0, "_note": "1:1 planner registration", "_is1to1": true },
-    { "from": "+15551350001", "body": "Caroline - Tulum", "delay_ms": 1000, "_note": "INTRO" },
-    { "from": "+15551350002", "body": "Ross", "delay_ms": 1000 },
-    { "from": "+15551350003", "body": "Mike", "delay_ms": 1000 },
-    { "from": "+15551350004", "body": "Abbey", "delay_ms": 1000 },
-    { "from": "+15551350001", "body": "that's everyone", "delay_ms": 2000 },
-
-    { "from": "+15551350002", "body": "Reacted 🤔 to \"Hi everyone, I'm here to propose a really really fun trip to Mexico in November\"", "delay_ms": 1000, "_note": "REACTION AS TEXT: iMessage reaction forwarded as SMS. Must be ignored completely — should not try to parse the quoted content" },
-    { "from": "+15551350004", "body": "Reacted 🙄 to \"School doesn't have that off\"", "delay_ms": 1000, "_note": "REACTION: another reaction-as-text. Ignore" },
-    { "from": "+15551350004", "body": "Reacted 😭 to \"For Mike - Tulum, Mexico, is a treasure trove for...\"", "delay_ms": 1000, "_note": "REACTION: contains ChatGPT-style text in the quote. Must not parse quoted content" },
-
-    { "from": "+15551350003", "body": "👍", "delay_ms": 1000, "_note": "EMOJI-ONLY: single thumbs up. Should be ignored, not parsed as a name or vote" },
-    { "from": "+15551350004", "body": "😂😂😂", "delay_ms": 500, "_note": "EMOJI-ONLY: laughing. Ignore" },
-    { "from": "+15551350002", "body": "🔥🔥", "delay_ms": 500, "_note": "EMOJI-ONLY: fire. Ignore" },
-    { "from": "+15551350003", "body": "👀", "delay_ms": 500, "_note": "EMOJI-ONLY: eyes. Ignore" },
-
-    { "from": "+15551350003", "body": "For Mike - Tulum, Mexico, is a treasure trove for history enthusiasts, offering a blend of ancient Mayan heritage and unique cultural experiences. Here are some top historical activities and sites to explore in Tulum.", "delay_ms": 2000, "_note": "CHATGPT PASTE: someone pasted AI-generated text into the thread. Should be ignored, not parsed for destination/decision info" },
-    { "from": "+15551350004", "body": "Ok chat gbt", "delay_ms": 1000, "_note": "Calling out the AI paste — social banter, ignore" },
-
-    { "from": "+15551350001", "body": "You unsent a message", "delay_ms": 1000, "_note": "SYSTEM MESSAGE: unsent notification. Ignore" },
-    { "from": "+15551350001", "body": "Oops", "delay_ms": 500, "_note": "Follow-up to unsent — ignore" },
-
-    { "from": "+15551350001", "body": "Nov 12-16?", "delay_ms": 2000, "_note": "DECIDING_DATES: actual date proposal" },
-    { "from": "+15551350002", "body": "Liked \"Nov 12-16?\"", "delay_ms": 1000, "_note": "REACTION AS TEXT: 'Liked' prefix. Should NOT be treated as a date confirmation — it's a system artifact" },
-    { "from": "+15551350002", "body": "yeah works", "delay_ms": 500, "_note": "Actual confirmation" },
-    { "from": "+15551350003", "body": "Emphasized \"Nov 12-16?\"", "delay_ms": 500, "_note": "REACTION: 'Emphasized' prefix. Ignore" },
-    { "from": "+15551350003", "body": "yes", "delay_ms": 500, "_note": "Actual confirmation" },
-    { "from": "+15551350004", "body": "Loved \"Nov 12-16?\"", "delay_ms": 500, "_note": "REACTION: 'Loved' prefix. Ignore" },
-    { "from": "+15551350004", "body": "yep", "delay_ms": 500, "_note": "Actual confirmation" },
-
-    { "from": "+15551350001", "body": "STATUS", "delay_ms": 2000, "_note": "Status check" }
+    {
+      "from": "+15551350001",
+      "body": "Hey",
+      "delay_ms": 0,
+      "_note": "1:1 planner registration",
+      "_is1to1": true
+    },
+    {
+      "from": "+15551350001",
+      "body": "Caroline - Tulum",
+      "delay_ms": 1000,
+      "_note": "INTRO"
+    },
+    {
+      "from": "+15551350002",
+      "body": "Ross",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551350003",
+      "body": "Mike",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551350004",
+      "body": "Abbey",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551350001",
+      "body": "that's everyone",
+      "delay_ms": 2000
+    },
+    {
+      "from": "+15551350002",
+      "body": "Reacted 🤔 to \"Hi everyone, I'm here to propose a really really fun trip to Mexico in November\"",
+      "delay_ms": 1000,
+      "_note": "REACTION AS TEXT: iMessage reaction forwarded as SMS. Must be ignored completely — should not try to parse the quoted content"
+    },
+    {
+      "from": "+15551350004",
+      "body": "Reacted 🙄 to \"School doesn't have that off\"",
+      "delay_ms": 1000,
+      "_note": "REACTION: another reaction-as-text. Ignore"
+    },
+    {
+      "from": "+15551350004",
+      "body": "Reacted 😭 to \"For Mike - Tulum, Mexico, is a treasure trove for...\"",
+      "delay_ms": 1000,
+      "_note": "REACTION: contains ChatGPT-style text in the quote. Must not parse quoted content"
+    },
+    {
+      "from": "+15551350003",
+      "body": "👍",
+      "delay_ms": 1000,
+      "_note": "EMOJI-ONLY: single thumbs up. Should be ignored, not parsed as a name or vote"
+    },
+    {
+      "from": "+15551350004",
+      "body": "😂😂😂",
+      "delay_ms": 500,
+      "_note": "EMOJI-ONLY: laughing. Ignore"
+    },
+    {
+      "from": "+15551350002",
+      "body": "🔥🔥",
+      "delay_ms": 500,
+      "_note": "EMOJI-ONLY: fire. Ignore"
+    },
+    {
+      "from": "+15551350003",
+      "body": "👀",
+      "delay_ms": 500,
+      "_note": "EMOJI-ONLY: eyes. Ignore"
+    },
+    {
+      "from": "+15551350003",
+      "body": "For Mike - Tulum, Mexico, is a treasure trove for history enthusiasts, offering a blend of ancient Mayan heritage and unique cultural experiences. Here are some top historical activities and sites to explore in Tulum.",
+      "delay_ms": 2000,
+      "_note": "CHATGPT PASTE: someone pasted AI-generated text into the thread. Should be ignored, not parsed for destination/decision info"
+    },
+    {
+      "from": "+15551350004",
+      "body": "Ok chat gbt",
+      "delay_ms": 1000,
+      "_note": "Calling out the AI paste — social banter, ignore"
+    },
+    {
+      "from": "+15551350001",
+      "body": "You unsent a message",
+      "delay_ms": 1000,
+      "_note": "SYSTEM MESSAGE: unsent notification. Ignore"
+    },
+    {
+      "from": "+15551350001",
+      "body": "Oops",
+      "delay_ms": 500,
+      "_note": "Follow-up to unsent — ignore"
+    },
+    {
+      "from": "+15551350001",
+      "body": "Nov 12-16?",
+      "delay_ms": 2000,
+      "_note": "DECIDING_DATES: actual date proposal"
+    },
+    {
+      "from": "+15551350002",
+      "body": "Liked \"Nov 12-16?\"",
+      "delay_ms": 1000,
+      "_note": "REACTION AS TEXT: 'Liked' prefix. Should NOT be treated as a date confirmation — it's a system artifact"
+    },
+    {
+      "from": "+15551350002",
+      "body": "yeah works",
+      "delay_ms": 500,
+      "_note": "Actual confirmation"
+    },
+    {
+      "from": "+15551350003",
+      "body": "Emphasized \"Nov 12-16?\"",
+      "delay_ms": 500,
+      "_note": "REACTION: 'Emphasized' prefix. Ignore"
+    },
+    {
+      "from": "+15551350003",
+      "body": "yes",
+      "delay_ms": 500,
+      "_note": "Actual confirmation"
+    },
+    {
+      "from": "+15551350004",
+      "body": "Loved \"Nov 12-16?\"",
+      "delay_ms": 500,
+      "_note": "REACTION: 'Loved' prefix. Ignore"
+    },
+    {
+      "from": "+15551350004",
+      "body": "yep",
+      "delay_ms": 500,
+      "_note": "Actual confirmation"
+    },
+    {
+      "from": "+15551350001",
+      "body": "STATUS",
+      "delay_ms": 2000,
+      "_note": "Status check"
+    }
   ]
 }

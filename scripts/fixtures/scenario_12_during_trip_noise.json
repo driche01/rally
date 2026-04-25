@@ -1,4 +1,6 @@
 {
+  "_obsolete": true,
+  "_obsolete_reason": "Group-MMS routing was retired in Phase 2 of the 1:1 SMS pivot. Rewrite required for Phase 7.",
   "script_name": "scenario_12_during_trip_noise",
   "description": "Trip is in AWAITING_INDIVIDUAL_LODGING or later phase. Messages are all during-trip logistics: grocery runs, wifi passwords, carpool, activity coordination, property questions. Agent should be completely silent for all of these. Based on real Tahoe ski trip text.",
   "phones": {
@@ -18,52 +20,232 @@
     "Error"
   ],
   "messages": [
-    { "from": "+15551320001", "body": "Hey", "delay_ms": 0, "_note": "1:1 planner registration", "_is1to1": true },
-    { "from": "+15551320001", "body": "Annika - Tahoe", "delay_ms": 1000, "_note": "INTRO" },
-    { "from": "+15551320002", "body": "Michelle", "delay_ms": 1000 },
-    { "from": "+15551320003", "body": "Allison", "delay_ms": 1000 },
-    { "from": "+15551320004", "body": "Nick", "delay_ms": 1000 },
-    { "from": "+15551320001", "body": "that's everyone", "delay_ms": 2000 },
-    { "from": "+15551320001", "body": "Mar 16-17", "delay_ms": 1000 },
-    { "from": "+15551320002", "body": "works", "delay_ms": 500 },
-    { "from": "+15551320003", "body": "yes", "delay_ms": 500 },
-    { "from": "+15551320004", "body": "yes", "delay_ms": 500 },
-    { "from": "+15551320001", "body": "NEXT", "delay_ms": 2000 },
-    { "from": "+15551320001", "body": "NEXT", "delay_ms": 2000 },
-    { "from": "+15551320001", "body": "San Francisco", "delay_ms": 1000 },
-    { "from": "+15551320002", "body": "San Francisco", "delay_ms": 500 },
-    { "from": "+15551320003", "body": "San Francisco", "delay_ms": 500 },
-    { "from": "+15551320004", "body": "San Francisco", "delay_ms": 500 },
-    { "from": "+15551320001", "body": "YES", "delay_ms": 2000 },
-    { "from": "+15551320002", "body": "YES", "delay_ms": 500 },
-    { "from": "+15551320003", "body": "YES", "delay_ms": 500 },
-    { "from": "+15551320004", "body": "YES", "delay_ms": 500 },
-    { "from": "+15551320001", "body": "BOOKED", "delay_ms": 1000 },
-    { "from": "+15551320002", "body": "BOOKED", "delay_ms": 500 },
-    { "from": "+15551320003", "body": "BOOKED", "delay_ms": 500 },
-    { "from": "+15551320004", "body": "BOOKED", "delay_ms": 500 },
-    { "from": "+15551320001", "body": "NEXT", "delay_ms": 2000 },
-    { "from": "+15551320001", "body": "1", "delay_ms": 1000, "_note": "Lodging vote: staying together" },
-    { "from": "+15551320002", "body": "1", "delay_ms": 500 },
-    { "from": "+15551320003", "body": "1", "delay_ms": 500 },
-    { "from": "+15551320004", "body": "1", "delay_ms": 500 },
-
-    { "from": "+15551320002", "body": "We're at grocery outlet! Send requests if you have any", "delay_ms": 5000, "_note": "DURING-TRIP: grocery coordination. Agent should be SILENT" },
-    { "from": "+15551320003", "body": "Can we get a bottle of Iced coffee please lol", "delay_ms": 1000, "_note": "DURING-TRIP: grocery request. SILENT" },
-    { "from": "+15551320003", "body": "Any brand will do", "delay_ms": 500, "_note": "DURING-TRIP: follow-up. SILENT" },
-    { "from": "+15551320004", "body": "we'll get groceries for brekky, lunches, veggie stir fry dinner and pasta dinner", "delay_ms": 1000, "_note": "DURING-TRIP: meal planning. SILENT" },
-    { "from": "+15551320001", "body": "Bananas and other fruits plz!", "delay_ms": 1000, "_note": "DURING-TRIP: grocery request. SILENT" },
-    { "from": "+15551320003", "body": "Can we pl get some meat for the non vegetarians? Lol", "delay_ms": 1000, "_note": "DURING-TRIP: food request. SILENT" },
-
-    { "from": "+15551320003", "body": "What's the garage code again?", "delay_ms": 3000, "_note": "DURING-TRIP: property question. SILENT" },
-    { "from": "+15551320004", "body": "3571", "delay_ms": 500, "_note": "DURING-TRIP: code answer. SILENT — and should NOT be parsed as anything" },
-    { "from": "+15551320003", "body": "But how do you close the right side door", "delay_ms": 1000, "_note": "DURING-TRIP: property question. SILENT" },
-    { "from": "+15551320003", "body": "Ah I realized it is good old fashioned manual labor. We're all good folks!", "delay_ms": 1000, "_note": "DURING-TRIP: self-resolved. SILENT" },
-
-    { "from": "+15551320004", "body": "Anyone want to go for a walk?", "delay_ms": 3000, "_note": "DURING-TRIP: activity coordination. SILENT" },
-
-    { "from": "+15551320005", "body": "Ambika - hey! David said there might be space. Is it ok if I join?", "delay_ms": 3000, "_note": "LAST-MINUTE ADDITION: someone not in original group. Agent should onboard" },
-
-    { "from": "+15551320004", "body": "*four including me", "delay_ms": 2000, "_note": "ASTERISK CORRECTION: correcting a previous message. Agent should acknowledge ('noted the correction...') but not treat as a new trip decision" }
+    {
+      "from": "+15551320001",
+      "body": "Hey",
+      "delay_ms": 0,
+      "_note": "1:1 planner registration",
+      "_is1to1": true
+    },
+    {
+      "from": "+15551320001",
+      "body": "Annika - Tahoe",
+      "delay_ms": 1000,
+      "_note": "INTRO"
+    },
+    {
+      "from": "+15551320002",
+      "body": "Michelle",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551320003",
+      "body": "Allison",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551320004",
+      "body": "Nick",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551320001",
+      "body": "that's everyone",
+      "delay_ms": 2000
+    },
+    {
+      "from": "+15551320001",
+      "body": "Mar 16-17",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551320002",
+      "body": "works",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551320003",
+      "body": "yes",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551320004",
+      "body": "yes",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551320001",
+      "body": "NEXT",
+      "delay_ms": 2000
+    },
+    {
+      "from": "+15551320001",
+      "body": "NEXT",
+      "delay_ms": 2000
+    },
+    {
+      "from": "+15551320001",
+      "body": "San Francisco",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551320002",
+      "body": "San Francisco",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551320003",
+      "body": "San Francisco",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551320004",
+      "body": "San Francisco",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551320001",
+      "body": "YES",
+      "delay_ms": 2000
+    },
+    {
+      "from": "+15551320002",
+      "body": "YES",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551320003",
+      "body": "YES",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551320004",
+      "body": "YES",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551320001",
+      "body": "BOOKED",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551320002",
+      "body": "BOOKED",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551320003",
+      "body": "BOOKED",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551320004",
+      "body": "BOOKED",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551320001",
+      "body": "NEXT",
+      "delay_ms": 2000
+    },
+    {
+      "from": "+15551320001",
+      "body": "1",
+      "delay_ms": 1000,
+      "_note": "Lodging vote: staying together"
+    },
+    {
+      "from": "+15551320002",
+      "body": "1",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551320003",
+      "body": "1",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551320004",
+      "body": "1",
+      "delay_ms": 500
+    },
+    {
+      "from": "+15551320002",
+      "body": "We're at grocery outlet! Send requests if you have any",
+      "delay_ms": 5000,
+      "_note": "DURING-TRIP: grocery coordination. Agent should be SILENT"
+    },
+    {
+      "from": "+15551320003",
+      "body": "Can we get a bottle of Iced coffee please lol",
+      "delay_ms": 1000,
+      "_note": "DURING-TRIP: grocery request. SILENT"
+    },
+    {
+      "from": "+15551320003",
+      "body": "Any brand will do",
+      "delay_ms": 500,
+      "_note": "DURING-TRIP: follow-up. SILENT"
+    },
+    {
+      "from": "+15551320004",
+      "body": "we'll get groceries for brekky, lunches, veggie stir fry dinner and pasta dinner",
+      "delay_ms": 1000,
+      "_note": "DURING-TRIP: meal planning. SILENT"
+    },
+    {
+      "from": "+15551320001",
+      "body": "Bananas and other fruits plz!",
+      "delay_ms": 1000,
+      "_note": "DURING-TRIP: grocery request. SILENT"
+    },
+    {
+      "from": "+15551320003",
+      "body": "Can we pl get some meat for the non vegetarians? Lol",
+      "delay_ms": 1000,
+      "_note": "DURING-TRIP: food request. SILENT"
+    },
+    {
+      "from": "+15551320003",
+      "body": "What's the garage code again?",
+      "delay_ms": 3000,
+      "_note": "DURING-TRIP: property question. SILENT"
+    },
+    {
+      "from": "+15551320004",
+      "body": "3571",
+      "delay_ms": 500,
+      "_note": "DURING-TRIP: code answer. SILENT — and should NOT be parsed as anything"
+    },
+    {
+      "from": "+15551320003",
+      "body": "But how do you close the right side door",
+      "delay_ms": 1000,
+      "_note": "DURING-TRIP: property question. SILENT"
+    },
+    {
+      "from": "+15551320003",
+      "body": "Ah I realized it is good old fashioned manual labor. We're all good folks!",
+      "delay_ms": 1000,
+      "_note": "DURING-TRIP: self-resolved. SILENT"
+    },
+    {
+      "from": "+15551320004",
+      "body": "Anyone want to go for a walk?",
+      "delay_ms": 3000,
+      "_note": "DURING-TRIP: activity coordination. SILENT"
+    },
+    {
+      "from": "+15551320005",
+      "body": "Ambika - hey! David said there might be space. Is it ok if I join?",
+      "delay_ms": 3000,
+      "_note": "LAST-MINUTE ADDITION: someone not in original group. Agent should onboard"
+    },
+    {
+      "from": "+15551320004",
+      "body": "*four including me",
+      "delay_ms": 2000,
+      "_note": "ASTERISK CORRECTION: correcting a previous message. Agent should acknowledge ('noted the correction...') but not treat as a new trip decision"
+    }
   ]
 }

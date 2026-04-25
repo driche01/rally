@@ -1,4 +1,6 @@
 {
+  "_obsolete": true,
+  "_obsolete_reason": "Group-MMS routing was retired in Phase 2 of the 1:1 SMS pivot. Rewrite required for Phase 7.",
   "script_name": "scenario_4_ghost",
   "description": "3 of 4 respond to every poll. 4th person (Ghost Gary) never responds to anything. Does the flow still complete?",
   "phones": {
@@ -13,31 +15,117 @@
   ],
   "assert_outbound_does_not_contain": [],
   "messages": [
-    { "from": "+15551240001", "body": "Hey", "delay_ms": 0, "_note": "1:1 planner registration" },
-    { "from": "+15551240001", "body": "Jake — Tulum, Nov 8-12, about $1250pp", "delay_ms": 1000, "_note": "INTRO: planner intake with dest+dates+budget pre-filled" },
-    { "from": "+15551240002", "body": "Sarah — sounds perfect", "delay_ms": 1000 },
-    { "from": "+15551240003", "body": "Mike — I'm in", "delay_ms": 1000 },
-    { "from": "+15551240004", "body": "Gary", "delay_ms": 1000, "_note": "Ghost names themselves but never participates again" },
-    { "from": "+15551240001", "body": "that's everyone", "delay_ms": 2000, "_note": "Advance from INTRO. Pre-filled dest+dates+budget shown for group confirmation." },
-
-    { "from": "+15551240002", "body": "yes", "delay_ms": 1000, "_note": "PREFILL_CONFIRMATION: p2 confirms" },
-    { "from": "+15551240003", "body": "sounds good", "delay_ms": 1000, "_note": "PREFILL_CONFIRMATION: p3 confirms" },
-    { "from": "+15551240001", "body": "NEXT", "delay_ms": 2000, "_note": "Planner skips waiting for ghost to confirm" },
-
-    { "from": "+15551240001", "body": "STATUS", "delay_ms": 2000, "_note": "Check: what phase are we in after confirmation?" },
-
-    { "from": "+15551240001", "body": "JFK", "delay_ms": 2000, "_note": "COLLECTING_ORIGINS: planner provides origin" },
-    { "from": "+15551240002", "body": "JFK", "delay_ms": 1000, "_note": "COLLECTING_ORIGINS: p2 provides origin" },
-    { "from": "+15551240003", "body": "BOS", "delay_ms": 1000, "_note": "COLLECTING_ORIGINS: p3 provides origin. Ghost Gary says nothing." },
-
-    { "from": "+15551240001", "body": "NEXT", "delay_ms": 3000, "_note": "Planner forces advance past ghost's non-response" },
-
-    { "from": "+15551240001", "body": "YES", "delay_ms": 3000, "_note": "COMMIT_POLL: planner commits" },
-    { "from": "+15551240002", "body": "YES", "delay_ms": 1000, "_note": "COMMIT_POLL: p2 commits" },
-    { "from": "+15551240003", "body": "YES", "delay_ms": 1000, "_note": "COMMIT_POLL: p3 commits. Ghost Gary never responds — should be marked committed=false after 48h (or planner NEXT)." },
-
-    { "from": "+15551240001", "body": "NEXT", "delay_ms": 2000, "_note": "Planner advances past ghost at commit poll — should move to AWAITING_FLIGHTS" },
-
-    { "from": "+15551240001", "body": "STATUS", "delay_ms": 1000, "_note": "Final check: should be in AWAITING_FLIGHTS, ghost excluded" }
+    {
+      "from": "+15551240001",
+      "body": "Hey",
+      "delay_ms": 0,
+      "_note": "1:1 planner registration"
+    },
+    {
+      "from": "+15551240001",
+      "body": "Jake — Tulum, Nov 8-12, about $1250pp",
+      "delay_ms": 1000,
+      "_note": "INTRO: planner intake with dest+dates+budget pre-filled"
+    },
+    {
+      "from": "+15551240002",
+      "body": "Sarah — sounds perfect",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551240003",
+      "body": "Mike — I'm in",
+      "delay_ms": 1000
+    },
+    {
+      "from": "+15551240004",
+      "body": "Gary",
+      "delay_ms": 1000,
+      "_note": "Ghost names themselves but never participates again"
+    },
+    {
+      "from": "+15551240001",
+      "body": "that's everyone",
+      "delay_ms": 2000,
+      "_note": "Advance from INTRO. Pre-filled dest+dates+budget shown for group confirmation."
+    },
+    {
+      "from": "+15551240002",
+      "body": "yes",
+      "delay_ms": 1000,
+      "_note": "PREFILL_CONFIRMATION: p2 confirms"
+    },
+    {
+      "from": "+15551240003",
+      "body": "sounds good",
+      "delay_ms": 1000,
+      "_note": "PREFILL_CONFIRMATION: p3 confirms"
+    },
+    {
+      "from": "+15551240001",
+      "body": "NEXT",
+      "delay_ms": 2000,
+      "_note": "Planner skips waiting for ghost to confirm"
+    },
+    {
+      "from": "+15551240001",
+      "body": "STATUS",
+      "delay_ms": 2000,
+      "_note": "Check: what phase are we in after confirmation?"
+    },
+    {
+      "from": "+15551240001",
+      "body": "JFK",
+      "delay_ms": 2000,
+      "_note": "COLLECTING_ORIGINS: planner provides origin"
+    },
+    {
+      "from": "+15551240002",
+      "body": "JFK",
+      "delay_ms": 1000,
+      "_note": "COLLECTING_ORIGINS: p2 provides origin"
+    },
+    {
+      "from": "+15551240003",
+      "body": "BOS",
+      "delay_ms": 1000,
+      "_note": "COLLECTING_ORIGINS: p3 provides origin. Ghost Gary says nothing."
+    },
+    {
+      "from": "+15551240001",
+      "body": "NEXT",
+      "delay_ms": 3000,
+      "_note": "Planner forces advance past ghost's non-response"
+    },
+    {
+      "from": "+15551240001",
+      "body": "YES",
+      "delay_ms": 3000,
+      "_note": "COMMIT_POLL: planner commits"
+    },
+    {
+      "from": "+15551240002",
+      "body": "YES",
+      "delay_ms": 1000,
+      "_note": "COMMIT_POLL: p2 commits"
+    },
+    {
+      "from": "+15551240003",
+      "body": "YES",
+      "delay_ms": 1000,
+      "_note": "COMMIT_POLL: p3 commits. Ghost Gary never responds — should be marked committed=false after 48h (or planner NEXT)."
+    },
+    {
+      "from": "+15551240001",
+      "body": "NEXT",
+      "delay_ms": 2000,
+      "_note": "Planner advances past ghost at commit poll — should move to AWAITING_FLIGHTS"
+    },
+    {
+      "from": "+15551240001",
+      "body": "STATUS",
+      "delay_ms": 1000,
+      "_note": "Final check: should be in AWAITING_FLIGHTS, ghost excluded"
+    }
   ]
 }

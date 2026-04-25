@@ -27,6 +27,16 @@ const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '***SCRUBBED-SUPABA
 const RALLY_PHONE = process.env.TWILIO_PHONE_NUMBER || '+18559310010';
 
 const script = JSON.parse(fs.readFileSync(scriptPath, 'utf8'));
+
+// Phase 2 of 1:1 pivot: scenarios written for the old group-MMS routing are
+// tagged `_obsolete: true`. Skip by default; --include-obsolete to force.
+const includeObsolete = args.includes('--include-obsolete');
+if (script._obsolete && !includeObsolete) {
+  console.log(`\n⏭️  Skipped (obsolete under 1:1 model): ${script.script_name}`);
+  console.log(`   Pass --include-obsolete to run anyway.\n`);
+  process.exit(0);
+}
+
 const outboundMessages = [];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

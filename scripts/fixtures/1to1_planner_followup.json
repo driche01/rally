@@ -1,0 +1,31 @@
+{
+  "script_name": "1to1_planner_followup",
+  "_purpose": "Phase 2 verification. After the kickoff message creates the session, the planner sends their name in the new INTRO phase. Expect findActiveSessionForPhone to locate the session and route to the INTRO phase handler, which should record the planner's display_name and reply.",
+  "phones": {
+    "planner": "+15551320002",
+    "rally": "+16624283059"
+  },
+  "assert_outbound_contains": [
+    "rallysurveys.netlify.app/join/"
+  ],
+  "_post_run_assertions": [
+    "trip_session_participants for planner phone has display_name='Sarah'",
+    "Final phase still 'INTRO' (auto-advance requires 2 named participants)"
+  ],
+  "messages": [
+    {
+      "from": "+15551320002",
+      "body": "Plan a trip to Tulum in May",
+      "delay_ms": 0,
+      "_is1to1": true,
+      "_note": "Kickoff — planning intent + destination via 'trip to' pattern"
+    },
+    {
+      "from": "+15551320002",
+      "body": "I'm Sarah",
+      "delay_ms": 1500,
+      "_is1to1": true,
+      "_note": "Follow-up in INTRO phase — name extraction via natural-language pattern"
+    }
+  ]
+}

@@ -286,3 +286,205 @@ export async function touchSession(
     .update({ last_message_at: new Date().toISOString() })
     .eq('id', sessionId);
 }
+
+// ─── 1:1 pivot helpers (Phase 2) ─────────────────────────────────────────────
+
+const ACTIVE_SESSION_STATUSES = [
+  'ACTIVE',
+  'PAUSED',
+  'RE_ENGAGEMENT_PENDING',
+  'FIRST_BOOKING_REACHED',
+] as const;
+
+const JOIN_BASE_URL = 'https://rallysurveys.netlify.app/join';
+const JOIN_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Crockford-base32, no I/O/0/1
+
+/**
+ * Find the most-recently-active trip session where this phone is an
+ * active participant. If the phone is in multiple concurrent active
+ * sessions (rare V1; documented limitation), returns the one whose
+ * session.last_message_at is most recent. Returns null if none.
+ *
+ * Replaces the comma-parsed group lookup that drove the old MMS routing.
+ */
+export async function findActiveSessionForPhone(
+  admin: SupabaseClient,
+  phone: string,
+): Promise<{ session: TripSession; participant: TripSessionParticipant } | null> {
+  const { data: rows } = await admin
+    .from('trip_session_participants')
+    .select('*, trip_sessions!inner(*)')
+    .eq('phone', phone)
+    .eq('status', 'active')
+    .in('trip_sessions.status', ACTIVE_SESSION_STATUSES as unknown as string[])
+    .order('joined_at', { ascending: false });
+
+  if (!rows || rows.length === 0) return null;
+
+  // Pick the row whose underlying session has the most recent activity.
+  let best: { session: TripSession; participant: TripSessionParticipant } | null = null;
+  let bestTs = -Infinity;
+  for (const row of rows) {
+    // deno-lint-ignore no-explicit-any
+    const sessionEmbedded = (row as any).trip_sessions as TripSession;
+    const ts = sessionEmbedded.last_message_at
+      ? new Date(sessionEmbedded.last_message_at).getTime()
+      : 0;
+    if (ts > bestTs) {
+      bestTs = ts;
+      // Strip the embedded join from the participant object.
+      // deno-lint-ignore no-explicit-any
+      const { trip_sessions: _embed, ...participant } = row as any;
+      best = {
+        session: sessionEmbedded,
+        participant: participant as TripSessionParticipant,
+      };
+    }
+  }
+  return best;
+}
+
+/**
+ * Create a fresh planner-led trip session AND mint a join link in one
+ * pass. Used by `handleNewPlannerInbound` when a phone with no active
+ * session texts Rally with planning intent. Service-role; no auth.uid()
+ * gate (the edge function already validated the inbound origin).
+ *
+ * Mirrors create_join_link from migration 039 for the code generation
+ * but lives in TS so the inbound path can react in one round-trip.
+ */
+export async function createPlannerSessionWithJoinLink(
+  admin: SupabaseClient,
+  planner: SmsUser,
+  hints: {
+    destination?: string | null;
+    dates?: { start: string; end: string; nights?: number } | null;
+    budget?: number | null;
+    threadName?: string | null;
+  },
+): Promise<{
+  session: TripSession;
+  participant: TripSessionParticipant;
+  joinCode: string;
+  joinUrl: string;
+}> {
+  // 1. Create a `trips` row so polls and respondents have something to FK to.
+  const { data: trip, error: tripErr } = await admin
+    .from('trips')
+    .insert({
+      name: hints.threadName ?? hints.destination ?? 'SMS Trip',
+      destination: hints.destination ?? null,
+      group_size_bucket: '5-8',
+      status: 'active',
+    })
+    .select('id')
+    .single();
+  if (tripErr) throw new Error(`Failed to create trip: ${tripErr.message}`);
+
+  // 2. Create the trip session — thread_id NULL under the 1:1 model.
+  const sessionInsert: Record<string, unknown> = {
+    trip_id: trip!.id,
+    thread_id: null,
+    planner_user_id: planner.id,
+    phase: 'INTRO',
+    status: 'ACTIVE',
+    thread_name: hints.threadName ?? null,
+    trip_model: '1to1',
+  };
+  if (hints.destination) sessionInsert.destination = hints.destination;
+  if (hints.destination) {
+    sessionInsert.destination_candidates = [{ label: hints.destination, votes: 1 }];
+  }
+  if (hints.dates) sessionInsert.dates = hints.dates;
+  if (hints.budget) {
+    sessionInsert.budget_median = hints.budget;
+    sessionInsert.budget_status = 'ALIGNED';
+  }
+
+  const { data: session, error: sessionErr } = await admin
+    .from('trip_sessions')
+    .insert(sessionInsert)
+    .select('*')
+    .single();
+  if (sessionErr) throw new Error(`Failed to create session: ${sessionErr.message}`);
+
+  // 3. Add the planner as the first participant.
+  const participant = await addParticipant(admin, session!.id, planner, true);
+  await admin
+    .from('trip_session_participants')
+    .update({ is_attending: true })
+    .eq('id', participant.id);
+
+  // 4. Mint a join link. Retry on (extremely rare) code collision.
+  let joinCode = '';
+  let attempts = 0;
+  while (true) {
+    joinCode = generateJoinCode();
+    const { error: linkErr } = await admin
+      .from('join_links')
+      .insert({
+        trip_session_id: session!.id,
+        code: joinCode,
+        created_by_user_id: planner.id,
+      });
+    if (!linkErr) break;
+    if (linkErr.code !== '23505' /* unique_violation */) {
+      throw new Error(`Failed to create join_link: ${linkErr.message}`);
+    }
+    attempts += 1;
+    if (attempts >= 5) throw new Error('join_link_code_collision');
+  }
+
+  return {
+    session: session!,
+    participant,
+    joinCode,
+    joinUrl: `${JOIN_BASE_URL}/${joinCode}`,
+  };
+}
+
+/**
+ * Returns the latest non-revoked, non-expired join_link for a session,
+ * minting one if none exists. Used by message-router when softening the
+ * "Is that everyone?" prompt to include the share URL.
+ */
+export async function getOrCreateJoinLinkForSession(
+  admin: SupabaseClient,
+  sessionId: string,
+  createdByUserId: string | null,
+): Promise<{ code: string; url: string }> {
+  const { data: existing } = await admin
+    .from('join_links')
+    .select('code, expires_at, revoked_at')
+    .eq('trip_session_id', sessionId)
+    .is('revoked_at', null)
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (existing?.code) {
+    return { code: existing.code, url: `${JOIN_BASE_URL}/${existing.code}` };
+  }
+
+  let attempts = 0;
+  while (true) {
+    const code = generateJoinCode();
+    const { error } = await admin.from('join_links').insert({
+      trip_session_id: sessionId,
+      code,
+      created_by_user_id: createdByUserId,
+    });
+    if (!error) return { code, url: `${JOIN_BASE_URL}/${code}` };
+    if (error.code !== '23505') throw new Error(`join_link insert failed: ${error.message}`);
+    attempts += 1;
+    if (attempts >= 5) throw new Error('join_link_code_collision');
+  }
+}
+
+function generateJoinCode(): string {
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  let code = '';
+  for (const b of bytes) code += JOIN_CODE_ALPHABET[b % JOIN_CODE_ALPHABET.length];
+  return code;
+}

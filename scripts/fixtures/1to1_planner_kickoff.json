@@ -1,0 +1,28 @@
+{
+  "script_name": "1to1_planner_kickoff",
+  "_purpose": "Phase 2 of 1:1 SMS pivot. Verifies that a fresh planner texting Rally with planning intent gets an auto-created session + a join-link URL back in one round-trip. Sender phone has no prior session — should land in handleNewPlannerInbound, detectPlanningIntent should fire, createPlannerSessionWithJoinLink should mint the session and link.",
+  "phones": {
+    "planner": "+15551320001",
+    "rally": "+16624283059"
+  },
+  "assert_outbound_contains": [
+    "rallysurveys.netlify.app/join/",
+    "Yosemite",
+    "Reply HELP"
+  ],
+  "_post_run_assertions": [
+    "trip_sessions has a row with planner_user_id matching +15551320001's user, trip_model='1to1', destination='Yosemite', phase='INTRO'",
+    "trip_session_participants has the planner row with is_planner=true, is_attending=true, status='active'",
+    "join_links has a row for the new trip_session_id with use_count=0",
+    "PostHog 'sms_planner_session_created_from_text' event fired with hasIntent=true, hasDestination=true"
+  ],
+  "messages": [
+    {
+      "from": "+15551320001",
+      "body": "Plan a Yosemite trip with my friends",
+      "delay_ms": 0,
+      "_is1to1": true,
+      "_note": "First message from a fresh planner, planning intent + destination → expect auto-session + join URL"
+    }
+  ]
+}

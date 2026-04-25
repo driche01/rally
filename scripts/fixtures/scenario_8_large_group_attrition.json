@@ -1,4 +1,6 @@
 {
+  "_obsolete": true,
+  "_obsolete_reason": "Group-MMS routing was retired in Phase 2 of the 1:1 SMS pivot. Rewrite required for Phase 7.",
   "script_name": "scenario_8_large_group_attrition",
   "description": "15-person group. Planner proposes dates + cost in opening pitch. People self-remove gracefully (not STOP). Off-topic messages, compliments to organizer, partial availability, slang. Based on real Shasta houseboat text.",
   "phones": {
@@ -24,36 +26,156 @@
     "Error"
   ],
   "messages": [
-    { "from": "+15551280001", "body": "Hey", "delay_ms": 0, "_note": "1:1 planner registration", "_is1to1": true },
-    { "from": "+15551280001", "body": "Bri - Lake Shasta houseboat", "delay_ms": 1000, "_note": "INTRO: planner opens group with name + destination" },
-    { "from": "+15551280002", "body": "Nikki", "delay_ms": 1000, "_note": "INTRO: p2 gives just a name" },
-    { "from": "+15551280003", "body": "Connie", "delay_ms": 1000, "_note": "INTRO: p3 names herself" },
-    { "from": "+15551280004", "body": "Farah", "delay_ms": 1000, "_note": "INTRO: p4 names herself" },
-    { "from": "+15551280005", "body": "Hannah", "delay_ms": 1000, "_note": "INTRO: p5 names herself" },
-    { "from": "+15551280006", "body": "Annika", "delay_ms": 1000, "_note": "INTRO: p6 names herself" },
-    { "from": "+15551280007", "body": "Amy", "delay_ms": 1000, "_note": "INTRO: p7 names herself" },
-    { "from": "+15551280008", "body": "Jen", "delay_ms": 1000, "_note": "INTRO: p8" },
-    { "from": "+15551280009", "body": "Laura", "delay_ms": 1000, "_note": "INTRO: p9" },
-    { "from": "+15551280010", "body": "Mia", "delay_ms": 1000, "_note": "INTRO: p10" },
-    { "from": "+15551280001", "body": "that's everyone", "delay_ms": 2000, "_note": "INTRO→COLLECTING_DESTINATIONS: planner confirms group" },
-
-    { "from": "+15551280002", "body": "Bless you Bri for being an organizer. Also love the use of rustic", "delay_ms": 1000, "_note": "Compliment to organizer — should NOT generate a trip-related response" },
-    { "from": "+15551280003", "body": "+1, thank you for planning! Won't be able to make it but have so much fun!", "delay_ms": 1000, "_note": "GRACEFUL OPT-OUT: should mark as opted_out WITHOUT harsh STOP response" },
-    { "from": "+15551280007", "body": "Have to remove myself due to other travel but bless you for coordinating", "delay_ms": 1000, "_note": "GRACEFUL OPT-OUT: another self-removal" },
-    { "from": "+15551280007", "body": "Bye guyssss", "delay_ms": 500, "_note": "Follow-up farewell — should be ignored" },
-
-    { "from": "+15551280001", "body": "I'd like to propose the weekend of 9/12 - like this if interested!", "delay_ms": 2000, "_note": "DECIDING_DATES: planner proposes dates" },
-    { "from": "+15551280001", "body": "Also flexible weekend of 9/5 if better", "delay_ms": 1000, "_note": "DECIDING_DATES: planner offers ALTERNATIVE dates — should track both" },
-    { "from": "+15551280004", "body": "A Bri bday boat I c u", "delay_ms": 1000, "_note": "Slang message — not a date vote, should be ignored" },
-    { "from": "+15551280001", "body": "survey says we must", "delay_ms": 1000, "_note": "Playful response — not a trip decision" },
-
-    { "from": "+15551280009", "body": "bri you planning rockstar. i'm sadly out for the first two wks for sept!", "delay_ms": 2000, "_note": "PARTIAL AVAILABILITY: not a full opt-out, it's a date constraint" },
-
-    { "from": "+15551280005", "body": "Hi! Are you at Dolores for the protest?", "delay_ms": 3000, "_note": "COMPLETELY OFF-TOPIC: should be ignored entirely" },
-    { "from": "+15551280006", "body": "Hi! I'm out of town at the river this weekend", "delay_ms": 1000, "_note": "OFF-TOPIC: not related to the trip planning" },
-
-    { "from": "+15551280001", "body": "Price pp will depend on exact #s but it looks to be less than $200 pp for the weekend for the boat", "delay_ms": 2000, "_note": "BUDGET INFO: planner shares cost estimate — should be stored as preliminary budget" },
-
-    { "from": "+15551280001", "body": "STATUS", "delay_ms": 1000, "_note": "Status check: should show correct participant count after removals" }
+    {
+      "from": "+15551280001",
+      "body": "Hey",
+      "delay_ms": 0,
+      "_note": "1:1 planner registration",
+      "_is1to1": true
+    },
+    {
+      "from": "+15551280001",
+      "body": "Bri - Lake Shasta houseboat",
+      "delay_ms": 1000,
+      "_note": "INTRO: planner opens group with name + destination"
+    },
+    {
+      "from": "+15551280002",
+      "body": "Nikki",
+      "delay_ms": 1000,
+      "_note": "INTRO: p2 gives just a name"
+    },
+    {
+      "from": "+15551280003",
+      "body": "Connie",
+      "delay_ms": 1000,
+      "_note": "INTRO: p3 names herself"
+    },
+    {
+      "from": "+15551280004",
+      "body": "Farah",
+      "delay_ms": 1000,
+      "_note": "INTRO: p4 names herself"
+    },
+    {
+      "from": "+15551280005",
+      "body": "Hannah",
+      "delay_ms": 1000,
+      "_note": "INTRO: p5 names herself"
+    },
+    {
+      "from": "+15551280006",
+      "body": "Annika",
+      "delay_ms": 1000,
+      "_note": "INTRO: p6 names herself"
+    },
+    {
+      "from": "+15551280007",
+      "body": "Amy",
+      "delay_ms": 1000,
+      "_note": "INTRO: p7 names herself"
+    },
+    {
+      "from": "+15551280008",
+      "body": "Jen",
+      "delay_ms": 1000,
+      "_note": "INTRO: p8"
+    },
+    {
+      "from": "+15551280009",
+      "body": "Laura",
+      "delay_ms": 1000,
+      "_note": "INTRO: p9"
+    },
+    {
+      "from": "+15551280010",
+      "body": "Mia",
+      "delay_ms": 1000,
+      "_note": "INTRO: p10"
+    },
+    {
+      "from": "+15551280001",
+      "body": "that's everyone",
+      "delay_ms": 2000,
+      "_note": "INTRO→COLLECTING_DESTINATIONS: planner confirms group"
+    },
+    {
+      "from": "+15551280002",
+      "body": "Bless you Bri for being an organizer. Also love the use of rustic",
+      "delay_ms": 1000,
+      "_note": "Compliment to organizer — should NOT generate a trip-related response"
+    },
+    {
+      "from": "+15551280003",
+      "body": "+1, thank you for planning! Won't be able to make it but have so much fun!",
+      "delay_ms": 1000,
+      "_note": "GRACEFUL OPT-OUT: should mark as opted_out WITHOUT harsh STOP response"
+    },
+    {
+      "from": "+15551280007",
+      "body": "Have to remove myself due to other travel but bless you for coordinating",
+      "delay_ms": 1000,
+      "_note": "GRACEFUL OPT-OUT: another self-removal"
+    },
+    {
+      "from": "+15551280007",
+      "body": "Bye guyssss",
+      "delay_ms": 500,
+      "_note": "Follow-up farewell — should be ignored"
+    },
+    {
+      "from": "+15551280001",
+      "body": "I'd like to propose the weekend of 9/12 - like this if interested!",
+      "delay_ms": 2000,
+      "_note": "DECIDING_DATES: planner proposes dates"
+    },
+    {
+      "from": "+15551280001",
+      "body": "Also flexible weekend of 9/5 if better",
+      "delay_ms": 1000,
+      "_note": "DECIDING_DATES: planner offers ALTERNATIVE dates — should track both"
+    },
+    {
+      "from": "+15551280004",
+      "body": "A Bri bday boat I c u",
+      "delay_ms": 1000,
+      "_note": "Slang message — not a date vote, should be ignored"
+    },
+    {
+      "from": "+15551280001",
+      "body": "survey says we must",
+      "delay_ms": 1000,
+      "_note": "Playful response — not a trip decision"
+    },
+    {
+      "from": "+15551280009",
+      "body": "bri you planning rockstar. i'm sadly out for the first two wks for sept!",
+      "delay_ms": 2000,
+      "_note": "PARTIAL AVAILABILITY: not a full opt-out, it's a date constraint"
+    },
+    {
+      "from": "+15551280005",
+      "body": "Hi! Are you at Dolores for the protest?",
+      "delay_ms": 3000,
+      "_note": "COMPLETELY OFF-TOPIC: should be ignored entirely"
+    },
+    {
+      "from": "+15551280006",
+      "body": "Hi! I'm out of town at the river this weekend",
+      "delay_ms": 1000,
+      "_note": "OFF-TOPIC: not related to the trip planning"
+    },
+    {
+      "from": "+15551280001",
+      "body": "Price pp will depend on exact #s but it looks to be less than $200 pp for the weekend for the boat",
+      "delay_ms": 2000,
+      "_note": "BUDGET INFO: planner shares cost estimate — should be stored as preliminary budget"
+    },
+    {
+      "from": "+15551280001",
+      "body": "STATUS",
+      "delay_ms": 1000,
+      "_note": "Status check: should show correct participant count after removals"
+    }
   ]
 }
