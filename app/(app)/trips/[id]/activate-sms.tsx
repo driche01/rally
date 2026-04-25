@@ -279,7 +279,7 @@ function StatusCard({
         <Ionicons name="checkmark-circle" size={22} color={C.green} />
         <View style={{ flex: 1 }}>
           <Text style={{ color: C.ink, fontSize: 16, fontWeight: '700' }}>
-            Active 🎉
+            Active
           </Text>
           <Text style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>
             Rally is in your group chat and planning with everyone now.

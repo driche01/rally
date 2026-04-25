@@ -780,7 +780,10 @@ function ItineraryRsvpSection({
 
   return (
     <View className="mt-6">
-      <Text className="text-lg font-bold text-ink">📅 Are you in?</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Ionicons name="calendar-outline" size={18} color="#0F3F2E" />
+        <Text className="text-lg font-bold text-ink">Are you in?</Text>
+      </View>
       <Text className="mt-1 text-sm text-muted">
         Let the planner know which days work for you.
       </Text>
@@ -1797,7 +1800,19 @@ export default function RespondScreen() {
         <Text className="text-3xl font-bold text-green">rally</Text>
 
         <View className="mt-8 items-center">
-          <Text className="text-4xl">🎉</Text>
+          <View
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 32,
+              backgroundColor: '#DFE8D2',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 4,
+            }}
+          >
+            <Ionicons name="sparkles" size={32} color="#0F3F2E" />
+          </View>
           <Text className="mt-4 text-center text-2xl font-bold text-ink">
             {rsvpChoice === 'in' ? "You're in!" : hasExistingResponses ? 'Responses updated!' : 'Responses sent!'}
           </Text>

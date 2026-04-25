@@ -65,8 +65,8 @@ export function PlanConfirmedModal({
 
   const destination = decidedDestination || tripName;
   const headline = decidedDestination
-    ? `${decidedDestination} it is! 🎉`
-    : 'The plan is locked in! 🎉';
+    ? `${decidedDestination} it is!`
+    : 'The plan is locked in!';
 
   return (
     <Modal
@@ -104,13 +104,13 @@ export function PlanConfirmedModal({
                   width: 72,
                   height: 72,
                   borderRadius: 36,
-                  backgroundColor: '#FFF4F2',
+                  backgroundColor: '#DFE8D2',
                   alignItems: 'center',
                   justifyContent: 'center',
                   marginBottom: 8,
                 }}
               >
-                <Text style={{ fontSize: 36 }}>🎉</Text>
+                <Ionicons name="sparkles" size={36} color="#0F3F2E" />
               </View>
 
               <Text
