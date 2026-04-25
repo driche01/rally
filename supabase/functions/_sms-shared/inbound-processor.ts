@@ -270,6 +270,66 @@ export async function processInboundMessage(
           }
         }
       } else {
+        // ─── App-pending session handoff (Phase 4) ────────────────────────
+        // Before creating a brand-new session, check whether one of the
+        // group's participants is the planner of an `app_pending_<tripId>`
+        // session pre-created by the in-app "Get Rally to run this in my
+        // group" flow. If so, this inbound is the activation moment —
+        // reassign the placeholder thread_id to the real group hash and
+        // proceed as a normal new-thread message.
+        let pendingHandoffSession = null;
+        const { data: pendingCandidates } = await admin
+          .from('trip_sessions')
+          .select('*')
+          .like('thread_id', 'app_pending_%')
+          .eq('status', 'ACTIVE');
+
+        for (const candidate of pendingCandidates ?? []) {
+          if (!candidate.planner_user_id) continue;
+          const { data: plannerUser } = await admin
+            .from('users')
+            .select('phone')
+            .eq('id', candidate.planner_user_id)
+            .maybeSingle();
+          if (!plannerUser) continue;
+          // Activate when the planner's phone is one of the group's phones.
+          if (allPhones.includes(plannerUser.phone as string)) {
+            pendingHandoffSession = candidate;
+            break;
+          }
+        }
+
+        if (pendingHandoffSession) {
+          const realThreadId = await deriveThreadId([senderPhone, `group_${Date.now()}`]);
+          await admin
+            .from('trip_sessions')
+            .update({ thread_id: realThreadId, last_message_at: new Date().toISOString() })
+            .eq('id', pendingHandoffSession.id);
+          session = { ...pendingHandoffSession, thread_id: realThreadId };
+          // Add this sender as a participant if they aren't the planner.
+          if (user.id !== pendingHandoffSession.planner_user_id) {
+            participant = await addParticipant(admin, session.id, user, false);
+          } else {
+            const { data: existingP } = await admin
+              .from('trip_session_participants')
+              .select('*')
+              .eq('trip_session_id', session.id)
+              .eq('user_id', user.id)
+              .maybeSingle();
+            participant = existingP ?? null;
+          }
+          if (session.trip_id) {
+            await ensureRespondent(admin, session.trip_id, user);
+          }
+          // Skip the brand-new-session intro logic below — use the
+          // standard intro response for the activated thread.
+          introResponse = introMessage({ channel: 'sms' });
+          track('sms_session_activated_from_app', {
+            distinct_id: session.id,
+            sessionId: session.id,
+            tripId: session.trip_id,
+          }).catch(() => {});
+        } else {
         // ─── Truly new session ────────────────────────────────────────────
         const threadId = await deriveThreadId([senderPhone, `group_${Date.now()}`]);
 
@@ -357,6 +417,7 @@ export async function processInboundMessage(
           plannerUserId: user.id,
           threadName: msg.FriendlyName ?? null,
         }).catch(() => {});
+        }  // ← closes the `else` for app-pending-handoff vs truly-new-session
       }
     }
   }
