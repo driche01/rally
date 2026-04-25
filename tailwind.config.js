@@ -20,7 +20,7 @@ module.exports = {
           DEFAULT: '#FBF7EF',  // page bg
           warm:    '#EFE3D0',  // inactive interactive surface (pills, toggles)
         },
-        card: '#FFFAF2',       // elevated card (paired with shadow + border)
+        card: '#FFFCF6',       // elevated card — near-white, whisper of warmth
         line: '#D9CCB6',       // hairline border (visible-but-quiet)
         // Text colors — never pure black.
         ink:   '#163026',
