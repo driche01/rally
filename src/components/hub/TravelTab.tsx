@@ -33,6 +33,7 @@ import {
 import { useGetTravelSuggestions } from '@/hooks/useAiSuggestions';
 import type { TravelSuggestion } from '@/lib/api/aiSuggestions';
 import type { TravelLeg, TransportMode } from '@/types/database';
+import { Button } from '@/components/ui';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -437,36 +438,23 @@ function LegForm({
 
       {/* Actions */}
       <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
-        <Pressable
-          onPress={onCancel}
-          style={{
-            flex: 1,
-            height: 50,
-            borderRadius: 14,
-            borderWidth: 1.5,
-            borderColor: '#D9CCB6',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Text style={{ fontSize: 15, fontWeight: '500', color: '#888' }}>Cancel</Text>
-        </Pressable>
-        <Pressable
-          onPress={handleSave}
-          disabled={saving}
-          style={{
-            flex: 2,
-            height: 50,
-            borderRadius: 14,
-            backgroundColor: saving ? '#FFAA9F' : '#0F3F2E',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Text style={{ fontSize: 15, fontWeight: '600', color: '#fff' }}>
-            {saving ? 'Saving…' : isEditing ? 'Save changes' : 'Add leg'}
-          </Text>
-        </Pressable>
+        <View style={{ flex: 1 }}>
+          <Button variant="secondary" onPress={onCancel} fullWidth size="lg">
+            Cancel
+          </Button>
+        </View>
+        <View style={{ flex: 2 }}>
+          <Button
+            variant="primary"
+            onPress={handleSave}
+            loading={saving}
+            disabled={saving}
+            fullWidth
+            size="lg"
+          >
+            {isEditing ? 'Save changes' : 'Add leg'}
+          </Button>
+        </View>
       </View>
     </View>
   );

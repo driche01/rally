@@ -42,6 +42,7 @@ import type { LodgingSuggestion } from '@/lib/api/aiSuggestions';
 import { useCreateBlock, useDeleteBlocksByType } from '@/hooks/useItinerary';
 import type { LodgingOptionWithVotes, LodgingPlatform } from '@/types/database';
 import { GROUP_SIZE_MIDPOINTS } from '@/types/database';
+import { Button } from '@/components/ui';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -171,23 +172,22 @@ function BookingSheet({
             </View>
 
             <View style={{ flexDirection: 'row', gap: 10 }}>
-              <Pressable
-                onPress={onClose}
-                style={{ flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#D9CCB6', alignItems: 'center' }}
-              >
-                <Text style={{ fontSize: 15, fontWeight: '600', color: '#525252' }}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => onSave(local)}
-                disabled={saving}
-                style={{ flex: 2, paddingVertical: 14, borderRadius: 14, backgroundColor: '#0F3F2E', alignItems: 'center', justifyContent: 'center' }}
-              >
-                {saving ? (
-                  <ActivityIndicator size="small" color="white" />
-                ) : (
-                  <Text style={{ fontSize: 15, fontWeight: '600', color: 'white' }}>Mark as booked</Text>
-                )}
-              </Pressable>
+              <View style={{ flex: 1 }}>
+                <Button variant="secondary" onPress={onClose} fullWidth>
+                  Cancel
+                </Button>
+              </View>
+              <View style={{ flex: 2 }}>
+                <Button
+                  variant="primary"
+                  onPress={() => onSave(local)}
+                  loading={saving}
+                  disabled={saving}
+                  fullWidth
+                >
+                  Mark as booked
+                </Button>
+              </View>
             </View>
           </Pressable>
         </KeyboardAvoidingView>
@@ -373,23 +373,22 @@ function ManualEntrySheet({
               />
 
               <View style={{ flexDirection: 'row', gap: 10 }}>
-                <Pressable
-                  onPress={onClose}
-                  style={{ flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#D9CCB6', alignItems: 'center' }}
-                >
-                  <Text style={{ fontSize: 15, fontWeight: '600', color: '#525252' }}>Cancel</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => canSave && onSave(local)}
-                  disabled={!canSave || saving}
-                  style={{ flex: 2, paddingVertical: 14, borderRadius: 14, backgroundColor: canSave ? '#0F3F2E' : '#FCA99F', alignItems: 'center', justifyContent: 'center' }}
-                >
-                  {saving ? (
-                    <ActivityIndicator size="small" color="white" />
-                  ) : (
-                    <Text style={{ fontSize: 15, fontWeight: '600', color: 'white' }}>Add property</Text>
-                  )}
-                </Pressable>
+                <View style={{ flex: 1 }}>
+                  <Button variant="secondary" onPress={onClose} fullWidth>
+                    Cancel
+                  </Button>
+                </View>
+                <View style={{ flex: 2 }}>
+                  <Button
+                    variant="primary"
+                    onPress={() => canSave && onSave(local)}
+                    loading={saving}
+                    disabled={!canSave || saving}
+                    fullWidth
+                  >
+                    Add property
+                  </Button>
+                </View>
               </View>
             </Pressable>
           </ScrollView>
@@ -1192,13 +1191,13 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
                 autoCorrect={false}
                 keyboardType="url"
               />
-              <Pressable
+              <Button
+                variant="primary"
                 onPress={handleAddFromUrl}
                 disabled={!pasteUrl.trim()}
-                className={`rounded-xl px-4 py-3 ${pasteUrl.trim() ? 'bg-green' : 'bg-line'}`}
               >
-                <Text className={`text-sm font-semibold ${pasteUrl.trim() ? 'text-white' : 'text-muted'}`}>Add</Text>
-              </Pressable>
+                Add
+              </Button>
             </View>
 
             {urlError ? (
@@ -1229,17 +1228,15 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
                   placeholderTextColor="#A3A3A3"
                   className="rounded-xl border border-line bg-card px-3 py-2.5 text-sm text-ink"
                 />
-                <Pressable
+                <Button
+                  variant="primary"
                   onPress={handleConfirmUrlAdd}
+                  loading={createOption.isPending}
                   disabled={createOption.isPending}
-                  className="items-center rounded-xl bg-green py-2.5"
+                  fullWidth
                 >
-                  {createOption.isPending ? (
-                    <ActivityIndicator size="small" color="white" />
-                  ) : (
-                    <Text className="text-sm font-semibold text-white">Add property</Text>
-                  )}
-                </Pressable>
+                  Add property
+                </Button>
               </View>
             ) : null}
 

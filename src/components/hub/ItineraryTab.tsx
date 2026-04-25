@@ -988,20 +988,13 @@ function AiItineraryBanner({
         <Text style={{ fontSize: 13, color: '#4A6E8A', lineHeight: 18 }}>
           Rally will create 3 tailored options based on your group's confirmed preferences and trip details.
         </Text>
-        <Pressable
+        <Button
+          variant="primary"
           onPress={() => generate.mutate({})}
-          style={{
-            backgroundColor: '#0F3F2E',
-            borderRadius: 12,
-            paddingVertical: 12,
-            alignItems: 'center',
-          }}
-          accessibilityRole="button"
+          fullWidth
         >
-          <Text style={{ fontSize: 14, fontWeight: '700', color: '#FFFCF6' }}>
-            Generate options
-          </Text>
-        </Pressable>
+          Generate options
+        </Button>
       </View>
     );
   }
@@ -1249,12 +1242,13 @@ export function ItineraryTab({ tripId, isPlanner = true }: { tripId: string; isP
           <Text className="text-center text-sm text-muted">
             Set your trip start and end dates to build a day-by-day itinerary.
           </Text>
-          <Pressable
+          <Button
+            variant="primary"
             onPress={() => setDateSheetVisible(true)}
-            className="mt-1 rounded-2xl bg-green px-6 py-3"
+            className="mt-1"
           >
-            <Text className="text-sm font-semibold text-white">Set trip dates</Text>
-          </Pressable>
+            Set trip dates
+          </Button>
         </View>
       ) : (
         <ScrollView

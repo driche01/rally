@@ -646,14 +646,16 @@ export default function NewPollScreen() {
               >
                 Save as draft
               </Button>
-              <Pressable
-                onPress={() => handleSave('live')}
-                disabled={createPoll.isPending || updateCustomPoll.isPending}
-                className="flex-1 items-center justify-center rounded-2xl min-h-[48px] px-6 py-3"
-                style={{ backgroundColor: accentColor, opacity: (createPoll.isPending || updateCustomPoll.isPending) ? 0.5 : 1 }}
-              >
-                <Text className="text-base font-semibold text-white">Send it!</Text>
-              </Pressable>
+              <View style={{ flex: 1 }}>
+                <Button
+                  variant="primary"
+                  onPress={() => handleSave('live')}
+                  disabled={createPoll.isPending || updateCustomPoll.isPending}
+                  fullWidth
+                >
+                  Send it!
+                </Button>
+              </View>
             </View>
           )}
         </View>
@@ -687,19 +689,20 @@ export default function NewPollScreen() {
               Only the completed ones will go live. Send it anyway?
             </Text>
             <View className="mt-5 flex-row gap-3">
-              <Pressable
-                onPress={() => setShowIncompleteModal(false)}
-                className="flex-1 items-center rounded-xl border border-line bg-card py-3"
-              >
-                <Text className="text-base font-medium text-ink">Go back</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => { setShowIncompleteModal(false); doSave('live'); }}
-                className="flex-1 items-center rounded-xl py-3"
-                style={{ backgroundColor: accentColor }}
-              >
-                <Text className="text-base font-semibold text-white">Send it anyway</Text>
-              </Pressable>
+              <View style={{ flex: 1 }}>
+                <Button variant="secondary" onPress={() => setShowIncompleteModal(false)} fullWidth>
+                  Go back
+                </Button>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button
+                  variant="primary"
+                  onPress={() => { setShowIncompleteModal(false); doSave('live'); }}
+                  fullWidth
+                >
+                  Send it anyway
+                </Button>
+              </View>
             </View>
           </View>
         </View>

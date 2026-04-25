@@ -301,6 +301,7 @@ export function DatesSection({
               </Pressable>
             );
           })}
+          {/* FUTURE: icon-only Button variant */}
           <Pressable
             onPress={onCustomDurationAdd}
             disabled={!customDurationInput.trim()}

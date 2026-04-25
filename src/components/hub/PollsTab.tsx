@@ -285,51 +285,57 @@ const PollCard = memo(function PollCard({
         </View>
         <View className="flex-row items-center gap-2">
           {isEditable && (
-            <Pressable
+            <Button
+              variant="secondary"
+              size="sm"
               onPress={() => router.push(`/(app)/trips/${tripId}/polls/${poll.id}/edit`)}
-              className="rounded-xl border border-neutral-200 bg-white px-3 py-1.5"
             >
-              <Text className="text-xs font-medium text-neutral-600">Edit</Text>
-            </Pressable>
+              Edit
+            </Button>
           )}
           {poll.status === 'draft' && (
-            <Pressable
+            <Button
+              variant="primary"
+              size="sm"
               onPress={() => Alert.alert('Go live?', 'Once live with responses it cannot be edited.', [
                 { text: 'Cancel', style: 'cancel' },
                 { text: 'Go live', onPress: () => updateStatus.mutate({ pollId: poll.id, status: 'live' }, { onError: mutationError('go live') }) },
               ])}
-              className="rounded-xl bg-green px-3 py-1.5"
             >
-              <Text className="text-xs font-semibold text-white">Go live</Text>
-            </Pressable>
+              Go live
+            </Button>
           )}
           {poll.status === 'live' && (
-            <Pressable
+            <Button
+              variant="secondary"
+              size="sm"
               onPress={() => updateStatus.mutate({ pollId: poll.id, status: 'closed' }, { onSuccess: () => capture(Events.POLL_CLOSED, { poll_type: poll.type, trip_id: tripId }), onError: mutationError('close poll') })}
-              className="rounded-xl border border-neutral-200 bg-white px-3 py-1.5"
             >
-              <Text className="text-xs font-medium text-neutral-600">Close</Text>
-            </Pressable>
+              Close
+            </Button>
           )}
           {poll.status === 'decided' && (
-            <Pressable
+            <Button
+              variant="secondary"
+              size="sm"
               onPress={() => undecide.mutate(poll.id, { onError: mutationError('undo decision') })}
-              className="rounded-xl border border-neutral-200 bg-white px-3 py-1.5"
             >
-              <Text className="text-xs font-medium text-neutral-600">Undo</Text>
-            </Pressable>
+              Undo
+            </Button>
           )}
           {showCopy && (
-            <Pressable
+            <Button
+              variant="secondary"
+              size="sm"
               onPress={() => Alert.alert('Clone poll?', 'Creates a new draft.', [
                 { text: 'Cancel', style: 'cancel' },
                 { text: 'Clone', onPress: () => duplicate.mutate(poll.id, { onError: mutationError('clone poll') }) },
               ])}
-              className="rounded-xl border border-neutral-200 bg-white px-3 py-1.5"
             >
-              <Text className="text-xs font-medium text-neutral-600">Clone</Text>
-            </Pressable>
+              Clone
+            </Button>
           )}
+          {/* FUTURE: icon-only Button variant */}
           <Pressable
             onPress={() => Alert.alert('Delete this poll?', 'This cannot be undone.', [
               { text: 'Cancel', style: 'cancel' },
@@ -441,14 +447,14 @@ export function PollsTab({ tripId, isPlanner = true }: { tripId: string; isPlann
             <Text className="text-xs text-neutral-400">{sortNewest ? 'Newest' : 'Oldest'}</Text>
           </Pressable>
           {isPlanner ? (
-            <Pressable
+            <Button
+              variant="primary"
+              size="sm"
+              leadingIcon="add"
               onPress={() => router.push(`/(app)/trips/${tripId}/polls/new`)}
-              className="flex-row items-center gap-1 rounded-xl px-3 py-1.5"
-              style={{ backgroundColor: accentColor }}
             >
-              <Ionicons name="add" size={14} color="white" />
-              <Text className="text-xs font-semibold text-white">Add poll</Text>
-            </Pressable>
+              Add poll
+            </Button>
           ) : null}
         </View>
       </View>
