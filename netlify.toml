@@ -9,7 +9,34 @@
 [build.environment]
   SECRETS_SCAN_OMIT_KEYS = "EXPO_PUBLIC_POSTHOG_HOST,EXPO_PUBLIC_SUPABASE_URL"
 
-# SPA fallback — all routes serve index.html
+# Universal-link manifests — must be served literally (no SPA fallback) and
+# with `Content-Type: application/json`. iOS rejects AASA without it.
+# These rules MUST come before the SPA catchall below.
+[[redirects]]
+  from = "/.well-known/apple-app-site-association"
+  to = "/.well-known/apple-app-site-association"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/.well-known/assetlinks.json"
+  to = "/.well-known/assetlinks.json"
+  status = 200
+  force = true
+
+[[headers]]
+  for = "/.well-known/apple-app-site-association"
+  [headers.values]
+    Content-Type = "application/json"
+    Cache-Control = "public, max-age=300"
+
+[[headers]]
+  for = "/.well-known/assetlinks.json"
+  [headers.values]
+    Content-Type = "application/json"
+    Cache-Control = "public, max-age=300"
+
+# SPA fallback — all other routes serve index.html
 [[redirects]]
   from = "/*"
   to = "/index.html"

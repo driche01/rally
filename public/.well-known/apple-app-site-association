@@ -1,0 +1,17 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appID": "KZJZ29X54P.io.rallyapp.app",
+        "paths": [
+          "/t/*",
+          "/respond/*",
+          "/download"
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["KZJZ29X54P.io.rallyapp.app"]
+  }
+}
