@@ -1,6 +1,10 @@
 import React, { forwardRef } from 'react';
 import { Text, TextInput, View, type TextInputProps } from 'react-native';
 
+// Placeholder text — slightly desaturated to read as hint on cream/card.
+// Local-only (not part of brand T).
+const PLACEHOLDER = '#9DA8A0';
+
 interface InputProps extends TextInputProps {
   label?: string;
   error?: string;
@@ -28,7 +32,7 @@ export const Input = forwardRef<TextInput, InputProps>(
           ]
             .filter(Boolean)
             .join(' ')}
-          placeholderTextColor="#9DA8A0"
+          placeholderTextColor={PLACEHOLDER}
           accessible
           accessibilityLabel={label}
           {...props}

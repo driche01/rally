@@ -27,6 +27,11 @@ import {
   ViewStyle,
 } from 'react-native';
 import { fetchPlaceSuggestions, PlaceSuggestion } from '@/lib/api/places';
+import { T } from '@/theme';
+
+// Placeholder text + secondary icon tint — slightly desaturated against
+// the warm card surface. Local-only (not part of brand T).
+const PLACEHOLDER = '#9DA8A0';
 
 function makeSessionToken() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -118,12 +123,12 @@ export function PlacesAutocompleteInput({
   return (
     <View style={containerStyle}>
       {/* Input row */}
-      <View className="flex-row items-center min-h-[48px] rounded-2xl border border-neutral-200 bg-white px-4 py-3">
+      <View className="flex-row items-center min-h-[48px] rounded-md border border-line bg-card px-4 py-3">
         {leadingIcon && (
           <Ionicons
             name="location-outline"
             size={18}
-            color="#737373"
+            color={T.muted}
             style={{ marginRight: 8 }}
           />
         )}
@@ -134,38 +139,38 @@ export function PlacesAutocompleteInput({
           maxLength={maxLength}
           onFocus={() => setFocused(true)}
           onBlur={() => setTimeout(() => setFocused(false), 150)}
-          placeholderTextColor="#A8A8A8"
+          placeholderTextColor={PLACEHOLDER}
           returnKeyType="done"
-          className="flex-1 text-base text-neutral-800"
+          className="flex-1 text-base text-ink"
         />
         {loading ? (
-          <ActivityIndicator size="small" color="#A8A8A8" style={{ marginLeft: 6 }} />
+          <ActivityIndicator size="small" color={T.muted} style={{ marginLeft: 6 }} />
         ) : value.length > 0 ? (
           <TouchableOpacity hitSlop={8} onPress={handleClear}>
-            <Ionicons name="close-circle" size={18} color="#a3a3a3" />
+            <Ionicons name="close-circle" size={18} color={T.muted} />
           </TouchableOpacity>
         ) : null}
       </View>
 
       {/* Suggestions dropdown */}
       {showDropdown && (
-        <View className="mt-1 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm">
+        <View className="mt-1 overflow-hidden rounded-lg border border-line bg-card shadow-sm">
           {suggestions.map((s, i) => (
             <Pressable
               key={s.id}
               onPress={() => handleSelect(s)}
               className={[
                 'flex-row items-center gap-3 px-4 py-3',
-                i < suggestions.length - 1 ? 'border-b border-neutral-100' : '',
+                i < suggestions.length - 1 ? 'border-b border-line' : '',
               ].join(' ')}
             >
-              <Ionicons name="location-outline" size={15} color="#A8A8A8" />
+              <Ionicons name="location-outline" size={15} color={T.muted} />
               <View className="flex-1">
-                <Text className="text-sm font-medium text-neutral-700" numberOfLines={1}>
+                <Text className="text-sm font-medium text-ink" numberOfLines={1}>
                   {s.mainText}
                 </Text>
                 {s.secondaryText ? (
-                  <Text className="text-xs text-neutral-400" numberOfLines={1}>
+                  <Text className="text-xs text-muted" numberOfLines={1}>
                     {s.secondaryText}
                   </Text>
                 ) : null}

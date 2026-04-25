@@ -5,6 +5,7 @@ import {
   Text,
   type PressableProps,
 } from 'react-native';
+import { T } from '@/theme';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'destructive';
 type Size = 'sm' | 'md' | 'lg';
@@ -48,10 +49,10 @@ const sizeClasses: Record<Size, { container: string; text: string }> = {
 };
 
 const SPINNER_COLOR: Record<Variant, string> = {
-  primary:     '#FFFFFF',
-  secondary:   '#0F3F2E', // green
-  ghost:       '#0F3F2E',
-  destructive: '#FFFFFF',
+  primary:     T.white,
+  secondary:   T.green,
+  ghost:       T.green,
+  destructive: T.white,
 };
 
 export function Button({
