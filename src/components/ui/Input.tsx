@@ -12,13 +12,14 @@ interface InputProps extends TextInputProps {
 }
 
 // Subtle drop shadow gives the input a clear lift off cream-page surfaces.
-// Without it, bg-card (#FFFAF2) on bg-cream (#FBF7EF) is barely visible.
+// Warm-tinted shadow blends with the brand surface; ~6% opacity reads as
+// "input box" without screaming.
 const INPUT_SHADOW = {
-  shadowColor:   '#1A1A1A',
-  shadowOffset:  { width: 0, height: 2 },
-  shadowOpacity: 0.04,
-  shadowRadius:  6,
-  elevation:     1,
+  shadowColor:   '#3A2D14',
+  shadowOffset:  { width: 0, height: 3 },
+  shadowOpacity: 0.06,
+  shadowRadius:  8,
+  elevation:     2,
 };
 
 // 2026-04-24 brand palette: warm cream surfaces, ink text, hairline borders,
