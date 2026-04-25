@@ -42,27 +42,36 @@ export const radius = {
   full: 9999,
 } as const;
 
-/** Shadows — kept light per brand direction. No heavy drops. */
+/**
+ * Shadows — warm-tinted to blend with the cream brand surface.
+ * Cool/neutral shadows on a warm palette read as "off." The brown-tinted
+ * shadow color (#3A2D14) complements cream/card without darkening to gray.
+ *
+ * Opacities tuned for visibility on warm bg:
+ *   sm  ~6%  — inputs, small lifted elements
+ *   md  ~9%  — cards, modals, sheets
+ *   lg ~14%  — overlays, big floating CTAs
+ */
 export const shadow = {
   sm: {
-    shadowColor:   '#111111',
-    shadowOffset:  { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowColor:   '#3A2D14',
+    shadowOffset:  { width: 0, height: 3 },
+    shadowOpacity: 0.06,
     shadowRadius:  8,
-    elevation:     1,
+    elevation:     2,
   },
   md: {
-    shadowColor:   '#111111',
-    shadowOffset:  { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius:  24,
-    elevation:     3,
+    shadowColor:   '#3A2D14',
+    shadowOffset:  { width: 0, height: 6 },
+    shadowOpacity: 0.09,
+    shadowRadius:  16,
+    elevation:     4,
   },
   lg: {
-    shadowColor:   '#111111',
+    shadowColor:   '#3A2D14',
     shadowOffset:  { width: 0, height: 18 },
-    shadowOpacity: 0.12,
-    shadowRadius:  48,
-    elevation:     6,
+    shadowOpacity: 0.14,
+    shadowRadius:  40,
+    elevation:     8,
   },
 } as const;

@@ -14,12 +14,14 @@ module.exports = {
           soft:    '#DFE8D2',
         },
         // Cream backgrounds — Rally's signature surface.
+        // ~5-8% luminance gap between adjacent layers so each surface is
+        // perceivable at a glance. See src/theme/colors.ts for rationale.
         cream: {
-          DEFAULT: '#FBF7EF',
-          warm:    '#F4ECDF',
+          DEFAULT: '#FBF7EF',  // page bg
+          warm:    '#EFE3D0',  // inactive interactive surface (pills, toggles)
         },
-        card: '#FFFAF2',
-        line: '#E7DDCF',
+        card: '#FFFAF2',       // elevated card (paired with shadow + border)
+        line: '#D9CCB6',       // hairline border (visible-but-quiet)
         // Text colors — never pure black.
         ink:   '#163026',
         muted: '#5F685F',

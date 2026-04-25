@@ -36,12 +36,16 @@ export const colors = {
   },
 
   // ─── Backgrounds & surfaces ───────────────────────────────────────────────
+  // Layered surface system. ~5–8% luminance step between adjacent layers so
+  // each surface is perceivable at a glance against the one below it. Warm
+  // palette + low-contrast page demands this — too-close steps wash out.
   cream: {
-    DEFAULT: '#FBF7EF',  // page background
-    warm:    '#F4ECDF',  // section background, slightly warmer
+    DEFAULT: '#FBF7EF',  // page background — lightest
+    warm:    '#EFE3D0',  // inactive interactive surfaces (pills, toggles, calendar)
+                         //   — ~8% darker than page, clearly differentiated
   },
-  card:     '#FFFAF2',   // card surface — slight warmth, not pure white
-  line:     '#E7DDCF',   // borders, hairlines
+  card:     '#FFFAF2',   // elevated card surface — paired with shadow + border
+  line:     '#D9CCB6',   // hairline borders — visible-but-quiet on cream surfaces
 
   // ─── Text ─────────────────────────────────────────────────────────────────
   ink:      '#163026',   // primary text — never #000

@@ -40,12 +40,12 @@ const tabStyles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
   },
-  // Inactive uses cream-warm (#F4ECDF) — clearly differentiated from the
-  // page bg (#FBF7EF). bg-card (#FFFAF2) is too close to read as a distinct
-  // pill on cream surfaces.
-  inactive: { borderColor: '#E7DDCF', backgroundColor: '#F4ECDF' },
-  taken:    { borderColor: '#E7DDCF', backgroundColor: '#EFE8DA' },
-  textActive:   { fontSize: 14, fontWeight: '500', color: '#FFFFFF' },
+  // Inactive uses cream-warm (#EFE3D0) — ~8% darker than page (#FBF7EF),
+  // gives a clearly perceivable pill. taken state goes one step quieter
+  // with a stronger border so it reads as "out of consideration."
+  inactive: { borderColor: '#D9CCB6', backgroundColor: '#EFE3D0' },
+  taken:    { borderColor: '#D9CCB6', backgroundColor: '#E5D9C3' },
+  textActive:   { fontSize: 14, fontWeight: '600', color: '#FFFFFF' },
   textInactive: { fontSize: 14, fontWeight: '500', color: '#163026' },
   textTaken:    { fontSize: 14, fontWeight: '500', color: '#9DA8A0' },
 });
