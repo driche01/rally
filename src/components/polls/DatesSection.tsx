@@ -81,13 +81,13 @@ function CalendarPicker({
   const weeks = chunkArray(cells, 7);
 
   return (
-    <View className="rounded-2xl border border-neutral-200 bg-white p-4">
+    <View className="rounded-2xl border border-line bg-cream-warm p-4">
       {/* Month nav */}
       <View className="mb-3 flex-row items-center justify-between">
         <Pressable onPress={prevMonth} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} className="p-1" disabled={isCurrentMonth}>
           <Ionicons name="chevron-back" size={20} color={isCurrentMonth ? '#D4D4D4' : '#6B6B6B'} />
         </Pressable>
-        <Text className="text-sm font-semibold text-neutral-800">
+        <Text className="text-sm font-semibold text-ink">
           {MONTH_NAMES[viewMonth]} {viewYear}
         </Text>
         <Pressable onPress={nextMonth} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} className="p-1">
@@ -99,7 +99,7 @@ function CalendarPicker({
       <View className="mb-1 flex-row">
         {DAY_NAMES.map((d) => (
           <View key={d} style={{ flex: 1 }} className="items-center">
-            <Text className="text-xs font-medium text-neutral-400">{d}</Text>
+            <Text className="text-xs font-medium text-muted">{d}</Text>
           </View>
         ))}
       </View>
@@ -130,7 +130,7 @@ function CalendarPicker({
                     style={isPast
                       ? { color: '#D4D4D4' }
                       : isEndpoint
-                        ? { fontWeight: '700', color: '#FFFFFF' }
+                        ? { fontWeight: '700', color: '#F4ECDF' }
                         : isIn
                           ? { color: accentColor }
                           : { color: '#404040' }
@@ -146,7 +146,7 @@ function CalendarPicker({
       ))}
 
       {/* Hint */}
-      <Text className="mt-2 text-center text-xs text-neutral-400">
+      <Text className="mt-2 text-center text-xs text-muted">
         {pendingStart
           ? `Now tap an end date (started ${fmtShort(pendingStart)})`
           : 'Tap a start date to add a period'}
@@ -236,12 +236,12 @@ export function DatesSection({
                 className="rounded-full border px-4 py-2"
                 style={sel
                   ? { borderColor: accentColor, backgroundColor: accentColor }
-                  : { borderColor: '#E5E5E5', backgroundColor: '#FFFFFF' }
+                  : { borderColor: '#E7DDCF', backgroundColor: '#F4ECDF' }
                 }
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: sel }}
               >
-                <Text className="text-sm font-medium" style={{ color: sel ? '#FFFFFF' : '#525252' }}>
+                <Text className="text-sm font-medium" style={{ color: sel ? '#F4ECDF' : '#525252' }}>
                   {dur}
                 </Text>
               </Pressable>
@@ -277,7 +277,7 @@ export function DatesSection({
             keyboardType="number-pad"
             placeholder="e.g. 5"
             maxLength={3}
-            className="w-20 min-h-[44px] rounded-2xl border border-neutral-200 bg-white px-4 py-2 text-sm text-neutral-800 text-center"
+            className="w-20 min-h-[44px] rounded-2xl border border-line bg-cream-warm px-4 py-2 text-sm text-ink text-center"
             placeholderTextColor="#A8A8A8"
           />
           {DURATION_UNITS.map((u) => {
@@ -289,13 +289,13 @@ export function DatesSection({
                 className="flex-1 items-center justify-center rounded-2xl border min-h-[44px] px-1"
                 style={sel
                   ? { borderColor: accentColor, backgroundColor: accentColor }
-                  : { borderColor: '#E5E5E5', backgroundColor: '#FFFFFF' }
+                  : { borderColor: '#E7DDCF', backgroundColor: '#F4ECDF' }
                 }
                 accessibilityRole="radio"
                 accessibilityState={{ selected: sel }}
                 accessibilityLabel={u}
               >
-                <Text className="text-xs font-medium" style={{ color: sel ? '#FFFFFF' : '#525252' }}>
+                <Text className="text-xs font-medium" style={{ color: sel ? '#F4ECDF' : '#525252' }}>
                   {u}
                 </Text>
               </Pressable>
@@ -305,11 +305,11 @@ export function DatesSection({
             onPress={onCustomDurationAdd}
             disabled={!customDurationInput.trim()}
             className="h-11 w-11 items-center justify-center rounded-full"
-            style={{ backgroundColor: customDurationInput.trim() ? accentColor : '#E5E5E5' }}
+            style={{ backgroundColor: customDurationInput.trim() ? accentColor : '#E7DDCF' }}
             accessibilityRole="button"
             accessibilityLabel="Add custom duration"
           >
-            <Ionicons name="add" size={22} color={customDurationInput.trim() ? '#FFFFFF' : '#A8A8A8'} />
+            <Ionicons name="add" size={22} color={customDurationInput.trim() ? '#F4ECDF' : '#A8A8A8'} />
           </Pressable>
         </View>
       </View>

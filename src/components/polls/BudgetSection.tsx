@@ -37,7 +37,7 @@ function BoundaryInput({
       onSubmitEditing={handleCommit}
       keyboardType="number-pad"
       selectTextOnFocus
-      className="min-w-[56px] rounded-lg border border-neutral-200 bg-neutral-50 px-2 py-1 text-center text-sm font-medium text-neutral-700"
+      className="min-w-[56px] rounded-lg border border-line bg-cream px-2 py-1 text-center text-sm font-medium text-ink"
       accessibilityLabel="budget boundary"
     />
   );
@@ -80,8 +80,8 @@ export function BudgetSection({
       <Divider />
 
       <View className="gap-2">
-        <Text className="text-sm font-medium text-neutral-700">Budget tiers</Text>
-        <Text className="text-xs text-neutral-400 -mt-1">
+        <Text className="text-sm font-medium text-ink">Budget tiers</Text>
+        <Text className="text-xs text-muted -mt-1">
           Tap a label to rename · tap a number to change the boundary
         </Text>
         {budgetRanges.map((r, i) => {
@@ -92,7 +92,7 @@ export function BudgetSection({
               className="flex-row items-center gap-2 rounded-xl border px-3 py-3"
               style={r.selected
                 ? { borderColor: accentColor + '80', backgroundColor: accentColor + '10' }
-                : { borderColor: '#E5E5E5', backgroundColor: '#FFFFFF' }
+                : { borderColor: '#E7DDCF', backgroundColor: '#F4ECDF' }
               }
             >
               {/* Checkbox */}
@@ -105,7 +105,7 @@ export function BudgetSection({
                   className="h-5 w-5 items-center justify-center rounded-md border-2"
                   style={r.selected
                     ? { borderColor: accentColor, backgroundColor: accentColor }
-                    : { borderColor: '#D4D4D4', backgroundColor: '#FFFFFF' }
+                    : { borderColor: '#D4D4D4', backgroundColor: '#F4ECDF' }
                   }
                 >
                   {r.selected ? <Ionicons name="checkmark" size={12} color="white" /> : null}
@@ -116,7 +116,7 @@ export function BudgetSection({
               <TextInput
                 value={r.label}
                 onChangeText={(v) => onLabelUpdate(r.id, v)}
-                className="flex-1 text-sm text-neutral-800"
+                className="flex-1 text-sm text-ink"
                 placeholderTextColor="#A8A8A8"
                 maxLength={40}
               />
@@ -124,7 +124,7 @@ export function BudgetSection({
               {/* Boundary input — hidden for the last "over X" tier */}
               {!isLast ? (
                 <View className="flex-row items-center gap-1">
-                  <Text className="text-xs text-neutral-400">Up to</Text>
+                  <Text className="text-xs text-muted">Up to</Text>
                   <BoundaryInput
                     value={r.max!}
                     onCommit={(n) => onBoundaryUpdate(i, n)}
