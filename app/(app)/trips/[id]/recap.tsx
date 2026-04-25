@@ -104,7 +104,7 @@ export default function TripRecapScreen() {
         <View className="items-center pt-12 pb-8">
           <Text style={{ fontSize: 56, marginBottom: 16 }}>🎉</Text>
           <Text className="text-3xl font-bold text-neutral-800 text-center mb-2">
-            What a ripper trip!
+            What a trip!
           </Text>
           {trip ? (
             <Text className="text-lg font-semibold text-coral-500 text-center">
@@ -151,7 +151,7 @@ export default function TripRecapScreen() {
         {/* Next trip CTA */}
         <View className="gap-4">
           <Text className="text-lg font-bold text-neutral-800 text-center">
-            Ready for the next ripper?
+            Ready for the next trip?
           </Text>
           <Text className="text-sm text-neutral-500 text-center leading-5">
             Your crew size is pre-filled.{'\n'}Just pick a destination and let's go again.

@@ -69,7 +69,7 @@ export default function LoginScreen() {
         <View className="mb-10">
           <Text className="text-4xl text-coral-500" style={{ fontFamily: 'SpaceGrotesk_700Bold' }}>rally</Text>
           <Text className="mt-1 text-base text-neutral-500">
-            Gather the crew. Plan the ripper trip.
+            Gather your group. Plan a great trip.
           </Text>
         </View>
 

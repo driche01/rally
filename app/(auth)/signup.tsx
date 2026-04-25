@@ -87,7 +87,7 @@ export default function SignupScreen() {
         <View className="mb-10">
           <Text className="text-4xl font-bold text-coral-500">rally</Text>
           <Text className="mt-1 text-base text-neutral-500">
-            Join the crew. Big rallies incoming.
+            Join your group. Big trips ahead.
           </Text>
         </View>
 

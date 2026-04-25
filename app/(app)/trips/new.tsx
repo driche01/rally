@@ -25,7 +25,7 @@ const EXACT_SIZES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 const TRIP_TYPES = [
   'Hens / bucks party',
-  'Birthday ripper',
+  'Birthday trip',
   "Mates' getaway",
   'Family trip',
   'Catch-up / reunion',
@@ -164,7 +164,7 @@ export default function NewTripScreen() {
 
           {/* Group size — exact pills */}
           <View className="gap-2">
-            <Text className="text-sm font-medium text-[#404040]">How big's the crew?</Text>
+            <Text className="text-sm font-medium text-[#404040]">How big is your group?</Text>
             <View className="flex-row flex-wrap gap-2">
               {EXACT_SIZES.map((n) => {
                 const sel = exactSize === n && !isCustom;
@@ -303,7 +303,7 @@ export default function NewTripScreen() {
           </View>
 
           <Button onPress={handleCreate} loading={createTrip.isPending} fullWidth>
-            Lock it in!
+            Create trip
           </Button>
         </View>
       </ScrollView>

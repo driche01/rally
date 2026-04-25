@@ -73,12 +73,12 @@ const HERO_CONFIG: Record<TripStage, {
   ctaLabel: string;
   ctaBg: string;
 }> = {
-  deciding:     { bg: '#1A1715', badge: 'FIGURING IT OUT', badgeColor: 'rgba(255,255,255,0.45)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'Rally the crew!', ctaBg: '#E05A28' },
-  confirmed:    { bg: '#0C2218', badge: "IT'S ON!",         badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.65)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'Sort the crew!', ctaBg: '#1A9E5A' },
-  planning:     { bg: '#0A1828', badge: 'GETTING SORTED',  badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.65)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'See the plan', ctaBg: '#1563B0' },
-  experiencing: { bg: '#042E26', badge: 'GET AMONGST IT!', badgeColor: 'rgba(255,255,255,0.7)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.75)', pillBg: 'rgba(255,255,255,0.15)', ctaLabel: "See today's plan", ctaBg: 'rgba(255,255,255,0.2)' },
+  deciding:     { bg: '#1A1715', badge: 'FIGURING IT OUT', badgeColor: 'rgba(255,255,255,0.45)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'Invite your group', ctaBg: '#E05A28' },
+  confirmed:    { bg: '#0C2218', badge: 'CONFIRMED',        badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.65)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'Manage your group', ctaBg: '#1A9E5A' },
+  planning:     { bg: '#0A1828', badge: 'PLANNING',        badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.65)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'See the plan', ctaBg: '#1563B0' },
+  experiencing: { bg: '#042E26', badge: 'TRIP IS ON!',     badgeColor: 'rgba(255,255,255,0.7)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.75)', pillBg: 'rgba(255,255,255,0.15)', ctaLabel: "See today's plan", ctaBg: 'rgba(255,255,255,0.2)' },
   reconciling:  { bg: '#1A1715', badge: 'SORTING IT OUT',  badgeColor: 'rgba(255,255,255,0.45)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'Settle up', ctaBg: '#555552' },
-  done:         { bg: '#1A1715', badge: 'WHAT A RIPPER!',  badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'Relive it', ctaBg: 'rgba(255,255,255,0.15)' },
+  done:         { bg: '#1A1715', badge: 'WHAT A TRIP!',    badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'Relive it', ctaBg: 'rgba(255,255,255,0.15)' },
 };
 
 // ─── Group Members Card ───────────────────────────────────────────────────────
@@ -108,7 +108,7 @@ function GroupMembersCard({
         <Ionicons name="people-outline" size={20} color="#555" />
       </View>
       <View style={styles.entryText}>
-        <Text style={styles.entryTitle}>The Crew</Text>
+        <Text style={styles.entryTitle}>Group</Text>
         <Text style={styles.entrySubtitle}>
           {respondents.length === 0
             ? 'No one else in yet'
@@ -208,7 +208,7 @@ const stage = trip ? getTripStage(trip) : 'deciding';
 
     // Build an exciting trip summary message
     const lines: string[] = [];
-    lines.push(`🎉 ${trip.name} is on! Who's keen?`);
+    lines.push(`🎉 ${trip.name} is on! Who's in?`);
     if (destination) lines.push(`📍 ${destination}`);
     if (dateDisplay) lines.push(`📅 ${dateDisplay}`);
     const details: string[] = [];
