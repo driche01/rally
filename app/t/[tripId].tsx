@@ -25,9 +25,14 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { capture, Events } from '@/lib/analytics';
 
-const CORAL = '#D85A30';
-const CHARCOAL = '#1C1C1C';
-const BG = '#FAFAFA';
+// 2026-04-24 brand palette — green primary, cream surfaces, ink text.
+const GREEN = '#0F3F2E';
+const CREAM = '#FBF7EF';
+const CARD = '#FFFAF2';
+const LINE = '#E7DDCF';
+const INK = '#163026';
+const MUTED = '#5F685F';
+const HEADLINE_FONT = Platform.OS === 'android' ? 'serif' : 'Georgia';
 
 export default function UniversalLinkLandingPage() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
@@ -65,7 +70,7 @@ export default function UniversalLinkLandingPage() {
 
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: BG }}
+      style={{ flex: 1, backgroundColor: CREAM }}
       contentContainerStyle={{
         flexGrow: 1,
         maxWidth: 520,
@@ -80,9 +85,10 @@ export default function UniversalLinkLandingPage() {
       {/* Brand mark */}
       <Text
         style={{
-          fontSize: 40,
-          fontWeight: '800',
-          color: CORAL,
+          fontFamily: HEADLINE_FONT,
+          fontSize: 44,
+          fontWeight: '700',
+          color: GREEN,
           letterSpacing: -1,
           marginBottom: 32,
         }}
@@ -92,17 +98,18 @@ export default function UniversalLinkLandingPage() {
 
       <Text
         style={{
-          fontSize: 32,
-          fontWeight: '800',
-          color: CHARCOAL,
-          letterSpacing: -0.5,
-          lineHeight: 38,
-          marginBottom: 12,
+          fontFamily: HEADLINE_FONT,
+          fontSize: 40,
+          fontWeight: '700',
+          color: INK,
+          letterSpacing: -0.6,
+          lineHeight: 44,
+          marginBottom: 14,
         }}
       >
         Your trip is waiting.
       </Text>
-      <Text style={{ fontSize: 17, color: '#525252', lineHeight: 24, marginBottom: 32 }}>
+      <Text style={{ fontSize: 18, color: MUTED, lineHeight: 26, marginBottom: 32 }}>
         Tap below to open it in the Rally app. Don't have Rally yet? Skip the line and we'll get you in.
       </Text>
 
@@ -114,7 +121,7 @@ export default function UniversalLinkLandingPage() {
           setDidAttemptDeepLink(true);
         }}
         style={{
-          backgroundColor: CORAL,
+          backgroundColor: GREEN,
           borderRadius: 12,
           paddingVertical: 16,
           alignItems: 'center',
@@ -135,14 +142,14 @@ export default function UniversalLinkLandingPage() {
         onPress={handleGetApp}
         style={{
           borderWidth: 1,
-          borderColor: '#E5E5E5',
-          backgroundColor: '#FFFFFF',
+          borderColor: LINE,
+          backgroundColor: CARD,
           borderRadius: 12,
           paddingVertical: 16,
           alignItems: 'center',
         }}
       >
-        <Text style={{ color: CHARCOAL, fontSize: 16, fontWeight: '600' }}>
+        <Text style={{ color: INK, fontSize: 16, fontWeight: '600' }}>
           I don't have Rally yet
         </Text>
       </Pressable>
@@ -151,7 +158,7 @@ export default function UniversalLinkLandingPage() {
         <Text
           style={{
             fontSize: 13,
-            color: '#A3A3A3',
+            color: MUTED,
             marginTop: 24,
             textAlign: 'center',
           }}

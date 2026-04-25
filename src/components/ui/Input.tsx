@@ -7,26 +7,28 @@ interface InputProps extends TextInputProps {
   hint?: string;
 }
 
+// 2026-04-24 brand palette: warm cream surfaces, ink text, hairline borders,
+// green focus state. No pure white, no neutral grays in primary surfaces.
 export const Input = forwardRef<TextInput, InputProps>(
   ({ label, error, hint, className, ...props }, ref) => {
     return (
       <View className="gap-1">
         {label ? (
-          <Text className="text-sm font-medium text-neutral-700">{label}</Text>
+          <Text className="text-sm font-medium text-ink">{label}</Text>
         ) : null}
         <TextInput
           ref={ref}
           className={[
-            'min-h-[48px] rounded-2xl border px-4 py-3 text-base text-neutral-800',
-            'bg-white placeholder:text-neutral-400',
+            'min-h-[48px] rounded-md border px-4 py-3 text-base text-ink',
+            'bg-card placeholder:text-muted',
             error
               ? 'border-red-400 focus:border-red-500'
-              : 'border-neutral-200 focus:border-coral-500',
+              : 'border-line focus:border-green',
             className ?? '',
           ]
             .filter(Boolean)
             .join(' ')}
-          placeholderTextColor="#A8A8A8"
+          placeholderTextColor="#9DA8A0"
           accessible
           accessibilityLabel={label}
           {...props}
@@ -34,7 +36,7 @@ export const Input = forwardRef<TextInput, InputProps>(
         {error ? (
           <Text className="text-sm text-red-500">{error}</Text>
         ) : hint ? (
-          <Text className="text-sm text-neutral-400">{hint}</Text>
+          <Text className="text-sm text-muted">{hint}</Text>
         ) : null}
       </View>
     );

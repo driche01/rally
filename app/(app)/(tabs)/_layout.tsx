@@ -58,14 +58,14 @@ function AppTabBar({ state, navigation }: BottomTabBarProps) {
         <Ionicons
           name={isFocused ? tab.iconActive : tab.icon}
           size={22}
-          color={isFocused ? '#D85A30' : '#A8A8A8'}
+          color={isFocused ? '#0F3F2E' : '#9DA8A0'}
         />
         <Text
           style={{
             marginTop: 2,
             fontSize: 10,
             fontWeight: isFocused ? '600' : '400',
-            color: isFocused ? '#D85A30' : '#A8A8A8',
+            color: isFocused ? '#0F3F2E' : '#9DA8A0',
           }}
         >
           {tab.label}
@@ -75,7 +75,7 @@ function AppTabBar({ state, navigation }: BottomTabBarProps) {
   }
 
   return (
-    <View style={{ paddingBottom: insets.bottom, borderTopWidth: 1, borderTopColor: '#E5E5E5', backgroundColor: '#fff' }}>
+    <View style={{ paddingBottom: insets.bottom, borderTopWidth: 1, borderTopColor: '#E7DDCF', backgroundColor: '#FFFAF2' }}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         {leftRoutes.map((route, i) => renderTab(route, i))}
 
@@ -87,16 +87,16 @@ function AppTabBar({ state, navigation }: BottomTabBarProps) {
               width: 36,
               height: 36,
               borderRadius: 18,
-              backgroundColor: '#D85A30',
+              backgroundColor: '#0F3F2E',
               alignItems: 'center',
               justifyContent: 'center',
             }}
             accessibilityRole="button"
-            accessibilityLabel="Add a rally"
+            accessibilityLabel="Add a trip"
           >
             <Ionicons name="add" size={22} color="white" />
           </Pressable>
-          <Text style={{ marginTop: 2, fontSize: 10, color: '#A8A8A8' }}> </Text>
+          <Text style={{ marginTop: 2, fontSize: 10, color: '#9DA8A0' }}> </Text>
         </View>
 
         {rightRoutes.map((route, i) => renderTab(route, mid + i))}

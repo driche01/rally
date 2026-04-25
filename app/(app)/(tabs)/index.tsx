@@ -18,14 +18,15 @@ const SEASON_ICON: Record<string, React.ComponentProps<typeof Ionicons>['name']>
   Fall: 'leaf-outline',
 };
 
-// Stage accent colors — mirror the hero card palette on the dashboard
+// Stage accent colors — mirror the hero card palette on the dashboard.
+// 2026-04-24 brand: green-family for active, soft tints for past, no blue.
 const STAGE_COLOR: Record<string, { active: string; past: string; label: string }> = {
-  deciding:     { active: '#E05A28', past: '#F9C4A5', label: '#E05A28' },
-  confirmed:    { active: '#1A9E5A', past: '#A8DFC0', label: '#1A9E5A' },
-  planning:     { active: '#1563B0', past: '#9BB8D8', label: '#1563B0' },
-  experiencing: { active: '#0A8A6A', past: '#7ECAB8', label: '#0A8A6A' },
-  reconciling:  { active: '#888888', past: '#CCCCCC', label: '#888888' },
-  done:         { active: '#2C2C2A', past: '#AAAAAA', label: '#2C2C2A' },
+  deciding:     { active: '#0F3F2E', past: '#A4B6A1', label: '#0F3F2E' },
+  confirmed:    { active: '#0F3F2E', past: '#A4B6A1', label: '#0F3F2E' },
+  planning:     { active: '#0F3F2E', past: '#A4B6A1', label: '#0F3F2E' },
+  experiencing: { active: '#0F3F2E', past: '#A4B6A1', label: '#0F3F2E' },
+  reconciling:  { active: '#5F685F', past: '#C8C8C0', label: '#5F685F' },
+  done:         { active: '#163026', past: '#A4B6A1', label: '#163026' },
 };
 
 function TripCard({
@@ -103,7 +104,7 @@ function TripCard({
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
                 {trip.travel_window.split(', ').map((season) => (
                   <View key={season} style={styles.seasonPill}>
-                    <Ionicons name={SEASON_ICON[season] ?? 'sunny-outline'} size={12} color="#737373" />
+                    <Ionicons name={SEASON_ICON[season] ?? 'sunny-outline'} size={12} color="#5F685F" />
                     <Text style={styles.seasonText}>{season}</Text>
                   </View>
                 ))}
@@ -139,7 +140,7 @@ function TripCard({
                 <Ionicons
                   name={isPlanner ? 'ribbon-outline' : 'person-outline'}
                   size={10}
-                  color={isPlanner ? '#92640A' : '#3B6FA0'}
+                  color={isPlanner ? '#7C5A0A' : '#0F3F2E'}
                 />
                 <Text style={[styles.rolePillText, isPlanner ? styles.rolePillTextPlanner : styles.rolePillTextMember]}>
                   {isPlanner ? 'Planner' : 'Member'}
@@ -203,13 +204,13 @@ export default function HomeScreen() {
           keyExtractor={(t) => t.id}
           contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24 }}
           refreshControl={
-            <RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor="#D85A30" />
+            <RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor="#0F3F2E" />
           }
           ListEmptyComponent={
             !isLoading ? (
               <View className="items-center py-20 gap-3">
-                <Text className="text-xl font-semibold text-neutral-800">No trips yet</Text>
-                <Text className="text-base text-neutral-400 text-center">
+                <Text className="text-xl font-semibold text-ink">No trips yet</Text>
+                <Text className="text-base text-muted text-center">
                   Tap + below to start your first trip.
                 </Text>
               </View>
@@ -241,7 +242,7 @@ const styles = StyleSheet.create({
   tripName: {
     fontSize: 15,
     fontFamily: 'SpaceGrotesk_700Bold',
-    color: '#1a1a1a',
+    color: '#163026',
     lineHeight: 18,
   },
   seasonPill: {
@@ -249,28 +250,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 3,
     borderWidth: 1,
-    borderColor: '#e8e8e8',
+    borderColor: '#E7DDCF',
     borderRadius: 20,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    backgroundColor: '#fafafa',
+    backgroundColor: '#FBF7EF',
   },
   seasonText: {
     fontSize: 10.5,
-    color: '#666',
+    color: '#5F685F',
   },
   sizePill: {
     borderWidth: 1,
-    borderColor: '#e8e8e8',
+    borderColor: '#E7DDCF',
     borderRadius: 20,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    backgroundColor: '#fafafa',
+    backgroundColor: '#FBF7EF',
     alignSelf: 'flex-start',
   },
   sizePillText: {
     fontSize: 11,
-    color: '#888',
+    color: '#5F685F',
   },
   stageBar: {
     flexDirection: 'row',
@@ -281,7 +282,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 3,
     borderRadius: 99,
-    backgroundColor: '#e8e8e8',
+    backgroundColor: '#E7DDCF',
   },
   stageLabel: {
     fontSize: 10,
@@ -298,19 +299,21 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   rolePillPlanner: {
-    backgroundColor: '#FFF3CD',
+    // Gold tint — premium signal for planners.
+    backgroundColor: '#FBE9B6',
   },
   rolePillMember: {
-    backgroundColor: '#E0EEFA',
+    // Soft green tint — replaces prior light-blue (brand "no blue" rule).
+    backgroundColor: '#DFE8D2',
   },
   rolePillText: {
     fontSize: 10,
     fontWeight: '600',
   },
   rolePillTextPlanner: {
-    color: '#92640A',
+    color: '#7C5A0A',
   },
   rolePillTextMember: {
-    color: '#3B6FA0',
+    color: '#0F3F2E',
   },
 });

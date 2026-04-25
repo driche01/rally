@@ -73,9 +73,13 @@ const HERO_CONFIG: Record<TripStage, {
   ctaLabel: string;
   ctaBg: string;
 }> = {
-  deciding:     { bg: '#1A1715', badge: 'FIGURING IT OUT', badgeColor: 'rgba(255,255,255,0.45)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'Invite your group', ctaBg: '#E05A28' },
-  confirmed:    { bg: '#0C2218', badge: 'CONFIRMED',        badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.65)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'Manage your group', ctaBg: '#1A9E5A' },
-  planning:     { bg: '#0A1828', badge: 'PLANNING',        badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.65)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'See the plan', ctaBg: '#1563B0' },
+  // 2026-04-24 brand palette: dark moody backgrounds preserved, but BLUE
+  // (#0A1828, #1563B0) and bright greens (#1A9E5A) shifted into our deep-green
+  // primary family. Coral CTA (#E05A28) on `deciding` kept as a small accent
+  // on a dark surface (allowed sparing use).
+  deciding:     { bg: '#1A1715', badge: 'FIGURING IT OUT', badgeColor: 'rgba(255,255,255,0.45)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'Invite your group', ctaBg: '#0F3F2E' },
+  confirmed:    { bg: '#0C2218', badge: 'CONFIRMED',        badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.65)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'Manage your group', ctaBg: '#0F3F2E' },
+  planning:     { bg: '#0F2620', badge: 'PLANNING',        badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.65)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'See the plan', ctaBg: '#0F3F2E' },
   experiencing: { bg: '#042E26', badge: 'TRIP IS ON!',     badgeColor: 'rgba(255,255,255,0.7)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.75)', pillBg: 'rgba(255,255,255,0.15)', ctaLabel: "See today's plan", ctaBg: 'rgba(255,255,255,0.2)' },
   reconciling:  { bg: '#1A1715', badge: 'SORTING IT OUT',  badgeColor: 'rgba(255,255,255,0.45)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'Settle up', ctaBg: '#555552' },
   done:         { bg: '#1A1715', badge: 'WHAT A TRIP!',    badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'Relive it', ctaBg: 'rgba(255,255,255,0.15)' },

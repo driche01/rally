@@ -65,7 +65,7 @@ function WebPageShell({
     <View
       style={{
         flex: 1,
-        backgroundColor: '#F0EDE8',
+        backgroundColor: '#F4ECDF',
         alignItems: 'center',
         justifyContent: 'center',
         padding: 16,
@@ -180,9 +180,9 @@ function PollResponseCard({
 }) {
   return (
     <View className="mb-5">
-      <Text className="mb-3 text-lg font-semibold text-neutral-800">{poll.title}</Text>
+      <Text className="mb-3 text-lg font-semibold text-ink">{poll.title}</Text>
       {poll.allow_multi_select ? (
-        <Text className="mb-2 text-xs text-neutral-400">Select all that apply</Text>
+        <Text className="mb-2 text-xs text-muted">Select all that apply</Text>
       ) : null}
       <View className="gap-2">
         {poll.poll_options.map((opt) => {
@@ -195,7 +195,7 @@ function PollResponseCard({
                 'flex-row items-center rounded-2xl border px-4 py-3.5 min-h-[52px]',
                 selected
                   ? 'border-coral-400 bg-coral-50'
-                  : 'border-neutral-200 bg-white',
+                  : 'border-line bg-card',
               ].join(' ')}
               accessibilityRole={poll.allow_multi_select ? 'checkbox' : 'radio'}
               accessibilityState={{ checked: selected, selected }}
@@ -207,19 +207,19 @@ function PollResponseCard({
                   poll.allow_multi_select
                     ? 'h-5 w-5 rounded-md border-2'
                     : 'h-5 w-5 rounded-full border-2',
-                  selected ? 'border-coral-500 bg-coral-500' : 'border-neutral-300 bg-white',
+                  selected ? 'border-green bg-green' : 'border-neutral-300 bg-card',
                 ].join(' ')}
               >
                 {selected ? (
                   poll.allow_multi_select ? (
                     <Ionicons name="checkmark" size={12} color="white" />
                   ) : (
-                    <View className="h-2 w-2 rounded-full bg-white" />
+                    <View className="h-2 w-2 rounded-full bg-card" />
                   )
                 ) : null}
               </View>
               <Text
-                className={['flex-1 text-base', selected ? 'font-medium text-neutral-800' : 'text-neutral-700'].join(' ')}
+                className={['flex-1 text-base', selected ? 'font-medium text-ink' : 'text-ink'].join(' ')}
               >
                 {opt.label}
               </Text>
@@ -300,14 +300,14 @@ function DatesPollCard({
 
   return (
     <View className="mb-5">
-      <Text className="mb-3 text-lg font-semibold text-neutral-800">{poll.title}</Text>
+      <Text className="mb-3 text-lg font-semibold text-ink">{poll.title}</Text>
       {poll.allow_multi_select ? (
-        <Text className="mb-2 text-xs text-neutral-400">
+        <Text className="mb-2 text-xs text-muted">
           {isPerDayPoll ? "Tap each day you're available" : "Tap all dates you're available"}
         </Text>
       ) : null}
 
-      <View className="rounded-2xl border border-neutral-200 bg-white p-4">
+      <View className="rounded-2xl border border-line bg-card p-4">
         {/* Month navigation */}
         <View className="mb-3 flex-row items-center justify-between">
           <Pressable
@@ -323,7 +323,7 @@ function DatesPollCard({
           >
             <Ionicons name="chevron-back" size={18} color={canGoPrev ? '#6B7280' : '#D1D5DB'} />
           </Pressable>
-          <Text className="text-sm font-semibold text-neutral-700">{monthLabel}</Text>
+          <Text className="text-sm font-semibold text-ink">{monthLabel}</Text>
           <Pressable
             onPress={() => {
               const d = new Date(viewYear, viewMonth + 1, 1);
@@ -342,7 +342,7 @@ function DatesPollCard({
         {/* Day headers */}
         <View className="mb-1 flex-row">
           {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => (
-            <Text key={d} className="flex-1 text-center text-xs font-medium text-neutral-400">
+            <Text key={d} className="flex-1 text-center text-xs font-medium text-muted">
               {d}
             </Text>
           ))}
@@ -374,14 +374,14 @@ function DatesPollCard({
                     borderRadius: 16,
                     alignItems: 'center',
                     justifyContent: 'center',
-                    backgroundColor: isSelected ? '#D85A30' : isHighlighted ? '#FFF0EE' : 'transparent',
+                    backgroundColor: isSelected ? '#0F3F2E' : isHighlighted ? '#DFE8D2' : 'transparent',
                   }}
                 >
                   <Text
                     style={{
                       fontSize: 13,
                       fontWeight: isHighlighted ? '600' : '400',
-                      color: isSelected ? '#FFFFFF' : isHighlighted ? '#D85A30' : '#D1D5DB',
+                      color: isSelected ? '#FFFFFF' : isHighlighted ? '#0F3F2E' : '#D1D5DB',
                     }}
                   >
                     {date.getDate()}
@@ -397,7 +397,7 @@ function DatesPollCard({
       {selectedOptions.length > 0 ? (
         isPerDayPoll ? (
           <View className="mt-3 flex-row items-center gap-1.5">
-            <Ionicons name="checkmark-circle" size={14} color="#D85A30" />
+            <Ionicons name="checkmark-circle" size={14} color="#0F3F2E" />
             <Text className="text-xs font-medium text-coral-600">
               {selectedOptions.length} day{selectedOptions.length !== 1 ? 's' : ''} selected
             </Text>
@@ -408,7 +408,7 @@ function DatesPollCard({
               .filter((o) => selectedOptions.includes(o.id))
               .map((o) => (
                 <View key={o.id} className="flex-row items-center gap-1 rounded-full bg-coral-50 px-3 py-1">
-                  <Ionicons name="checkmark-circle" size={13} color="#D85A30" />
+                  <Ionicons name="checkmark-circle" size={13} color="#0F3F2E" />
                   <Text className="text-xs font-medium text-coral-600">{o.label}</Text>
                 </View>
               ))}
@@ -463,7 +463,7 @@ function PollResultsCard({
 
   return (
     <View className="mb-5">
-      <Text className="mb-3 text-sm font-semibold text-neutral-700">{poll.title}</Text>
+      <Text className="mb-3 text-sm font-semibold text-ink">{poll.title}</Text>
       <View className="gap-3">
         {poll.poll_options.map((opt) => {
           const votes = counts[opt.id] ?? 0;
@@ -476,7 +476,7 @@ function PollResultsCard({
                 <Text
                   className={[
                     'flex-1 text-sm',
-                    isLeading ? 'font-semibold text-neutral-800' : 'text-neutral-600',
+                    isLeading ? 'font-semibold text-ink' : 'text-muted',
                   ].join(' ')}
                   numberOfLines={1}
                 >
@@ -487,7 +487,7 @@ function PollResultsCard({
                     <Text className="text-xs font-medium text-coral-600">Your pick</Text>
                   </View>
                 ) : null}
-                <Text className="ml-2 text-xs text-neutral-400">
+                <Text className="ml-2 text-xs text-muted">
                   {votes} vote{votes !== 1 ? 's' : ''}
                 </Text>
               </View>
@@ -495,7 +495,7 @@ function PollResultsCard({
                 <View
                   className={[
                     'h-full rounded-full',
-                    isMyPick || isLeading ? 'bg-coral-500' : 'bg-neutral-300',
+                    isMyPick || isLeading ? 'bg-green' : 'bg-neutral-300',
                   ].join(' ')}
                   style={{ width: pct > 0 ? `${pct}%` : '2%' }}
                 />
@@ -504,7 +504,7 @@ function PollResultsCard({
           );
         })}
       </View>
-      <Text className="mt-2 text-xs text-neutral-400">
+      <Text className="mt-2 text-xs text-muted">
         {totalVotes === 0
           ? "You're the first — results will appear as others respond."
           : `${totalVotes} vote${totalVotes !== 1 ? 's' : ''} so far`}
@@ -567,14 +567,14 @@ function DateResultsCalendar({
 
   return (
     <View className="mb-5">
-      <Text className="mb-1 text-sm font-semibold text-neutral-700">{poll.title}</Text>
-      <Text className="mb-3 text-xs text-neutral-400">
+      <Text className="mb-1 text-sm font-semibold text-ink">{poll.title}</Text>
+      <Text className="mb-3 text-xs text-muted">
         {totalResponders === 0
           ? "You're the first — results will appear as others respond."
           : 'Darker = more people available'}
       </Text>
 
-      <View className="rounded-2xl border border-neutral-200 bg-white p-4">
+      <View className="rounded-2xl border border-line bg-card p-4">
         {/* Month navigation */}
         <View className="mb-3 flex-row items-center justify-between">
           <Pressable
@@ -588,7 +588,7 @@ function DateResultsCalendar({
           >
             <Ionicons name="chevron-back" size={18} color={canGoPrev ? '#6B7280' : '#D1D5DB'} />
           </Pressable>
-          <Text className="text-sm font-semibold text-neutral-700">{monthLabel}</Text>
+          <Text className="text-sm font-semibold text-ink">{monthLabel}</Text>
           <Pressable
             onPress={() => {
               const d = new Date(viewYear, viewMonth + 1, 1);
@@ -605,7 +605,7 @@ function DateResultsCalendar({
         {/* Day headers */}
         <View className="mb-1 flex-row">
           {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => (
-            <Text key={d} className="flex-1 text-center text-xs font-medium text-neutral-400">
+            <Text key={d} className="flex-1 text-center text-xs font-medium text-muted">
               {d}
             </Text>
           ))}
@@ -623,7 +623,7 @@ function DateResultsCalendar({
             const isMyPick = opt ? myOptionIds.includes(opt.id) : false;
             // Intensity 0–1 based on votes vs max
             const intensity = isInRange && maxVotes > 0 ? votes / maxVotes : 0;
-            // Coral color: interpolate from #FFF0EE (0 votes) to #D85A30 (max votes)
+            // Coral color: interpolate from #DFE8D2 (0 votes) to #0F3F2E (max votes)
             const r = Math.round(255 - intensity * (255 - 216));
             const g = Math.round(240 - intensity * (240 - 90));
             const b = Math.round(238 - intensity * (238 - 48));
@@ -650,7 +650,7 @@ function DateResultsCalendar({
                     justifyContent: 'center',
                     backgroundColor: bgColor,
                     borderWidth: isMyPick ? 2 : 0,
-                    borderColor: '#D85A30',
+                    borderColor: '#0F3F2E',
                   }}
                 >
                   <Text style={{ fontSize: 12, fontWeight: isInRange ? '600' : '400', color: textColor }}>
@@ -667,16 +667,16 @@ function DateResultsCalendar({
       <View className="mt-2 flex-row items-center gap-2">
         <View className="flex-row items-center gap-1">
           <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#F5F5F4' }} />
-          <Text className="text-xs text-neutral-400">No votes</Text>
+          <Text className="text-xs text-muted">No votes</Text>
         </View>
         <View className="flex-row items-center gap-1">
-          <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#D85A30' }} />
-          <Text className="text-xs text-neutral-400">Popular</Text>
+          <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#0F3F2E' }} />
+          <Text className="text-xs text-muted">Popular</Text>
         </View>
         {myOptionIds.length > 0 ? (
           <View className="flex-row items-center gap-1">
-            <View style={{ width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: '#D85A30' }} />
-            <Text className="text-xs text-neutral-400">Your picks</Text>
+            <View style={{ width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: '#0F3F2E' }} />
+            <Text className="text-xs text-muted">Your picks</Text>
           </View>
         ) : null}
       </View>
@@ -729,7 +729,7 @@ function DownloadPrompt({ tripName, tripId }: { tripName?: string; tripId: strin
   }
 
   return (
-    <View className="mt-6 rounded-3xl bg-coral-500 px-6 py-8">
+    <View className="mt-6 rounded-3xl bg-green px-6 py-8">
       <Text className="text-center text-xl font-bold text-white">
         Planning your own trip? Try Rally.
       </Text>
@@ -739,21 +739,21 @@ function DownloadPrompt({ tripName, tripId }: { tripName?: string; tripId: strin
       <View className="mt-5 gap-3">
         <Pressable
           onPress={() => handleDownload('ios')}
-          className="flex-row items-center justify-center gap-2 rounded-2xl bg-white py-3.5"
+          className="flex-row items-center justify-center gap-2 rounded-2xl bg-card py-3.5"
           accessibilityRole="button"
           accessibilityLabel="Download on the App Store"
         >
-          <Ionicons name="logo-apple" size={20} color="#222222" />
-          <Text className="font-semibold text-neutral-800">App Store</Text>
+          <Ionicons name="logo-apple" size={20} color="#163026" />
+          <Text className="font-semibold text-ink">App Store</Text>
         </Pressable>
         <Pressable
           onPress={() => handleDownload('android')}
-          className="flex-row items-center justify-center gap-2 rounded-2xl bg-white py-3.5"
+          className="flex-row items-center justify-center gap-2 rounded-2xl bg-card py-3.5"
           accessibilityRole="button"
           accessibilityLabel="Get it on Google Play"
         >
-          <Ionicons name="logo-google-playstore" size={20} color="#222222" />
-          <Text className="font-semibold text-neutral-800">Google Play</Text>
+          <Ionicons name="logo-google-playstore" size={20} color="#163026" />
+          <Text className="font-semibold text-ink">Google Play</Text>
         </Pressable>
       </View>
       <Pressable
@@ -816,8 +816,8 @@ function ItineraryRsvpSection({
 
   return (
     <View className="mt-6">
-      <Text className="text-lg font-bold text-neutral-800">📅 Are you in?</Text>
-      <Text className="mt-1 text-sm text-neutral-500">
+      <Text className="text-lg font-bold text-ink">📅 Are you in?</Text>
+      <Text className="mt-1 text-sm text-muted">
         Let the planner know which days work for you.
       </Text>
 
@@ -829,9 +829,9 @@ function ItineraryRsvpSection({
         const isSaving = rsvpSaving === dayDate;
 
         return (
-          <View key={dayDate} className="mt-4 rounded-2xl border border-neutral-100 bg-white p-4">
+          <View key={dayDate} className="mt-4 rounded-2xl border border-line bg-card p-4">
             {/* Day header */}
-            <Text className="mb-3 text-sm font-semibold text-neutral-700">
+            <Text className="mb-3 text-sm font-semibold text-ink">
               {formatDayLabel(dayDate)}
             </Text>
 
@@ -848,12 +848,12 @@ function ItineraryRsvpSection({
                       />
                     </View>
                     <View className="flex-1">
-                      <Text className="text-sm font-medium text-neutral-800">{block.title}</Text>
+                      <Text className="text-sm font-medium text-ink">{block.title}</Text>
                       {block.start_time ? (
-                        <Text className="text-xs text-neutral-400">{formatTime(block.start_time)}</Text>
+                        <Text className="text-xs text-muted">{formatTime(block.start_time)}</Text>
                       ) : null}
                       {block.location ? (
-                        <Text className="text-xs text-neutral-400" numberOfLines={1}>
+                        <Text className="text-xs text-muted" numberOfLines={1}>
                           {block.location}
                         </Text>
                       ) : null}
@@ -865,7 +865,7 @@ function ItineraryRsvpSection({
 
             {/* RSVP buttons */}
             {isSaving ? (
-              <ActivityIndicator size="small" color="#D85A30" />
+              <ActivityIndicator size="small" color="#0F3F2E" />
             ) : (
               <View className="flex-row gap-2">
                 <Pressable
@@ -918,7 +918,7 @@ function ItineraryRsvpSection({
                     'flex-1 items-center justify-center rounded-xl border py-2',
                     currentStatus === 'cant_make_it'
                       ? 'border-neutral-400 bg-neutral-400'
-                      : 'border-neutral-200 bg-neutral-100',
+                      : 'border-line bg-neutral-100',
                   ].join(' ')}
                   accessibilityRole="button"
                   accessibilityLabel="Can't make it"
@@ -927,7 +927,7 @@ function ItineraryRsvpSection({
                   <Text
                     className={[
                       'text-xs font-semibold',
-                      currentStatus === 'cant_make_it' ? 'text-white' : 'text-neutral-500',
+                      currentStatus === 'cant_make_it' ? 'text-white' : 'text-muted',
                     ].join(' ')}
                   >
                     ✕ Can't make it
@@ -1317,8 +1317,8 @@ export default function RespondScreen() {
   if (loading) {
     return (
       <WebPageShell cardStyle={{ padding: 48 }}>
-        <View className={IS_WEB ? 'items-center justify-center' : 'flex-1 items-center justify-center bg-neutral-50'}>
-          <ActivityIndicator size="large" color="#D85A30" />
+        <View className={IS_WEB ? 'items-center justify-center' : 'flex-1 items-center justify-center bg-cream'}>
+          <ActivityIndicator size="large" color="#0F3F2E" />
         </View>
       </WebPageShell>
     );
@@ -1327,12 +1327,12 @@ export default function RespondScreen() {
   if (loadError === 'not_found') {
     return (
       <WebPageShell cardStyle={{ padding: 40 }}>
-        <View className={IS_WEB ? 'items-center' : 'flex-1 items-center justify-center bg-neutral-50 px-8'}>
+        <View className={IS_WEB ? 'items-center' : 'flex-1 items-center justify-center bg-cream px-8'}>
           <Text className="text-5xl">🔗</Text>
-          <Text className="mt-4 text-center text-xl font-semibold text-neutral-800">
-            This rally no longer exists.
+          <Text className="mt-4 text-center text-xl font-semibold text-ink">
+            This trip no longer exists.
           </Text>
-          <Text className="mt-2 text-center text-sm text-neutral-400">
+          <Text className="mt-2 text-center text-sm text-muted">
             The trip planner may have deleted it.
           </Text>
         </View>
@@ -1343,12 +1343,12 @@ export default function RespondScreen() {
   if (loadError === 'closed' || (trip && trip.status !== 'active')) {
     return (
       <WebPageShell cardStyle={{ padding: 40 }}>
-        <View className={IS_WEB ? 'items-center' : 'flex-1 items-center justify-center bg-neutral-50 px-8'}>
+        <View className={IS_WEB ? 'items-center' : 'flex-1 items-center justify-center bg-cream px-8'}>
           <Text className="text-5xl">🔒</Text>
-          <Text className="mt-4 text-center text-xl font-semibold text-neutral-800">
-            This rally is no longer accepting responses.
+          <Text className="mt-4 text-center text-xl font-semibold text-ink">
+            This trip is no longer accepting responses.
           </Text>
-          <Text className="mt-2 text-center text-sm text-neutral-400">
+          <Text className="mt-2 text-center text-sm text-muted">
             The planner has closed it.
           </Text>
         </View>
@@ -1359,12 +1359,12 @@ export default function RespondScreen() {
   if (loadError === 'error') {
     return (
       <WebPageShell cardStyle={{ padding: 40 }}>
-        <View className={IS_WEB ? 'items-center' : 'flex-1 items-center justify-center bg-neutral-50 px-8'}>
+        <View className={IS_WEB ? 'items-center' : 'flex-1 items-center justify-center bg-cream px-8'}>
           <Text className="text-5xl">⚠️</Text>
-          <Text className="mt-4 text-center text-xl font-semibold text-neutral-800">
+          <Text className="mt-4 text-center text-xl font-semibold text-ink">
             Something went wrong.
           </Text>
-          <Text className="mt-2 text-center text-sm text-neutral-400">
+          <Text className="mt-2 text-center text-sm text-muted">
             Check your connection and try again.
           </Text>
         </View>
@@ -1389,11 +1389,11 @@ export default function RespondScreen() {
         }}
       >
           {/* Rally wordmark */}
-          <Text className="mb-1 text-3xl font-bold text-coral-500">rally</Text>
+          <Text className="mb-1 text-3xl font-bold text-green">rally</Text>
 
           {/* Trip header */}
-          <Text className="text-2xl font-bold text-neutral-800">{trip.name}</Text>
-          <Text className="mt-1 text-base text-neutral-500">
+          <Text className="text-2xl font-bold text-ink">{trip.name}</Text>
+          <Text className="mt-1 text-base text-muted">
             {plannerLabel} is planning a trip and wants your input.
           </Text>
 
@@ -1410,14 +1410,14 @@ export default function RespondScreen() {
                   accessibilityLabel="Respond as a different person"
                   hitSlop={8}
                 >
-                  <Text className="text-sm font-medium text-coral-500">Not you?</Text>
+                  <Text className="text-sm font-medium text-green">Not you?</Text>
                 </Pressable>
               </View>
             ) : null}
 
             <View className="flex-row gap-3">
               <View className="flex-1 gap-1">
-                <Text className="text-sm font-medium text-neutral-700">First name</Text>
+                <Text className="text-sm font-medium text-ink">First name</Text>
                 <TextInput
                   ref={nameInputRef}
                   value={firstName}
@@ -1432,17 +1432,17 @@ export default function RespondScreen() {
                   autoComplete="given-name"
                   returnKeyType="next"
                   className={[
-                    'min-h-[52px] rounded-2xl border bg-white px-4 py-3 text-lg text-neutral-800',
-                    firstNameError ? 'border-red-400' : 'border-neutral-200',
+                    'min-h-[52px] rounded-2xl border bg-card px-4 py-3 text-lg text-ink',
+                    firstNameError ? 'border-red-400' : 'border-line',
                   ].join(' ')}
-                  placeholderTextColor="#A8A8A8"
+                  placeholderTextColor="#9DA8A0"
                 />
                 {firstNameError ? (
                   <Text className="text-sm text-red-500">{firstNameError}</Text>
                 ) : null}
               </View>
               <View className="flex-1 gap-1">
-                <Text className="text-sm font-medium text-neutral-700">Last name</Text>
+                <Text className="text-sm font-medium text-ink">Last name</Text>
                 <TextInput
                   value={lastName}
                   onChangeText={(t) => {
@@ -1455,10 +1455,10 @@ export default function RespondScreen() {
                   autoComplete="family-name"
                   returnKeyType="next"
                   className={[
-                    'min-h-[52px] rounded-2xl border bg-white px-4 py-3 text-lg text-neutral-800',
-                    lastNameError ? 'border-red-400' : 'border-neutral-200',
+                    'min-h-[52px] rounded-2xl border bg-card px-4 py-3 text-lg text-ink',
+                    lastNameError ? 'border-red-400' : 'border-line',
                   ].join(' ')}
-                  placeholderTextColor="#A8A8A8"
+                  placeholderTextColor="#9DA8A0"
                 />
                 {lastNameError ? (
                   <Text className="text-sm text-red-500">{lastNameError}</Text>
@@ -1467,7 +1467,7 @@ export default function RespondScreen() {
             </View>
 
             <View className="gap-1">
-              <Text className="text-sm font-medium text-neutral-700">Email</Text>
+              <Text className="text-sm font-medium text-ink">Email</Text>
               <TextInput
                 value={email}
                 onChangeText={(t) => {
@@ -1480,10 +1480,10 @@ export default function RespondScreen() {
                 autoComplete="email"
                 returnKeyType="next"
                 className={[
-                  'min-h-[52px] rounded-2xl border bg-white px-4 py-3 text-lg text-neutral-800',
-                  emailError ? 'border-red-400' : 'border-neutral-200',
+                  'min-h-[52px] rounded-2xl border bg-card px-4 py-3 text-lg text-ink',
+                  emailError ? 'border-red-400' : 'border-line',
                 ].join(' ')}
-                placeholderTextColor="#A8A8A8"
+                placeholderTextColor="#9DA8A0"
               />
               {emailError ? (
                 <Text className="text-sm text-red-500">{emailError}</Text>
@@ -1491,7 +1491,7 @@ export default function RespondScreen() {
             </View>
 
             <View className="gap-1">
-              <Text className="text-sm font-medium text-neutral-700">Phone</Text>
+              <Text className="text-sm font-medium text-ink">Phone</Text>
               <TextInput
                 value={phone}
                 onChangeText={(t) => {
@@ -1504,10 +1504,10 @@ export default function RespondScreen() {
                 returnKeyType="go"
                 onSubmitEditing={handleNameContinue}
                 className={[
-                  'min-h-[52px] rounded-2xl border bg-white px-4 py-3 text-lg text-neutral-800',
-                  phoneError ? 'border-red-400' : 'border-neutral-200',
+                  'min-h-[52px] rounded-2xl border bg-card px-4 py-3 text-lg text-ink',
+                  phoneError ? 'border-red-400' : 'border-line',
                 ].join(' ')}
-                placeholderTextColor="#A8A8A8"
+                placeholderTextColor="#9DA8A0"
               />
               {phoneError ? (
                 <Text className="text-sm text-red-500">{phoneError}</Text>
@@ -1518,7 +1518,7 @@ export default function RespondScreen() {
               {existingRespondent && hasExistingResponses ? 'Update my responses →' : 'See polls →'}
             </Button>
 
-            <Text className="text-center text-xs text-neutral-400">
+            <Text className="text-center text-xs text-muted">
               No account needed. Contact info is only shared with your trip planner.
             </Text>
           </View>
@@ -1542,7 +1542,7 @@ export default function RespondScreen() {
 
     return (
       <KeyboardAvoidingView
-        className="flex-1 bg-neutral-50"
+        className="flex-1 bg-cream"
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         {nameForm}
@@ -1571,7 +1571,7 @@ export default function RespondScreen() {
           }}
           showsVerticalScrollIndicator={false}
         >
-          <Text style={{ fontSize: 24, fontWeight: '800', color: '#D85A30', marginBottom: 4 }}>rally</Text>
+          <Text style={{ fontSize: 24, fontWeight: '800', color: '#0F3F2E', marginBottom: 4 }}>rally</Text>
 
           {/* Trip hero */}
           <View style={{ backgroundColor: '#DDE8D8', borderRadius: 20, padding: 20, marginTop: 8, gap: 6 }}>
@@ -1633,7 +1633,7 @@ export default function RespondScreen() {
           }}
           showsVerticalScrollIndicator={false}
         >
-          <Text style={{ fontSize: 24, fontWeight: '800', color: '#D85A30', marginBottom: 4 }}>rally</Text>
+          <Text style={{ fontSize: 24, fontWeight: '800', color: '#0F3F2E', marginBottom: 4 }}>rally</Text>
           <Text style={{ fontSize: 18, fontWeight: '700', color: '#1A1A1A', marginTop: 4 }}>
             Help the group plan around you
           </Text>
@@ -1834,14 +1834,14 @@ export default function RespondScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        <Text className="text-3xl font-bold text-coral-500">rally</Text>
+        <Text className="text-3xl font-bold text-green">rally</Text>
 
         <View className="mt-8 items-center">
           <Text className="text-4xl">🎉</Text>
-          <Text className="mt-4 text-center text-2xl font-bold text-neutral-800">
+          <Text className="mt-4 text-center text-2xl font-bold text-ink">
             {rsvpChoice === 'in' ? "You're in!" : hasExistingResponses ? 'Responses updated!' : 'Responses sent!'}
           </Text>
-          <Text className="mt-2 text-center text-base text-neutral-500">
+          <Text className="mt-2 text-center text-base text-muted">
             {rsvpChoice === 'in'
               ? 'Your preferences have been shared with the planner.'
               : "You're in. Here's where the group stands so far."}
@@ -1850,12 +1850,12 @@ export default function RespondScreen() {
 
         {/* Live poll results visual */}
         {polls.length > 0 ? (
-          <View className="mt-6 rounded-2xl border border-neutral-100 bg-white p-4">
+          <View className="mt-6 rounded-2xl border border-line bg-card p-4">
             <View className="mb-4 flex-row items-center justify-between">
-              <Text className="text-sm font-semibold text-neutral-700">Live results</Text>
+              <Text className="text-sm font-semibold text-ink">Live results</Text>
               <View className="flex-row items-center gap-1">
                 <View className="h-1.5 w-1.5 rounded-full bg-green-400" />
-                <Text className="text-xs text-neutral-400">Updating live</Text>
+                <Text className="text-xs text-muted">Updating live</Text>
               </View>
             </View>
             {polls.map((poll) => (
@@ -1907,26 +1907,26 @@ export default function RespondScreen() {
     >
       {/* Header */}
       <View
-        className="border-b border-neutral-100 bg-white px-6 pb-4"
+        className="border-b border-line bg-card px-6 pb-4"
         style={{ paddingTop: IS_WEB ? 20 : insets.top + 16 }}
       >
-        <Text className="text-sm font-medium text-coral-500">rally · {trip.name}</Text>
-        <Text className="mt-0.5 text-lg font-bold text-neutral-800">
+        <Text className="text-sm font-medium text-green">rally · {trip.name}</Text>
+        <Text className="mt-0.5 text-lg font-bold text-ink">
           {hasExistingResponses ? `Hey ${firstName}, update your picks 👇` : `Hey ${firstName}, weigh in 👇`}
         </Text>
         {hasExistingResponses ? (
-          <Text className="mt-0.5 text-xs text-neutral-400">
+          <Text className="mt-0.5 text-xs text-muted">
             Your previous responses are pre-loaded — update anything below.
           </Text>
         ) : null}
         <View className="mt-2 flex-row items-center gap-2">
           <View className="h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-100">
             <View
-              className="h-full rounded-full bg-coral-500"
+              className="h-full rounded-full bg-green"
               style={{ width: polls.length > 0 ? `${(answeredCount / polls.length) * 100}%` : '0%' }}
             />
           </View>
-          <Text className="text-xs text-neutral-400">
+          <Text className="text-xs text-muted">
             {answeredCount}/{polls.length} answered
           </Text>
         </View>
@@ -1940,7 +1940,7 @@ export default function RespondScreen() {
       >
         {polls.length === 0 ? (
           <View className="items-center py-12">
-            <Text className="text-base text-neutral-500">No polls yet — check back soon.</Text>
+            <Text className="text-base text-muted">No polls yet — check back soon.</Text>
           </View>
         ) : (
           polls.map((poll) =>
@@ -1966,11 +1966,11 @@ export default function RespondScreen() {
       {/* Submit bar */}
       {polls.length > 0 ? (
         <View
-          className="border-t border-neutral-100 bg-white px-6 pt-3"
+          className="border-t border-line bg-card px-6 pt-3"
           style={{ paddingBottom: IS_WEB ? 16 : insets.bottom + 12 }}
         >
           {!allAnswered ? (
-            <Text className="mb-2 text-center text-xs text-neutral-400">
+            <Text className="mb-2 text-center text-xs text-muted">
               Answer all {polls.length} poll{polls.length !== 1 ? 's' : ''} to submit
             </Text>
           ) : null}
