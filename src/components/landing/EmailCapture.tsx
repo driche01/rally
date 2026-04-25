@@ -13,19 +13,21 @@ import { useState } from 'react';
 import { Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { joinBetaList } from '@/lib/api/beta';
 import { capture, Events } from '@/lib/analytics';
+import { T } from '@/theme';
 
 const HEADLINE_FONT = Platform.OS === 'android' ? 'serif' : 'Georgia';
 
+// Brand tokens via T (single source of truth — see src/theme/colors.ts).
 const C = {
-  green:     '#0F3F2E',
-  green2:    '#174F3C',
-  greenSoft: '#DFE8D2',
-  ink:       '#163026',
-  muted:     '#5F685F',
-  line:      '#E7DDCF',
-  card:      '#FFFAF2',
-  white:     '#FFFFFF',
-  error:     '#C13515',
+  green:     T.green,
+  green2:    T.greenDark,
+  greenSoft: T.greenSoft,
+  ink:       T.ink,
+  muted:     T.muted,
+  line:      T.line,
+  card:      T.card,
+  white:     T.white,
+  error:     T.error,
 };
 
 interface EmailCaptureProps {

@@ -54,6 +54,8 @@ export function getStageIndex(stage: TripStage): number {
   return STAGES.indexOf(stage);
 }
 
+import { T } from '@/theme';
+
 /**
  * Primary accent color for each stage — use for nav elements, CTAs, progress fills.
  *
@@ -64,12 +66,14 @@ export function getStageIndex(stage: TripStage): number {
  * backgrounds. Nav/CTA accents stay constant so the brand reads as one app
  * regardless of which stage you're looking at. Reconciling + done get a
  * quieter ink-tone since those stages are post-active.
+ *
+ * Source of truth: src/theme/colors.ts (T.*). Don't hardcode hex here.
  */
 export const STAGE_ACCENT: Record<TripStage, string> = {
-  deciding:     '#0F3F2E',
-  confirmed:    '#0F3F2E',
-  planning:     '#0F3F2E',
-  experiencing: '#0F3F2E',
-  reconciling:  '#5F685F',
-  done:         '#163026',
+  deciding:     T.green,
+  confirmed:    T.green,
+  planning:     T.green,
+  experiencing: T.green,
+  reconciling:  T.muted,
+  done:         T.ink,
 };

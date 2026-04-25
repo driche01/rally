@@ -22,27 +22,33 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import { T } from '@/theme';
 import { EmailCapture } from './EmailCapture';
 
 const HEADLINE_FONT = Platform.OS === 'android' ? 'serif' : 'Georgia';
 
+// Brand tokens (T) sourced from src/theme/colors.ts. Layout-only colors
+// (bubble, panelTop, highlight, etc.) are landing-page-specific tints
+// of cream/cream-warm and stay local.
 const C = {
-  cream:        '#FBF7EF',
-  cream2:       '#F4ECDF',
-  green:        '#0F3F2E',
-  green2:       '#174F3C',
-  greenSoft:    '#DFE8D2',
-  ink:          '#163026',
-  muted:        '#5F685F',
-  line:         '#E7DDCF',
-  card:         '#FFFAF2',
-  gold:         '#F3C96A',
+  cream:        T.cream,
+  cream2:       T.creamWarm,
+  green:        T.green,
+  green2:       T.greenDark,
+  greenSoft:    T.greenSoft,
+  ink:          T.ink,
+  muted:        T.muted,
+  line:         T.line,
+  card:         T.card,
+  gold:         T.gold,
+  white:        T.white,
+  // Landing-only decorative tints — derived from cream/cream-warm but
+  // tuned per-section. If you need them elsewhere, promote them to T.
   bubble:       '#EFEADC',
   panelTop:     '#F4EDDC',
   highlight:    '#FFF2DF',
   itineraryDate:'#F5EEE0',
   pill:         '#F7E9C7',
-  white:        '#FFFFFF',
 };
 
 const SHADOW = {

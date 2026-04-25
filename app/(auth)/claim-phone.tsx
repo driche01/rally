@@ -27,9 +27,13 @@ import { Button } from '@/components/ui';
 import { supabase } from '@/lib/supabase';
 import { normalizePhone } from '@/lib/phone';
 import { capture, Events } from '@/lib/analytics';
+import { T } from '@/theme';
 
 const HEADLINE_FONT = Platform.OS === 'android' ? 'serif' : 'Georgia';
 const RESEND_COOLDOWN_S = 30;
+// Placeholder color for the OTP input — slightly desaturated to read as
+// hint text on the warm card surface. Local-only (not part of brand T).
+const PLACEHOLDER = '#9DA8A0';
 
 export default function ClaimPhoneScreen() {
   const router = useRouter();
@@ -138,20 +142,20 @@ export default function ClaimPhoneScreen() {
             width: 56,
             height: 56,
             borderRadius: 28,
-            backgroundColor: '#DFE8D2',
+            backgroundColor: T.greenSoft,
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: 24,
           }}
         >
-          <Ionicons name="chatbubble-ellipses" size={28} color="#0F3F2E" />
+          <Ionicons name="chatbubble-ellipses" size={28} color={T.green} />
         </View>
 
         <Text
           style={{
             fontFamily: HEADLINE_FONT,
             fontSize: 36,
-            color: '#163026',
+            color: T.ink,
             fontWeight: '700',
             letterSpacing: -1,
             marginBottom: 10,
@@ -159,13 +163,13 @@ export default function ClaimPhoneScreen() {
         >
           Check your texts
         </Text>
-        <Text style={{ color: '#5F685F', fontSize: 16, lineHeight: 24, marginBottom: 8 }}>
+        <Text style={{ color: T.muted, fontSize: 16, lineHeight: 24, marginBottom: 8 }}>
           We sent a 6-digit code to
         </Text>
-        <Text style={{ color: '#163026', fontSize: 16, fontWeight: '700', marginBottom: 24 }}>
+        <Text style={{ color: T.ink, fontSize: 16, fontWeight: '700', marginBottom: 24 }}>
           {normalized ?? phone ?? 'your phone'}
         </Text>
-        <Text style={{ color: '#5F685F', fontSize: 14, lineHeight: 20, marginBottom: 24 }}>
+        <Text style={{ color: T.muted, fontSize: 14, lineHeight: 20, marginBottom: 24 }}>
           Confirm it's you and we'll pull in any trips from your text history.
         </Text>
 
@@ -181,28 +185,28 @@ export default function ClaimPhoneScreen() {
             }
           }}
           placeholder="123456"
-          placeholderTextColor="#9DA8A0"
+          placeholderTextColor={PLACEHOLDER}
           keyboardType="number-pad"
           autoComplete="one-time-code"
           textContentType="oneTimeCode"
           maxLength={6}
           style={{
-            backgroundColor: '#FFFAF2',
+            backgroundColor: T.card,
             borderWidth: 1,
-            borderColor: error ? '#C13515' : '#E7DDCF',
+            borderColor: error ? T.error : T.line,
             borderRadius: 12,
             paddingHorizontal: 18,
             paddingVertical: 16,
             fontSize: 28,
             fontWeight: '600',
-            color: '#163026',
+            color: T.ink,
             letterSpacing: 8,
             textAlign: 'center',
             marginBottom: 8,
           }}
         />
         {error ? (
-          <Text style={{ color: '#C13515', fontSize: 13, marginBottom: 8 }}>{error}</Text>
+          <Text style={{ color: T.error, fontSize: 13, marginBottom: 8 }}>{error}</Text>
         ) : null}
 
         <Button onPress={handleVerify} loading={loading} fullWidth className="mt-4">
@@ -213,7 +217,7 @@ export default function ClaimPhoneScreen() {
           <Pressable onPress={handleResend} disabled={resendIn > 0 || resending}>
             <Text
               style={{
-                color: resendIn > 0 || resending ? '#9DA8A0' : '#0F3F2E',
+                color: resendIn > 0 || resending ? PLACEHOLDER : T.green,
                 fontSize: 14,
                 fontWeight: '600',
               }}
@@ -222,7 +226,7 @@ export default function ClaimPhoneScreen() {
             </Text>
           </Pressable>
           <Pressable onPress={handleSkip}>
-            <Text style={{ color: '#5F685F', fontSize: 14, fontWeight: '600' }}>Skip for now</Text>
+            <Text style={{ color: T.muted, fontSize: 14, fontWeight: '600' }}>Skip for now</Text>
           </Pressable>
         </View>
       </View>
