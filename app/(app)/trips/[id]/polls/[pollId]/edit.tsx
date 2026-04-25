@@ -602,7 +602,7 @@ export default function EditPollScreen() {
                     <Pressable
                       onPress={addCustomDuration}
                       disabled={!customDurationInput.trim()}
-                      className={['h-11 w-11 items-center justify-center rounded-full', customDurationInput.trim() ? 'bg-green' : 'bg-neutral-200'].join(' ')}
+                      className={['h-11 w-11 items-center justify-center rounded-full', customDurationInput.trim() ? 'bg-green' : 'bg-line'].join(' ')}
                       accessibilityRole="button"
                     >
                       <Ionicons name="add" size={22} color={customDurationInput.trim() ? 'white' : '#A8A8A8'} />

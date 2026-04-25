@@ -195,7 +195,7 @@ function PollResponseCard({
               className={[
                 'flex-row items-center rounded-2xl border px-4 py-3.5 min-h-[52px]',
                 selected
-                  ? 'border-coral-400 bg-coral-50'
+                  ? 'border-green bg-green-soft'
                   : 'border-line bg-card',
               ].join(' ')}
               accessibilityRole={poll.allow_multi_select ? 'checkbox' : 'radio'}
@@ -208,7 +208,7 @@ function PollResponseCard({
                   poll.allow_multi_select
                     ? 'h-5 w-5 rounded-md border-2'
                     : 'h-5 w-5 rounded-full border-2',
-                  selected ? 'border-green bg-green' : 'border-neutral-300 bg-card',
+                  selected ? 'border-green bg-green' : 'border-line bg-card',
                 ].join(' ')}
               >
                 {selected ? (
@@ -318,7 +318,7 @@ function DatesPollCard({
               setViewMonth(d.getMonth());
             }}
             disabled={!canGoPrev}
-            className="rounded-lg p-1.5 active:bg-neutral-100"
+            className="rounded-lg p-1.5 active:bg-cream-warm"
             accessibilityRole="button"
             accessibilityLabel="Previous month"
           >
@@ -332,7 +332,7 @@ function DatesPollCard({
               setViewMonth(d.getMonth());
             }}
             disabled={!canGoNext}
-            className="rounded-lg p-1.5 active:bg-neutral-100"
+            className="rounded-lg p-1.5 active:bg-cream-warm"
             accessibilityRole="button"
             accessibilityLabel="Next month"
           >
@@ -492,11 +492,11 @@ function PollResultsCard({
                   {votes} vote{votes !== 1 ? 's' : ''}
                 </Text>
               </View>
-              <View className="h-2 overflow-hidden rounded-full bg-neutral-100">
+              <View className="h-2 overflow-hidden rounded-full bg-cream-warm">
                 <View
                   className={[
                     'h-full rounded-full',
-                    isMyPick || isLeading ? 'bg-green' : 'bg-neutral-300',
+                    isMyPick || isLeading ? 'bg-green' : 'bg-line',
                   ].join(' ')}
                   style={{ width: pct > 0 ? `${pct}%` : '2%' }}
                 />
@@ -847,7 +847,7 @@ function ItineraryRsvpSection({
                   <Text
                     className={[
                       'text-xs font-semibold',
-                      currentStatus === 'going' ? 'text-white' : 'text-green-700',
+                      currentStatus === 'going' ? 'text-white' : 'text-green',
                     ].join(' ')}
                   >
                     ✓ Going
@@ -881,8 +881,8 @@ function ItineraryRsvpSection({
                   className={[
                     'flex-1 items-center justify-center rounded-xl border py-2',
                     currentStatus === 'cant_make_it'
-                      ? 'border-neutral-400 bg-neutral-400'
-                      : 'border-line bg-neutral-100',
+                      ? 'border-muted bg-muted'
+                      : 'border-line bg-cream-warm',
                   ].join(' ')}
                   accessibilityRole="button"
                   accessibilityLabel="Can't make it"
@@ -1555,7 +1555,7 @@ export default function RespondScreen() {
             </View>
           </View>
 
-          <Text style={{ marginTop: 24, fontSize: 20, fontWeight: '700', color: '#1A1A1A', textAlign: 'center' }}>
+          <Text style={{ marginTop: 24, fontSize: 20, fontWeight: '700', color: '#163026', textAlign: 'center' }}>
             Are you in?
           </Text>
           <Text style={{ marginTop: 6, fontSize: 14, color: '#888', textAlign: 'center' }}>
@@ -1598,7 +1598,7 @@ export default function RespondScreen() {
           showsVerticalScrollIndicator={false}
         >
           <Text style={{ fontSize: 24, fontWeight: '800', color: '#0F3F2E', marginBottom: 4 }}>rally</Text>
-          <Text style={{ fontSize: 18, fontWeight: '700', color: '#1A1A1A', marginTop: 4 }}>
+          <Text style={{ fontSize: 18, fontWeight: '700', color: '#163026', marginTop: 4 }}>
             Help the group plan around you
           </Text>
           <Text style={{ fontSize: 14, color: '#888', marginTop: 4, marginBottom: 24 }}>
@@ -1607,7 +1607,7 @@ export default function RespondScreen() {
 
           {/* Q1: Needs (multi-select, optional) */}
           <View style={{ marginBottom: 28 }}>
-            <Text style={{ fontSize: 15, fontWeight: '700', color: '#1A1A1A', marginBottom: 12 }}>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: '#163026', marginBottom: 12 }}>
               What do you personally need to enjoy this trip?
             </Text>
             <Text style={{ fontSize: 12, color: '#aaa', marginBottom: 10 }}>Select all that apply</Text>
@@ -1620,7 +1620,7 @@ export default function RespondScreen() {
                     onPress={() => setPrefNeeds((prev) => sel ? prev.filter((x) => x !== opt) : [...prev, opt])}
                     style={{
                       borderWidth: 1.5,
-                      borderColor: sel ? '#235C38' : '#E5E5E5',
+                      borderColor: sel ? '#235C38' : '#E7DDCF',
                       backgroundColor: sel ? '#EAF3EC' : '#fff',
                       borderRadius: 12,
                       paddingHorizontal: 14,
@@ -1640,7 +1640,7 @@ export default function RespondScreen() {
 
           {/* Q2: Energy (2-option pick, optional) */}
           <View style={{ marginBottom: 28 }}>
-            <Text style={{ fontSize: 15, fontWeight: '700', color: '#1A1A1A', marginBottom: 4 }}>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: '#163026', marginBottom: 4 }}>
               How adventurous do you want to go?
             </Text>
             <Text style={{ fontSize: 12, color: '#aaa', marginBottom: 10 }}>Optional</Text>
@@ -1653,7 +1653,7 @@ export default function RespondScreen() {
                     onPress={() => setPrefEnergy(sel ? null : opt.value)}
                     style={{
                       borderWidth: 1.5,
-                      borderColor: sel ? '#235C38' : '#E5E5E5',
+                      borderColor: sel ? '#235C38' : '#E7DDCF',
                       backgroundColor: sel ? '#EAF3EC' : '#fff',
                       borderRadius: 12,
                       paddingHorizontal: 14,
@@ -1676,7 +1676,7 @@ export default function RespondScreen() {
 
           {/* Q3: Vibes (multi-select, max 2) */}
           <View style={{ marginBottom: 28 }}>
-            <Text style={{ fontSize: 15, fontWeight: '700', color: '#1A1A1A', marginBottom: 12 }}>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: '#163026', marginBottom: 12 }}>
               Pick the 1–2 vibes that best describe your ideal trip.
             </Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -1692,7 +1692,7 @@ export default function RespondScreen() {
                     }}
                     style={{
                       borderWidth: 1.5,
-                      borderColor: sel ? '#235C38' : maxReached ? '#eee' : '#E5E5E5',
+                      borderColor: sel ? '#235C38' : maxReached ? '#eee' : '#E7DDCF',
                       backgroundColor: sel ? '#EAF3EC' : '#fff',
                       borderRadius: 999,
                       paddingHorizontal: 16,
@@ -1713,7 +1713,7 @@ export default function RespondScreen() {
 
           {/* Q4: Pace (single-select, required) */}
           <View style={{ marginBottom: 32 }}>
-            <Text style={{ fontSize: 15, fontWeight: '700', color: '#1A1A1A', marginBottom: 4 }}>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: '#163026', marginBottom: 4 }}>
               What does a perfect trip day look like?
             </Text>
             <Text style={{ fontSize: 12, color: '#aaa', marginBottom: 10 }}>Pick 1</Text>
@@ -1726,7 +1726,7 @@ export default function RespondScreen() {
                     onPress={() => setPrefPace(opt)}
                     style={{
                       borderWidth: 1.5,
-                      borderColor: sel ? '#235C38' : '#E5E5E5',
+                      borderColor: sel ? '#235C38' : '#E7DDCF',
                       backgroundColor: sel ? '#EAF3EC' : '#fff',
                       borderRadius: 12,
                       paddingHorizontal: 14,
@@ -1774,7 +1774,7 @@ export default function RespondScreen() {
       <WebPageShell cardStyle={{ padding: IS_WEB ? 48 : 0 }}>
         <View style={IS_WEB ? { alignItems: 'center' } : { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F9F9F7', padding: 40 }}>
           <Text style={{ fontSize: 48 }}>💙</Text>
-          <Text style={{ marginTop: 20, fontSize: 26, fontWeight: '800', color: '#1A1A1A', textAlign: 'center' }}>
+          <Text style={{ marginTop: 20, fontSize: 26, fontWeight: '800', color: '#163026', textAlign: 'center' }}>
             We'll miss you!
           </Text>
           <Text style={{ marginTop: 10, fontSize: 15, color: '#888', textAlign: 'center', lineHeight: 22 }}>
@@ -1884,7 +1884,7 @@ export default function RespondScreen() {
           </Text>
         ) : null}
         <View className="mt-2 flex-row items-center gap-2">
-          <View className="h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-100">
+          <View className="h-1.5 flex-1 overflow-hidden rounded-full bg-cream-warm">
             <View
               className="h-full rounded-full bg-green"
               style={{ width: polls.length > 0 ? `${(answeredCount / polls.length) * 100}%` : '0%' }}

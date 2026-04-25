@@ -78,7 +78,7 @@ function PollResultBar({
       </View>
       <View className="h-2 overflow-hidden rounded-full bg-cream-warm">
         <View
-          className="h-full rounded-full bg-neutral-300"
+          className="h-full rounded-full bg-line"
           style={{ width: `${pct}%`, ...(isLeading || isDecided ? { backgroundColor: barColor } : {}) }}
         />
       </View>
@@ -542,7 +542,7 @@ export default function PollsScreen() {
               setEditingName(false);
             }}
             className="mt-2 text-2xl font-bold text-ink rounded-xl bg-card px-3 py-2"
-            style={{ borderWidth: 1, borderColor: '#E5E5E5' }}
+            style={{ borderWidth: 1, borderColor: '#E7DDCF' }}
           />
         ) : (
           <Pressable
@@ -763,9 +763,9 @@ export default function PollsScreen() {
         {decidedPolls.length > 0 ? (
           <View className="mt-2" onLayout={(e) => setDecidedSectionY(e.nativeEvent.layout.y)}>
             <View className="mb-2 flex-row items-center gap-2">
-              <View className="h-px flex-1 bg-neutral-200" />
+              <View className="h-px flex-1 bg-line" />
               <Text className="text-xs font-semibold uppercase tracking-wider" style={{ color: accentColor }}>Decided</Text>
-              <View className="h-px flex-1 bg-neutral-200" />
+              <View className="h-px flex-1 bg-line" />
             </View>
             {decidedPolls.map((poll) => (
               <View key={poll.id} onLayout={(e) => { const y = e.nativeEvent.layout.y; setDecidedCardYs((prev) => ({ ...prev, [poll.id]: y })); }}>
@@ -858,7 +858,7 @@ function TravelWindowModal({
       <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }} onPress={onClose}>
         <Animated.View style={{ transform: [{ translateY }], backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>
           <View {...panResponder.panHandlers} style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
-            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#E5E5E5' }} />
+            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#E7DDCF' }} />
           </View>
           <Pressable onPress={() => {}} style={{ padding: 24, paddingTop: 12, gap: 16 }}>
             <Text style={{ fontSize: 17, fontWeight: '600', color: '#163026' }}>Rough travel window</Text>
@@ -873,7 +873,7 @@ function TravelWindowModal({
                     style={{
                       flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
                       gap: 6, paddingVertical: 10, borderRadius: 999, borderWidth: 1.5,
-                      borderColor: isSelected ? '#0F3F2E' : '#E5E5E5',
+                      borderColor: isSelected ? '#0F3F2E' : '#E7DDCF',
                       backgroundColor: isSelected ? '#FFF4F2' : 'white',
                     }}
                   >
@@ -884,7 +884,7 @@ function TravelWindowModal({
               })}
             </View>
             <View style={{ flexDirection: 'row', gap: 10 }}>
-              <Pressable onPress={onClose} style={{ flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#E5E5E5', alignItems: 'center' }}>
+              <Pressable onPress={onClose} style={{ flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#E7DDCF', alignItems: 'center' }}>
                 <Text style={{ fontSize: 15, fontWeight: '600', color: '#525252' }}>Cancel</Text>
               </Pressable>
               <Pressable onPress={handleSave} style={{ flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: '#0F3F2E', alignItems: 'center' }}>
