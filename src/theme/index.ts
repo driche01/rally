@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 
-export { colors } from './colors';
+export { colors, T } from './colors';
+export type { BrandToken, ColorKey } from './colors';
 
 /**
  * Display font for headlines and hero copy (2026-04-24 brand update).

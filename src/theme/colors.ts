@@ -1,6 +1,21 @@
 /**
  * Brand color palette (2026-04-24).
  *
+ * ★ SINGLE SOURCE OF TRUTH for Rally brand colors. ★
+ *
+ * If you need a brand color anywhere in the codebase:
+ *   1. Inside JSX/styles → use the Tailwind utilities from tailwind.config.js
+ *      (`bg-cream`, `text-ink`, `bg-green`, etc.).
+ *   2. As an inline style or in non-JSX code (e.g. ActivityIndicator color,
+ *      placeholderTextColor, RPC parameters) → `import { T } from '@/theme'`
+ *      and reference `T.green`, `T.ink`, etc.
+ *   3. As a per-stage / per-type variant map → import from this file and
+ *      reference the named tokens (see STAGE_ACCENT in src/lib/tripStage.ts
+ *      for the pattern). Never inline raw hex.
+ *
+ * DO NOT add raw `#XXXXXX` color literals to feature files. They drift.
+ * The Tailwind config and this file are the only places hex values live.
+ *
  * Voice & rules:
  *  - Green is primary (CTAs, anchors, headlines).
  *  - Cream is the signature background — never pure white.
@@ -80,3 +95,31 @@ export const colors = {
 } as const;
 
 export type ColorKey = keyof typeof colors;
+
+/**
+ * Flat brand-token alias for inline-style code.
+ *
+ * Prefer the Tailwind utilities (`bg-green`, `text-ink`, etc.) inside JSX.
+ * Use `T.*` when you need a literal hex string — RN's
+ * `placeholderTextColor`, `ActivityIndicator color`, native splash bg,
+ * inline `style={{ color: ... }}` props on Text, per-stage accent maps, etc.
+ *
+ * Adding a new brand token? Add it here AND in `tailwind.config.js` so
+ * both the JS-string form and the Tailwind-class form stay in sync.
+ */
+export const T = {
+  green:        colors.green.DEFAULT,
+  greenDark:    colors.green.dark,
+  greenSoft:    colors.green.soft,
+  cream:        colors.cream.DEFAULT,
+  creamWarm:    colors.cream.warm,
+  card:         colors.card,
+  line:         colors.line,
+  ink:          colors.ink,
+  muted:        colors.muted,
+  gold:         colors.gold,
+  coral:        colors.coral[500],   // sparing accent only — see brand rules above
+  white:        colors.white,
+  error:        colors.error,
+} as const;
+export type BrandToken = keyof typeof T;

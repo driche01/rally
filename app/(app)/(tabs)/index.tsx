@@ -10,6 +10,7 @@ import { useDeleteTrip, useTripsWithRespondentCounts, useUpdateTrip } from '@/ho
 import { useAuthStore } from '@/stores/authStore';
 import type { TripWithRespondentCount } from '@/lib/api/trips';
 import { getTripStage, STAGES, STAGE_LABEL } from '@/lib/tripStage';
+import { T } from '@/theme';
 
 const SEASON_ICON: Record<string, React.ComponentProps<typeof Ionicons>['name']> = {
   Winter: 'snow-outline',
@@ -20,13 +21,16 @@ const SEASON_ICON: Record<string, React.ComponentProps<typeof Ionicons>['name']>
 
 // Stage accent colors — mirror the hero card palette on the dashboard.
 // 2026-04-24 brand: green-family for active, soft tints for past, no blue.
+// Source of truth: src/theme/colors.ts (T.*).
+const STAGE_PAST_TINT = '#A4B6A1';        // muted-green for past-stage segments
+const STAGE_PAST_TINT_QUIET = '#C8C8C0';  // muted-neutral for done/reconciling past
 const STAGE_COLOR: Record<string, { active: string; past: string; label: string }> = {
-  deciding:     { active: '#0F3F2E', past: '#A4B6A1', label: '#0F3F2E' },
-  confirmed:    { active: '#0F3F2E', past: '#A4B6A1', label: '#0F3F2E' },
-  planning:     { active: '#0F3F2E', past: '#A4B6A1', label: '#0F3F2E' },
-  experiencing: { active: '#0F3F2E', past: '#A4B6A1', label: '#0F3F2E' },
-  reconciling:  { active: '#5F685F', past: '#C8C8C0', label: '#5F685F' },
-  done:         { active: '#163026', past: '#A4B6A1', label: '#163026' },
+  deciding:     { active: T.green, past: STAGE_PAST_TINT,       label: T.green },
+  confirmed:    { active: T.green, past: STAGE_PAST_TINT,       label: T.green },
+  planning:     { active: T.green, past: STAGE_PAST_TINT,       label: T.green },
+  experiencing: { active: T.green, past: STAGE_PAST_TINT,       label: T.green },
+  reconciling:  { active: T.muted, past: STAGE_PAST_TINT_QUIET, label: T.muted },
+  done:         { active: T.ink,   past: STAGE_PAST_TINT,       label: T.ink   },
 };
 
 function TripCard({

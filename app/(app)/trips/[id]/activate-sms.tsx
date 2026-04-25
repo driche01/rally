@@ -29,6 +29,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '@/lib/supabase';
 import { useTripSessionActivation } from '@/hooks/useTripSessionActivation';
 import { capture, Events } from '@/lib/analytics';
+import { T } from '@/theme';
 
 const HEADLINE_FONT = Platform.OS === 'android' ? 'serif' : 'Georgia';
 
@@ -38,16 +39,17 @@ const HEADLINE_FONT = Platform.OS === 'android' ? 'serif' : 'Georgia';
 const RALLY_NUMBER = '+18559310010';
 const RALLY_NUMBER_DISPLAY = '(855) 931-0010';
 
+// Brand tokens (T) sourced from src/theme/colors.ts.
 const C = {
-  cream:     '#FBF7EF',
-  card:      '#FFFAF2',
-  green:     '#0F3F2E',
-  greenSoft: '#DFE8D2',
-  ink:       '#163026',
-  muted:     '#5F685F',
-  line:      '#E7DDCF',
-  white:     '#FFFFFF',
-  error:     '#C13515',
+  cream:     T.cream,
+  card:      T.card,
+  green:     T.green,
+  greenSoft: T.greenSoft,
+  ink:       T.ink,
+  muted:     T.muted,
+  line:      T.line,
+  white:     T.white,
+  error:     T.error,
 };
 
 export default function ActivateSmsScreen() {
