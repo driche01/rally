@@ -28,6 +28,7 @@ import { Button, useCelebration } from '@/components/ui';
 import { getTripByShareToken } from '@/lib/api/trips';
 import { enrollRespondentAsMember } from '@/lib/api/members';
 import { normalizePhone } from '@/lib/phone';
+import { EmailCapture } from '@/components/landing/EmailCapture';
 import {
   getOrCreateRespondent,
   getExistingRespondentForTrip,
@@ -686,15 +687,10 @@ function DateResultsCalendar({
 
 // ─── Download prompt (post-submission) ────────────────────────────────────────
 
-function DownloadPrompt({ tripName, tripId }: { tripName?: string; tripId: string }) {
-  // Set EXPO_PUBLIC_APP_STORE_ID in your .env once your App Store listing is live
-  const appStoreId = process.env.EXPO_PUBLIC_APP_STORE_ID ?? '';
-  const APP_STORE_URL = appStoreId
-    ? `https://apps.apple.com/app/rally/id${appStoreId}`
-    : 'https://rallyapp.io';
-  const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.rally.app';
+function DownloadPrompt({ tripName: _tripName, tripId }: { tripName?: string; tripId: string }) {
+  // Show once per trip per device — same gating the App Store/Play Store
+  // prompt used. Avoids nagging respondents who've already seen it.
   const VIRAL_KEY = 'rally_viral_' + tripId;
-
   const [shown, setShown] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -723,48 +719,16 @@ function DownloadPrompt({ tripName, tripId }: { tripName?: string; tripId: strin
 
   if (shown === null || shown === false) return null;
 
-  function handleDownload(store: 'ios' | 'android') {
-    capture(Events.DOWNLOAD_PROMPT_TAPPED, { store });
-    Linking.openURL(store === 'ios' ? APP_STORE_URL : PLAY_STORE_URL);
-  }
-
   return (
-    <View className="mt-6 rounded-3xl bg-green px-6 py-8">
-      <Text className="text-center text-xl font-bold text-white">
-        Planning your own trip? Try Rally.
-      </Text>
-      <Text className="mt-2 text-center text-sm text-coral-100">
-        Rally makes group trip planning stupid simple — polls, itinerary, expenses, and a shared group hub. Free to start.
-      </Text>
-      <View className="mt-5 gap-3">
-        <Pressable
-          onPress={() => handleDownload('ios')}
-          className="flex-row items-center justify-center gap-2 rounded-2xl bg-card py-3.5"
-          accessibilityRole="button"
-          accessibilityLabel="Download on the App Store"
-        >
-          <Ionicons name="logo-apple" size={20} color="#163026" />
-          <Text className="font-semibold text-ink">App Store</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => handleDownload('android')}
-          className="flex-row items-center justify-center gap-2 rounded-2xl bg-card py-3.5"
-          accessibilityRole="button"
-          accessibilityLabel="Get it on Google Play"
-        >
-          <Ionicons name="logo-google-playstore" size={20} color="#163026" />
-          <Text className="font-semibold text-ink">Google Play</Text>
-        </Pressable>
-      </View>
-      <Pressable
-        onPress={() => Linking.openURL('https://rallyapp.io')}
-        accessibilityRole="link"
-        accessibilityLabel="Start planning free"
-      >
-        <Text className="mt-4 text-center text-sm font-semibold text-white underline">
-          Start planning free →
-        </Text>
-      </Pressable>
+    <View style={{ marginTop: 24 }}>
+      <EmailCapture
+        source="respond_post_submit"
+        tripId={tripId}
+        variant="card"
+        title="Want this in an app?"
+        subtitle="Drop your email and we'll get you in as soon as Rally opens up — your trip will be waiting."
+        ctaLabel="Get me on the list"
+      />
     </View>
   );
 }

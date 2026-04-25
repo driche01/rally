@@ -9,6 +9,15 @@
 [build.environment]
   SECRETS_SCAN_OMIT_KEYS = "EXPO_PUBLIC_POSTHOG_HOST,EXPO_PUBLIC_SUPABASE_URL"
 
+# /download → /  (preserve query string for source/trip attribution).
+# The standalone beta-signup page was collapsed into the landing in 2026-04;
+# legacy SMS install CTAs still hit /download — they get a 301 here.
+[[redirects]]
+  from = "/download"
+  to = "/"
+  status = 301
+  force = true
+
 # Universal-link manifests — must be served literally (no SPA fallback) and
 # with `Content-Type: application/json`. iOS rejects AASA without it.
 # These rules MUST come before the SPA catchall below.
