@@ -27,6 +27,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, useCelebration } from '@/components/ui';
 import { getTripByShareToken } from '@/lib/api/trips';
 import { enrollRespondentAsMember } from '@/lib/api/members';
+import { normalizePhone } from '@/lib/phone';
 import {
   getOrCreateRespondent,
   getExistingRespondentForTrip,
@@ -1137,7 +1138,9 @@ export default function RespondScreen() {
     if (!trimmedPhone) {
       setPhoneError('Phone number is required');
       hasError = true;
-    } else if (!/^\+?[\d\s\-().]{7,20}$/.test(trimmedPhone)) {
+    } else if (normalizePhone(trimmedPhone) === null) {
+      // Reject anything we can't E.164-normalize — that format is what SMS,
+      // survey, and app all key off for identity unification (Phase 0+).
       setPhoneError('Enter a valid phone number');
       hasError = true;
     } else {

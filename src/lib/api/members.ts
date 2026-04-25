@@ -1,4 +1,5 @@
 import { supabase } from '../supabase';
+import { normalizePhone } from '../phone';
 import type { TripMember, TripMemberWithProfile } from '../../types/database';
 
 /** Add the current authenticated user to a trip as a member. */
@@ -89,13 +90,16 @@ export async function enrollRespondentAsMember(
     },
   });
 
-  // Update profile + insert trip_members via SECURITY DEFINER function
+  // Update profile + insert trip_members via SECURITY DEFINER function.
+  // Phone is persisted E.164 so it matches the SMS-side users.phone exactly.
+  const trimmedPhone = phone.trim();
+  const normalizedPhone = normalizePhone(trimmedPhone) ?? trimmedPhone;
   const { error } = await supabase.rpc('enroll_respondent_as_member', {
     p_trip_id: tripId,
     p_email: email.trim().toLowerCase(),
     p_first_name: firstName.trim(),
     p_last_name: lastName.trim(),
-    p_phone: phone.trim(),
+    p_phone: normalizedPhone,
   });
   if (error) throw error;
 }
