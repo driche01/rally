@@ -1886,9 +1886,12 @@ export default function RespondScreen() {
         style={{ paddingTop: IS_WEB ? 20 : insets.top + 16 }}
       >
         <Text className="text-sm font-medium text-green">rally · {trip.name}</Text>
-        <Text className="mt-0.5 text-lg font-bold text-ink">
-          {hasExistingResponses ? `Hey ${firstName}, update your picks 👇` : `Hey ${firstName}, weigh in 👇`}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+          <Text className="text-lg font-bold text-ink">
+            {hasExistingResponses ? `Hey ${firstName}, update your picks` : `Hey ${firstName}, weigh in`}
+          </Text>
+          <Ionicons name="arrow-down" size={18} color="#0F3F2E" />
+        </View>
         {hasExistingResponses ? (
           <Text className="mt-0.5 text-xs text-muted">
             Your previous responses are pre-loaded — update anything below.
