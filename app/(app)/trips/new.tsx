@@ -130,7 +130,7 @@ export default function NewTripScreen() {
       onClose={() => setDatePickerVisible(false)}
     />
     <KeyboardAvoidingView
-      className="flex-1 bg-neutral-50"
+      className="flex-1 bg-cream"
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       {/* Header */}
@@ -139,7 +139,7 @@ export default function NewTripScreen() {
         style={{ paddingTop: insets.top + 16 }}
       >
         <TouchableOpacity onPress={() => router.back()} accessibilityRole="button">
-          <Text className="text-base text-coral-500">Cancel</Text>
+          <Text className="text-base text-green">Cancel</Text>
         </TouchableOpacity>
         <Text className="text-lg font-semibold text-[#262626]">New rally</Text>
         <View style={{ width: 60 }} />
@@ -172,29 +172,29 @@ export default function NewTripScreen() {
                   <Pressable
                     key={n}
                     onPress={() => { setExactSize(n); setIsCustom(false); setErrors((e) => ({ ...e, groupSize: undefined })); }}
-                    className={`w-[40px] h-[40px] items-center justify-center rounded-xl border-[1.5px] ${sel ? 'border-coral-500 bg-coral-50' : 'border-neutral-200 bg-white'}`}
+                    className={`w-[40px] h-[40px] items-center justify-center rounded-xl border-[1.5px] ${sel ? 'border-green bg-green-soft' : 'border-line bg-card'}`}
                     accessibilityRole="radio"
                     accessibilityState={{ selected: sel }}
                     accessibilityLabel={`${n} people`}
                   >
-                    <Text className={`text-base font-semibold ${sel ? 'text-coral-500' : 'text-[#404040]'}`}>{n}</Text>
+                    <Text className={`text-base font-semibold ${sel ? 'text-green' : 'text-[#404040]'}`}>{n}</Text>
                   </Pressable>
                 );
               })}
               <Pressable
                 onPress={() => { setIsCustom(true); setExactSize(null); setErrors((e) => ({ ...e, groupSize: undefined })); }}
-                className={`h-[40px] px-3.5 items-center justify-center rounded-xl border-[1.5px] ${isCustom ? 'border-coral-500 bg-coral-50' : 'border-neutral-200 bg-white'}`}
+                className={`h-[40px] px-3.5 items-center justify-center rounded-xl border-[1.5px] ${isCustom ? 'border-green bg-green-soft' : 'border-line bg-card'}`}
                 accessibilityRole="radio"
                 accessibilityState={{ selected: isCustom }}
                 accessibilityLabel="Custom number"
               >
-                <Text className={`text-base font-semibold ${isCustom ? 'text-coral-500' : 'text-[#404040]'}`}>Custom</Text>
+                <Text className={`text-base font-semibold ${isCustom ? 'text-green' : 'text-[#404040]'}`}>Custom</Text>
               </Pressable>
             </View>
             {isCustom && (
               <View className="flex-row items-center gap-2 mt-1">
                 <TextInput
-                  className="h-11 w-[100px] border-[1.5px] border-neutral-200 rounded-[10px] px-3 text-base text-[#262626] bg-white"
+                  className="h-11 w-[100px] border-[1.5px] border-line rounded-[10px] px-3 text-base text-[#262626] bg-card"
                   placeholder="e.g. 25"
                   keyboardType="number-pad"
                   value={customInput}
@@ -218,12 +218,12 @@ export default function NewTripScreen() {
                   <Pressable
                     key={type}
                     onPress={() => { setTripType(sel ? null : type); setErrors((e) => ({ ...e, tripType: undefined })); }}
-                    className={`px-3.5 py-2 rounded-full border-[1.5px] ${sel ? 'border-coral-500 bg-coral-50' : 'border-neutral-200 bg-white'}`}
+                    className={`px-3.5 py-2 rounded-full border-[1.5px] ${sel ? 'border-green bg-green-soft' : 'border-line bg-card'}`}
                     accessibilityRole="radio"
                     accessibilityState={{ selected: sel }}
                     accessibilityLabel={type}
                   >
-                    <Text className={`text-sm font-medium ${sel ? 'text-coral-500' : 'text-[#525252]'}`}>{type}</Text>
+                    <Text className={`text-sm font-medium ${sel ? 'text-green' : 'text-[#525252]'}`}>{type}</Text>
                   </Pressable>
                 );
               })}
@@ -252,7 +252,7 @@ export default function NewTripScreen() {
               <Text className="font-normal text-[#a3a3a3]">(optional)</Text>
             </Text>
             <TouchableOpacity
-              className="flex-row items-center gap-2.5 border-[1.5px] border-neutral-200 rounded-xl bg-white px-3.5 py-[13px]"
+              className="flex-row items-center gap-2.5 border-[1.5px] border-line rounded-xl bg-card px-3.5 py-[13px]"
               onPress={() => setDatePickerVisible(true)}
               activeOpacity={0.7}
             >
@@ -290,12 +290,12 @@ export default function NewTripScreen() {
                   <Pressable
                     key={opt}
                     onPress={() => setBudget(sel ? null : opt)}
-                    className={`px-3.5 py-2 rounded-full border-[1.5px] ${sel ? 'border-coral-500 bg-coral-50' : 'border-neutral-200 bg-white'}`}
+                    className={`px-3.5 py-2 rounded-full border-[1.5px] ${sel ? 'border-green bg-green-soft' : 'border-line bg-card'}`}
                     accessibilityRole="radio"
                     accessibilityState={{ selected: sel }}
                     accessibilityLabel={opt}
                   >
-                    <Text className={`text-sm font-medium ${sel ? 'text-coral-500' : 'text-[#525252]'}`}>{opt}</Text>
+                    <Text className={`text-sm font-medium ${sel ? 'text-green' : 'text-[#525252]'}`}>{opt}</Text>
                   </Pressable>
                 );
               })}

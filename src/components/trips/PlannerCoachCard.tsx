@@ -113,16 +113,16 @@ function NudgeRow({
         accessibilityRole="button"
       >
         {isLoading ? (
-          <ActivityIndicator size="small" color={isAgentAction ? '#D85A30' : '#1A4060'} />
+          <ActivityIndicator size="small" color={isAgentAction ? '#0F3F2E' : '#1A4060'} />
         ) : (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             {isAgentAction ? (
-              <Ionicons name="sparkles" size={12} color="#D85A30" />
+              <Ionicons name="sparkles" size={12} color="#0F3F2E" />
             ) : null}
             <Text
               style={[
                 styles.nudgeCtaText,
-                isAgentAction && { color: '#D85A30' },
+                isAgentAction && { color: '#0F3F2E' },
               ]}
             >
               {nudge.cta}
@@ -175,7 +175,7 @@ export function PlannerCoachCard({ tripId }: Props) {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Ionicons name="sparkles" size={14} color="#D85A30" />
+          <Ionicons name="sparkles" size={14} color="#0F3F2E" />
           <Text style={styles.headerTitle}>Planner coach</Text>
         </View>
         <View style={styles.headerRight}>
@@ -184,7 +184,7 @@ export function PlannerCoachCard({ tripId }: Props) {
             value={autoRemind}
             onValueChange={(val) => upsertSettings.mutate(val)}
             trackColor={{ false: '#E5E5E5', true: '#FDDDD8' }}
-            thumbColor={autoRemind ? '#D85A30' : '#fff'}
+            thumbColor={autoRemind ? '#0F3F2E' : '#fff'}
             ios_backgroundColor="#E5E5E5"
             style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
           />
@@ -194,7 +194,7 @@ export function PlannerCoachCard({ tripId }: Props) {
       {/* Nudge list */}
       {nudgesLoading ? (
         <View style={styles.loadingRow}>
-          <ActivityIndicator size="small" color="#D85A30" />
+          <ActivityIndicator size="small" color="#0F3F2E" />
           <Text style={styles.loadingText}>Checking your trip…</Text>
         </View>
       ) : error ? (
@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#F0EDE8',
     gap: 12,
-    shadowColor: '#D85A30',
+    shadowColor: '#0F3F2E',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 8,
@@ -254,7 +254,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: '#163026',
     textTransform: 'uppercase',
     letterSpacing: 0.6,
   },
@@ -279,7 +279,7 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#D85A30',
+    backgroundColor: '#0F3F2E',
     marginTop: 5,
     flexShrink: 0,
   },
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
   nudgeTitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#1A1A1A',
+    color: '#163026',
     lineHeight: 18,
   },
   nudgeSubtitle: {
@@ -309,7 +309,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   nudgeCtaBtnAgent: {
-    borderColor: '#D85A30',
+    borderColor: '#0F3F2E',
     backgroundColor: '#FFF8F6',
   },
   nudgeCtaText: {

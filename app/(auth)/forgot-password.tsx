@@ -31,7 +31,7 @@ export default function ForgotPasswordScreen() {
 
   return (
     <KeyboardAvoidingView
-      className="flex-1 bg-neutral-50"
+      className="flex-1 bg-cream"
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View className="flex-1 justify-center px-6 py-12">
@@ -41,15 +41,15 @@ export default function ForgotPasswordScreen() {
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
-          <Text className="text-base text-coral-500">← Back</Text>
+          <Text className="text-base text-green">← Back</Text>
         </TouchableOpacity>
 
         {sent ? (
           <View className="gap-4">
-            <Text className="text-2xl font-semibold text-neutral-800">Check your email</Text>
-            <Text className="text-base text-neutral-500">
+            <Text className="text-2xl font-semibold text-ink">Check your email</Text>
+            <Text className="text-base text-muted">
               We sent a reset link to{' '}
-              <Text className="font-medium text-neutral-700">{email}</Text>.
+              <Text className="font-medium text-ink">{email}</Text>.
             </Text>
             <Button variant="secondary" onPress={() => router.replace('/(auth)/login')} fullWidth>
               Back to login
@@ -58,8 +58,8 @@ export default function ForgotPasswordScreen() {
         ) : (
           <View className="gap-6">
             <View className="gap-1">
-              <Text className="text-2xl font-semibold text-neutral-800">Reset password</Text>
-              <Text className="text-base text-neutral-500">
+              <Text className="text-2xl font-semibold text-ink">Reset password</Text>
+              <Text className="text-base text-muted">
                 Enter your email and we'll send you a reset link.
               </Text>
             </View>

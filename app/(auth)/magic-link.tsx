@@ -31,28 +31,28 @@ export default function MagicLinkScreen() {
 
   return (
     <KeyboardAvoidingView
-      className="flex-1 bg-neutral-50"
+      className="flex-1 bg-cream"
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View className="flex-1 justify-center px-6 py-12">
         <TouchableOpacity onPress={() => router.back()} className="mb-8" accessibilityRole="button">
-          <Text className="text-base text-coral-500">← Back</Text>
+          <Text className="text-base text-green">← Back</Text>
         </TouchableOpacity>
 
         {sent ? (
           <View className="gap-4">
-            <Text className="text-2xl font-semibold text-neutral-800">Check your email</Text>
-            <Text className="text-base text-neutral-500">
+            <Text className="text-2xl font-semibold text-ink">Check your email</Text>
+            <Text className="text-base text-muted">
               We sent a magic link to{' '}
-              <Text className="font-medium text-neutral-700">{email}</Text>.{'\n\n'}
+              <Text className="font-medium text-ink">{email}</Text>.{'\n\n'}
               Tap the link in the email to log in — no password needed.
             </Text>
           </View>
         ) : (
           <View className="gap-6">
             <View className="gap-1">
-              <Text className="text-2xl font-semibold text-neutral-800">Magic link login</Text>
-              <Text className="text-base text-neutral-500">
+              <Text className="text-2xl font-semibold text-ink">Magic link login</Text>
+              <Text className="text-base text-muted">
                 We'll email you a link to sign in instantly.
               </Text>
             </View>

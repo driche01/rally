@@ -63,7 +63,7 @@ function BoundaryInput({ value, onCommit }: { value: number; onCommit: (n: numbe
       onSubmitEditing={handleCommit}
       keyboardType="number-pad"
       selectTextOnFocus
-      className="min-w-[56px] rounded-lg border border-neutral-200 bg-neutral-50 px-2 py-1 text-center text-sm font-medium text-neutral-700"
+      className="min-w-[56px] rounded-lg border border-line bg-cream px-2 py-1 text-center text-sm font-medium text-ink"
       accessibilityLabel="budget boundary"
     />
   );
@@ -98,19 +98,19 @@ function DestinationInput({
         maxLength={maxLength}
         onFocus={() => setFocused(true)}
         onBlur={() => setTimeout(() => setFocused(false), 150)}
-        className="min-h-[48px] rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-base text-neutral-800"
+        className="min-h-[48px] rounded-2xl border border-line bg-card px-4 py-3 text-base text-ink"
         placeholderTextColor="#A8A8A8"
       />
       {suggestions.length > 0 ? (
-        <View className="mt-1 overflow-hidden rounded-xl border border-neutral-200 bg-white">
+        <View className="mt-1 overflow-hidden rounded-xl border border-line bg-card">
           {suggestions.map((s, i) => (
             <Pressable
               key={s}
               onPress={() => { onChangeText(maxLength ? s.slice(0, maxLength) : s); setFocused(false); }}
-              className={['flex-row items-center gap-2 px-4 py-3', i < suggestions.length - 1 ? 'border-b border-neutral-100' : ''].join(' ')}
+              className={['flex-row items-center gap-2 px-4 py-3', i < suggestions.length - 1 ? 'border-b border-line' : ''].join(' ')}
             >
               <Ionicons name="location-outline" size={15} color="#A8A8A8" />
-              <Text className="text-sm text-neutral-700">{s}</Text>
+              <Text className="text-sm text-ink">{s}</Text>
             </Pressable>
           ))}
         </View>
@@ -169,12 +169,12 @@ function CalendarPicker({ ranges, onRangesChange }: { ranges: DateRange[]; onRan
   }
 
   return (
-    <View className="rounded-2xl border border-neutral-200 bg-white p-4">
+    <View className="rounded-2xl border border-line bg-card p-4">
       <View className="mb-3 flex-row items-center justify-between">
         <Pressable onPress={prevMonth} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} className="p-1">
           <Ionicons name="chevron-back" size={20} color="#6B6B6B" />
         </Pressable>
-        <Text className="text-sm font-semibold text-neutral-800">{MONTH_NAMES[viewMonth]} {viewYear}</Text>
+        <Text className="text-sm font-semibold text-ink">{MONTH_NAMES[viewMonth]} {viewYear}</Text>
         <Pressable onPress={nextMonth} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} className="p-1">
           <Ionicons name="chevron-forward" size={20} color="#6B6B6B" />
         </Pressable>
@@ -182,7 +182,7 @@ function CalendarPicker({ ranges, onRangesChange }: { ranges: DateRange[]; onRan
       <View className="mb-1 flex-row">
         {DAY_NAMES.map((d) => (
           <View key={d} style={{ flex: 1 }} className="items-center">
-            <Text className="text-xs font-medium text-neutral-400">{d}</Text>
+            <Text className="text-xs font-medium text-muted">{d}</Text>
           </View>
         ))}
       </View>
@@ -195,8 +195,8 @@ function CalendarPicker({ ranges, onRangesChange }: { ranges: DateRange[]; onRan
             const isIn = state === 'inRange';
             return (
               <Pressable key={di} onPress={() => handleDayPress(day)} style={{ flex: 1 }} className="items-center py-0.5">
-                <View className={['h-8 w-8 items-center justify-center rounded-full', isEndpoint ? 'bg-coral-500' : isIn ? 'bg-coral-100' : ''].join(' ')}>
-                  <Text className={['text-xs', isEndpoint ? 'font-bold text-white' : isIn ? 'text-coral-700' : 'text-neutral-700'].join(' ')}>
+                <View className={['h-8 w-8 items-center justify-center rounded-full', isEndpoint ? 'bg-green' : isIn ? 'bg-green-soft' : ''].join(' ')}>
+                  <Text className={['text-xs', isEndpoint ? 'font-bold text-white' : isIn ? 'text-green-dark' : 'text-ink'].join(' ')}>
                     {day.getDate()}
                   </Text>
                 </View>
@@ -205,16 +205,16 @@ function CalendarPicker({ ranges, onRangesChange }: { ranges: DateRange[]; onRan
           })}
         </View>
       ))}
-      <Text className="mt-2 text-center text-xs text-neutral-400">
+      <Text className="mt-2 text-center text-xs text-muted">
         {pendingStart ? `Now tap an end date (started ${fmtShort(pendingStart)})` : 'Tap a start date to add a period'}
       </Text>
       {ranges.length > 0 ? (
         <View className="mt-3 flex-row flex-wrap gap-2">
           {ranges.map((r, i) => (
-            <View key={i} className="flex-row items-center gap-1 rounded-full border border-coral-200 bg-coral-50 px-3 py-1.5">
-              <Text className="text-sm text-coral-700">{fmtRange(r)}</Text>
+            <View key={i} className="flex-row items-center gap-1 rounded-full border border-line bg-green-soft px-3 py-1.5">
+              <Text className="text-sm text-green-dark">{fmtRange(r)}</Text>
               <Pressable onPress={() => onRangesChange(ranges.filter((_, j) => j !== i))} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
-                <Ionicons name="close" size={13} color="#D85A30" />
+                <Ionicons name="close" size={13} color="#0F3F2E" />
               </Pressable>
             </View>
           ))}
@@ -460,14 +460,14 @@ export default function EditPollScreen() {
   // ── Render ──
   return (
     <KeyboardAvoidingView
-      className="flex-1 bg-neutral-50"
+      className="flex-1 bg-cream"
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View className="flex-row items-center justify-between px-6 pb-4" style={{ paddingTop: insets.top + 16 }}>
         <TouchableOpacity onPress={() => router.back()} accessibilityRole="button">
-          <Text className="text-base text-coral-500">Cancel</Text>
+          <Text className="text-base text-green">Cancel</Text>
         </TouchableOpacity>
-        <Text className="text-lg font-semibold text-neutral-800">Edit poll</Text>
+        <Text className="text-lg font-semibold text-ink">Edit poll</Text>
         <View style={{ width: 60 }} />
       </View>
 
@@ -481,20 +481,20 @@ export default function EditPollScreen() {
           {poll.type === 'destination' && (
             <>
               <View className="gap-1">
-                <Text className="text-sm font-medium text-neutral-700">Question</Text>
+                <Text className="text-sm font-medium text-ink">Question</Text>
                 <TextInput
                   value={destTitle}
                   onChangeText={setDestTitle}
-                  className="min-h-[48px] rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-base text-neutral-800"
+                  className="min-h-[48px] rounded-2xl border border-line bg-card px-4 py-3 text-base text-ink"
                   placeholderTextColor="#A8A8A8"
                 />
               </View>
               <Divider />
               <View className="gap-2">
-                <Text className="text-sm font-medium text-neutral-700">
-                  Options <Text className="font-normal text-neutral-400">({destOptions.length}/6)</Text>
+                <Text className="text-sm font-medium text-ink">
+                  Options <Text className="font-normal text-muted">({destOptions.length}/6)</Text>
                 </Text>
-                <Text className="text-xs text-neutral-400 -mt-1">Type to search cities & countries</Text>
+                <Text className="text-xs text-muted -mt-1">Type to search cities & countries</Text>
                 {destOptions.map((opt, i) => (
                   <View key={i} className="flex-row items-center gap-2">
                     <View className="flex-1">
@@ -514,18 +514,18 @@ export default function EditPollScreen() {
                 ))}
                 {destOptions.length < 6 ? (
                   <Pressable onPress={addDestOption} className="flex-row items-center gap-2 py-2" accessibilityRole="button">
-                    <Ionicons name="add-circle-outline" size={20} color="#D85A30" />
-                    <Text className="text-base text-coral-500">Add option</Text>
+                    <Ionicons name="add-circle-outline" size={20} color="#0F3F2E" />
+                    <Text className="text-base text-green">Add option</Text>
                   </Pressable>
                 ) : null}
               </View>
               <Divider />
               <View className="flex-row items-center justify-between">
                 <View className="flex-1 gap-0.5">
-                  <Text className="text-base font-medium text-neutral-800">Allow multiple choices</Text>
-                  <Text className="text-sm text-neutral-400">Group members can select more than one</Text>
+                  <Text className="text-base font-medium text-ink">Allow multiple choices</Text>
+                  <Text className="text-sm text-muted">Group members can select more than one</Text>
                 </View>
-                <Switch value={destAllowMulti} onValueChange={setDestAllowMulti} trackColor={{ false: '#E8E8E8', true: '#D85A30' }} thumbColor="white" />
+                <Switch value={destAllowMulti} onValueChange={setDestAllowMulti} trackColor={{ false: '#E8E8E8', true: '#0F3F2E' }} thumbColor="white" />
               </View>
             </>
           )}
@@ -534,23 +534,23 @@ export default function EditPollScreen() {
           {poll.type === 'dates' && (
             <>
               <View className="gap-1">
-                <Text className="text-sm font-medium text-neutral-700">Question</Text>
+                <Text className="text-sm font-medium text-ink">Question</Text>
                 <TextInput
                   value={datesTitle}
                   onChangeText={setDatesTitle}
-                  className="min-h-[48px] rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-base text-neutral-800"
+                  className="min-h-[48px] rounded-2xl border border-line bg-card px-4 py-3 text-base text-ink"
                   placeholderTextColor="#A8A8A8"
                 />
               </View>
               <Divider />
               {isDatesAvailability ? (
                 <>
-                  <Text className="text-sm font-medium text-neutral-700">Date ranges</Text>
+                  <Text className="text-sm font-medium text-ink">Date ranges</Text>
                   <CalendarPicker ranges={dateRanges} onRangesChange={setDateRanges} />
                 </>
               ) : (
                 <View className="gap-3">
-                  <Text className="text-sm font-medium text-neutral-700">Duration options</Text>
+                  <Text className="text-sm font-medium text-ink">Duration options</Text>
                   <View className="flex-row flex-wrap gap-2">
                     {DURATION_OPTIONS.map((dur) => {
                       const sel = selectedDurations.includes(dur);
@@ -558,14 +558,14 @@ export default function EditPollScreen() {
                         <Pressable
                           key={dur}
                           onPress={() => toggleDuration(dur)}
-                          className={['rounded-full border px-4 py-2', sel ? 'border-coral-500 bg-coral-500' : 'border-neutral-200 bg-white'].join(' ')}
+                          className={['rounded-full border px-4 py-2', sel ? 'border-green bg-green' : 'border-line bg-card'].join(' ')}
                         >
-                          <Text className={['text-sm font-medium', sel ? 'text-white' : 'text-neutral-600'].join(' ')}>{dur}</Text>
+                          <Text className={['text-sm font-medium', sel ? 'text-white' : 'text-muted'].join(' ')}>{dur}</Text>
                         </Pressable>
                       );
                     })}
                     {selectedDurations.filter((d) => !DURATION_OPTIONS.includes(d)).map((dur) => (
-                      <View key={dur} className="flex-row items-center gap-1 rounded-full border border-coral-500 bg-coral-500 px-4 py-2">
+                      <View key={dur} className="flex-row items-center gap-1 rounded-full border border-green bg-green px-4 py-2">
                         <Text className="text-sm font-medium text-white">{dur}</Text>
                         <Pressable onPress={() => toggleDuration(dur)} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
                           <Ionicons name="close" size={13} color="white" />
@@ -582,7 +582,7 @@ export default function EditPollScreen() {
                       keyboardType="number-pad"
                       placeholder="e.g. 5"
                       maxLength={3}
-                      className="w-20 min-h-[44px] rounded-2xl border border-neutral-200 bg-white px-4 py-2 text-sm text-neutral-800 text-center"
+                      className="w-20 min-h-[44px] rounded-2xl border border-line bg-card px-4 py-2 text-sm text-ink text-center"
                       placeholderTextColor="#A8A8A8"
                     />
                     {(['days', 'weeks', 'months'] as const).map((u) => {
@@ -591,18 +591,18 @@ export default function EditPollScreen() {
                         <Pressable
                           key={u}
                           onPress={() => setCustomDurationUnit(u)}
-                          className={['flex-1 items-center justify-center rounded-2xl border min-h-[44px] px-1', sel ? 'border-coral-500 bg-coral-500' : 'border-neutral-200 bg-white'].join(' ')}
+                          className={['flex-1 items-center justify-center rounded-2xl border min-h-[44px] px-1', sel ? 'border-green bg-green' : 'border-line bg-card'].join(' ')}
                           accessibilityRole="radio"
                           accessibilityState={{ selected: sel }}
                         >
-                          <Text className={['text-xs font-medium', sel ? 'text-white' : 'text-neutral-600'].join(' ')}>{u}</Text>
+                          <Text className={['text-xs font-medium', sel ? 'text-white' : 'text-muted'].join(' ')}>{u}</Text>
                         </Pressable>
                       );
                     })}
                     <Pressable
                       onPress={addCustomDuration}
                       disabled={!customDurationInput.trim()}
-                      className={['h-11 w-11 items-center justify-center rounded-full', customDurationInput.trim() ? 'bg-coral-500' : 'bg-neutral-200'].join(' ')}
+                      className={['h-11 w-11 items-center justify-center rounded-full', customDurationInput.trim() ? 'bg-green' : 'bg-neutral-200'].join(' ')}
                       accessibilityRole="button"
                     >
                       <Ionicons name="add" size={22} color={customDurationInput.trim() ? 'white' : '#A8A8A8'} />
@@ -617,34 +617,34 @@ export default function EditPollScreen() {
           {poll.type === 'budget' && (
             <>
               <View className="gap-1">
-                <Text className="text-sm font-medium text-neutral-700">Question</Text>
+                <Text className="text-sm font-medium text-ink">Question</Text>
                 <TextInput
                   value={budgetTitle}
                   onChangeText={setBudgetTitle}
-                  className="min-h-[48px] rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-base text-neutral-800"
+                  className="min-h-[48px] rounded-2xl border border-line bg-card px-4 py-3 text-base text-ink"
                   placeholderTextColor="#A8A8A8"
                 />
               </View>
               <Divider />
               <View className="gap-2">
-                <Text className="text-sm font-medium text-neutral-700">Budget tiers</Text>
-                <Text className="text-xs text-neutral-400 -mt-1">Tap a label to rename · tap a number to change the boundary</Text>
+                <Text className="text-sm font-medium text-ink">Budget tiers</Text>
+                <Text className="text-xs text-muted -mt-1">Tap a label to rename · tap a number to change the boundary</Text>
                 {budgetRanges.map((r, i) => {
                   const isLast = i === budgetRanges.length - 1;
                   return (
                     <View
                       key={r.id}
-                      className={['flex-row items-center gap-2 rounded-xl border px-3 py-3', r.selected ? 'border-coral-300 bg-coral-50' : 'border-neutral-200 bg-white'].join(' ')}
+                      className={['flex-row items-center gap-2 rounded-xl border px-3 py-3', r.selected ? 'border-coral-300 bg-green-soft' : 'border-line bg-card'].join(' ')}
                     >
                       <Pressable onPress={() => toggleBudgetRange(r.id)} accessibilityRole="checkbox" accessibilityState={{ checked: r.selected }}>
-                        <View className={['h-5 w-5 items-center justify-center rounded-md border-2', r.selected ? 'border-coral-500 bg-coral-500' : 'border-neutral-300 bg-white'].join(' ')}>
+                        <View className={['h-5 w-5 items-center justify-center rounded-md border-2', r.selected ? 'border-green bg-green' : 'border-line bg-card'].join(' ')}>
                           {r.selected ? <Ionicons name="checkmark" size={12} color="white" /> : null}
                         </View>
                       </Pressable>
-                      <TextInput value={r.label} onChangeText={(v) => updateRangeLabel(r.id, v)} className="flex-1 text-sm text-neutral-800" maxLength={40} />
+                      <TextInput value={r.label} onChangeText={(v) => updateRangeLabel(r.id, v)} className="flex-1 text-sm text-ink" maxLength={40} />
                       {!isLast ? (
                         <View className="flex-row items-center gap-1">
-                          <Text className="text-xs text-neutral-400">Up to</Text>
+                          <Text className="text-xs text-muted">Up to</Text>
                           <BoundaryInput value={r.max!} onCommit={(n) => updateBoundary(i, n)} />
                         </View>
                       ) : null}
@@ -658,8 +658,8 @@ export default function EditPollScreen() {
                 })}
                 {budgetRanges.length < 6 ? (
                   <Pressable onPress={addBudgetTier} className="flex-row items-center gap-2 py-2" accessibilityRole="button">
-                    <Ionicons name="add-circle-outline" size={20} color="#D85A30" />
-                    <Text className="text-base text-coral-500">Add tier</Text>
+                    <Ionicons name="add-circle-outline" size={20} color="#0F3F2E" />
+                    <Text className="text-base text-green">Add tier</Text>
                   </Pressable>
                 ) : null}
               </View>
@@ -670,19 +670,19 @@ export default function EditPollScreen() {
           {poll.type === 'custom' && (
             <>
               <View className="gap-1">
-                <Text className="text-sm font-medium text-neutral-700">Question</Text>
+                <Text className="text-sm font-medium text-ink">Question</Text>
                 <TextInput
                   value={customTitle}
                   onChangeText={setCustomTitle}
                   placeholder="e.g. What activities do you want?"
-                  className="min-h-[48px] rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-base text-neutral-800"
+                  className="min-h-[48px] rounded-2xl border border-line bg-card px-4 py-3 text-base text-ink"
                   placeholderTextColor="#A8A8A8"
                 />
               </View>
               <Divider />
               <View className="gap-2">
-                <Text className="text-sm font-medium text-neutral-700">
-                  Options <Text className="font-normal text-neutral-400">({customOptions.length}/6)</Text>
+                <Text className="text-sm font-medium text-ink">
+                  Options <Text className="font-normal text-muted">({customOptions.length}/6)</Text>
                 </Text>
                 {customOptions.map((opt, i) => (
                   <View key={i} className="flex-row items-center gap-2">
@@ -691,7 +691,7 @@ export default function EditPollScreen() {
                       onChangeText={(v) => updateCustomOption(i, v)}
                       placeholder={`Option ${i + 1}${i < 2 ? ' *' : ''}`}
                       maxLength={60}
-                      className="flex-1 min-h-[48px] rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-base text-neutral-800"
+                      className="flex-1 min-h-[48px] rounded-2xl border border-line bg-card px-4 py-3 text-base text-ink"
                       placeholderTextColor="#A8A8A8"
                     />
                     {customOptions.length > 2 ? (
@@ -703,18 +703,18 @@ export default function EditPollScreen() {
                 ))}
                 {customOptions.length < 6 ? (
                   <Pressable onPress={addCustomOption} className="flex-row items-center gap-2 py-2" accessibilityRole="button">
-                    <Ionicons name="add-circle-outline" size={20} color="#D85A30" />
-                    <Text className="text-base text-coral-500">Add option</Text>
+                    <Ionicons name="add-circle-outline" size={20} color="#0F3F2E" />
+                    <Text className="text-base text-green">Add option</Text>
                   </Pressable>
                 ) : null}
               </View>
               <Divider />
               <View className="flex-row items-center justify-between">
                 <View className="flex-1 gap-0.5">
-                  <Text className="text-base font-medium text-neutral-800">Allow multiple choices</Text>
-                  <Text className="text-sm text-neutral-400">Group members can select more than one</Text>
+                  <Text className="text-base font-medium text-ink">Allow multiple choices</Text>
+                  <Text className="text-sm text-muted">Group members can select more than one</Text>
                 </View>
-                <Switch value={customAllowMulti} onValueChange={setCustomAllowMulti} trackColor={{ false: '#E8E8E8', true: '#D85A30' }} thumbColor="white" />
+                <Switch value={customAllowMulti} onValueChange={setCustomAllowMulti} trackColor={{ false: '#E8E8E8', true: '#0F3F2E' }} thumbColor="white" />
               </View>
             </>
           )}

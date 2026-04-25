@@ -63,19 +63,19 @@ export default function TripHubScreen() {
   }
 
   return (
-    <View className="flex-1 bg-neutral-50" style={{ paddingTop: insets.top }}>
+    <View className="flex-1 bg-cream" style={{ paddingTop: insets.top }}>
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
-      <View className="flex-row items-center justify-between border-b border-neutral-200 bg-neutral-50 px-6 pb-3 pt-4">
+      <View className="flex-row items-center justify-between border-b border-line bg-cream px-6 pb-3 pt-4">
         <Pressable onPress={() => router.back()} accessibilityRole="button">
           <Text className="text-base" style={{ color: accentColor }}>← Back</Text>
         </Pressable>
         <View className="flex-1 items-center px-4">
-          <Text className="text-base text-neutral-800" style={{ fontFamily: 'SpaceGrotesk_700Bold' }} numberOfLines={1}>
+          <Text className="text-base text-ink" style={{ fontFamily: 'SpaceGrotesk_700Bold' }} numberOfLines={1}>
             {trip?.name ?? ''}
           </Text>
           {trip?.start_date && trip?.end_date ? (
-            <Text className="text-xs text-neutral-400">
+            <Text className="text-xs text-muted">
               {formatDateRange(trip.start_date, trip.end_date)}
             </Text>
           ) : null}

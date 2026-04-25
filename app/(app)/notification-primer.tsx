@@ -65,7 +65,7 @@ export default function NotificationPrimerScreen() {
             width: 72,
             height: 72,
             borderRadius: 22,
-            backgroundColor: '#D85A30',
+            backgroundColor: '#0F3F2E',
             alignItems: 'center',
             justifyContent: 'center',
           }}
@@ -114,7 +114,7 @@ export default function NotificationPrimerScreen() {
                 marginTop: 1,
               }}
             >
-              <Ionicons name={b.icon} size={20} color="#D85A30" />
+              <Ionicons name={b.icon} size={20} color="#0F3F2E" />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 15, fontWeight: '600', color: '#FFFFFF', marginBottom: 2 }}>
@@ -133,7 +133,7 @@ export default function NotificationPrimerScreen() {
         <Pressable
           onPress={handleAllow}
           style={{
-            backgroundColor: '#D85A30',
+            backgroundColor: '#0F3F2E',
             borderRadius: 16,
             paddingVertical: 16,
             alignItems: 'center',

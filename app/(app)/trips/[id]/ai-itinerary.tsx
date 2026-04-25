@@ -53,7 +53,7 @@ const BLOCK_TYPE_COLORS: Record<string, string> = {
   activity:      '#2563EB',
   meal:          '#EA580C',
   travel:        '#9333EA',
-  accommodation: '#D85A30',
+  accommodation: '#0F3F2E',
   free_time:     '#16A34A',
 };
 
@@ -321,7 +321,7 @@ export default function AiItineraryScreen() {
       {/* Header */}
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} accessibilityRole="button" hitSlop={8}>
-          <Ionicons name="arrow-back" size={22} color="#1A1A1A" />
+          <Ionicons name="arrow-back" size={22} color="#163026" />
         </Pressable>
         <View style={{ flex: 1, marginHorizontal: 16 }}>
           <Text style={styles.headerTitle}>AI Itinerary Options</Text>
@@ -344,11 +344,11 @@ export default function AiItineraryScreen() {
       {/* Body */}
       {isLoading ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#D85A30" />
+          <ActivityIndicator size="large" color="#0F3F2E" />
         </View>
       ) : isGenerating ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#D85A30" />
+          <ActivityIndicator size="large" color="#0F3F2E" />
           <Text style={styles.generatingText}>{LOADING_MESSAGES[loadingMsgIdx]}</Text>
           <Text style={styles.generatingSubText}>This takes about 15–20 seconds</Text>
         </View>
@@ -477,7 +477,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: '#163026',
   },
   headerSub: {
     fontSize: 12,
@@ -494,7 +494,7 @@ const styles = StyleSheet.create({
   generatingText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1A1A1A',
+    color: '#163026',
     marginTop: 16,
     textAlign: 'center',
   },
@@ -567,7 +567,7 @@ const styles = StyleSheet.create({
   cardTheme: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1A1A1A',
+    color: '#163026',
     marginBottom: 6,
   },
   cardSummary: {
@@ -611,7 +611,7 @@ const styles = StyleSheet.create({
   blockTitle: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#1A1A1A',
+    color: '#163026',
   },
   blockMeta: {
     fontSize: 11,
@@ -674,7 +674,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: '#163026',
   },
   modalSubtitle: {
     fontSize: 13,
@@ -687,7 +687,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 14,
-    color: '#1A1A1A',
+    color: '#163026',
     minHeight: 80,
     textAlignVertical: 'top',
   },
