@@ -102,7 +102,19 @@ export default function TripRecapScreen() {
 
         {/* Hero */}
         <View className="items-center pt-12 pb-8">
-          <Text style={{ fontSize: 56, marginBottom: 16 }}>🎉</Text>
+          <View
+            style={{
+              width: 88,
+              height: 88,
+              borderRadius: 44,
+              backgroundColor: '#DFE8D2',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 16,
+            }}
+          >
+            <Ionicons name="trophy-outline" size={44} color="#0F3F2E" />
+          </View>
           <Text className="text-3xl font-bold text-ink text-center mb-2">
             What a trip!
           </Text>
