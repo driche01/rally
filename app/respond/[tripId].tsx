@@ -399,7 +399,7 @@ function DatesPollCard({
         isPerDayPoll ? (
           <View className="mt-3 flex-row items-center gap-1.5">
             <Ionicons name="checkmark-circle" size={14} color="#0F3F2E" />
-            <Text className="text-xs font-medium text-coral-600">
+            <Text className="text-xs font-medium text-ink">
               {selectedOptions.length} day{selectedOptions.length !== 1 ? 's' : ''} selected
             </Text>
           </View>
@@ -408,9 +408,9 @@ function DatesPollCard({
             {poll.poll_options
               .filter((o) => selectedOptions.includes(o.id))
               .map((o) => (
-                <View key={o.id} className="flex-row items-center gap-1 rounded-full bg-coral-50 px-3 py-1">
+                <View key={o.id} className="flex-row items-center gap-1 rounded-full bg-gold/40 px-3 py-1">
                   <Ionicons name="checkmark-circle" size={13} color="#0F3F2E" />
-                  <Text className="text-xs font-medium text-coral-600">{o.label}</Text>
+                  <Text className="text-xs font-medium text-ink">{o.label}</Text>
                 </View>
               ))}
           </View>
@@ -484,8 +484,8 @@ function PollResultsCard({
                   {opt.label}
                 </Text>
                 {isMyPick ? (
-                  <View className="ml-2 rounded-full bg-coral-100 px-2 py-0.5">
-                    <Text className="text-xs font-medium text-coral-600">Your pick</Text>
+                  <View className="ml-2 rounded-full bg-gold/40 px-2 py-0.5">
+                    <Text className="text-xs font-medium text-ink">Your pick</Text>
                   </View>
                 ) : null}
                 <Text className="ml-2 text-xs text-muted">
@@ -1364,8 +1364,8 @@ export default function RespondScreen() {
           <View className="mt-8 gap-4">
             {/* Returning user banner */}
             {existingRespondent && hasExistingResponses ? (
-              <View className="flex-row items-center justify-between rounded-2xl bg-coral-50 px-4 py-3">
-                <Text className="text-sm text-coral-700">
+              <View className="flex-row items-center justify-between rounded-2xl bg-gold/40 px-4 py-3">
+                <Text className="text-sm text-ink">
                   Updating your previous responses
                 </Text>
                 <Pressable

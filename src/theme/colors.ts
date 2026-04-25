@@ -20,10 +20,16 @@
  *  - Green is primary (CTAs, anchors, headlines).
  *  - Cream is the signature background — never pure white.
  *  - Ink is primary text — never pure black.
- *  - Coral is a SPARINGLY-USED accent. Do not use as a primary CTA.
- *  - Gold is for premium/highlight signals.
+ *  - Gold is the one allowed warm accent — premium/highlight signals.
+ *  - Destructive actions use a warm-rust (#9A3F23) defined in
+ *    `src/components/ui/Button.tsx` — NOT pure red, NOT coral.
+ *  - NO CORAL anywhere. The legacy `coral` palette below is kept ONLY
+ *    so existing class references compile during migration; do not use
+ *    `bg-coral-*` / `text-coral-*` in new code, and migrate any you
+ *    encounter. Use green/green-soft for action accents, gold for
+ *    highlight, warm-rust (via Button destructive variant) for delete.
  *  - No blue. No cool tones.
- *  - Approximate ratio: 70% cream / 20% green / 10% accents.
+ *  - Approximate ratio: 70% cream / 25% green / 5% gold accents.
  *
  * Tailwind/NativeWind utilities for these are defined in tailwind.config.js.
  */
@@ -55,9 +61,11 @@ export const colors = {
   // ─── Accents (controlled use) ─────────────────────────────────────────────
   gold:     '#F3C96A',   // premium signal, badges, subtle emphasis
   /**
-   * Coral — SPARINGLY-USED accent only. Demoted from prior primary status.
-   * Acceptable: small highlights, notification dots, occasional CTA hovers.
-   * Forbidden: primary CTAs, page-level accents, large filled surfaces.
+   * Coral — RETIRED (2026-04-25). Kept here so legacy `bg-coral-*` /
+   * `text-coral-*` class references continue to compile while remaining
+   * usages are migrated. Do not introduce new references. Replace with
+   * green/green-soft (action accents), gold (highlight), or the
+   * warm-rust destructive variant in Button.tsx (delete).
    */
   coral: {
     50:  '#FEF3EE',

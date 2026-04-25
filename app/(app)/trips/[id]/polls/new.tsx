@@ -520,7 +520,7 @@ export default function NewPollScreen() {
             <View className="items-center py-16 gap-5">
               <View className="items-center justify-center" style={{ width: 120, height: 120 }}>
                 <View className="absolute rounded-full bg-green-soft" style={{ width: 120, height: 120, opacity: 0.5 }} />
-                <View className="absolute rounded-full bg-coral-200" style={{ width: 88, height: 88, opacity: 0.6 }} />
+                <View className="absolute rounded-full bg-gold/40" style={{ width: 88, height: 88, opacity: 0.6 }} />
                 <View className="items-center justify-center rounded-full bg-green" style={{ width: 64, height: 64 }}>
                   <Ionicons name="airplane" size={30} color="white" />
                 </View>

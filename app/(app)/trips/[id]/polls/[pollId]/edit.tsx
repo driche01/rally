@@ -634,7 +634,7 @@ export default function EditPollScreen() {
                   return (
                     <View
                       key={r.id}
-                      className={['flex-row items-center gap-2 rounded-xl border px-3 py-3', r.selected ? 'border-coral-300 bg-green-soft' : 'border-line bg-card'].join(' ')}
+                      className={['flex-row items-center gap-2 rounded-xl border px-3 py-3', r.selected ? 'border-green bg-green-soft' : 'border-line bg-card'].join(' ')}
                     >
                       <Pressable onPress={() => toggleBudgetRange(r.id)} accessibilityRole="checkbox" accessibilityState={{ checked: r.selected }}>
                         <View className={['h-5 w-5 items-center justify-center rounded-md border-2', r.selected ? 'border-green bg-green' : 'border-line bg-card'].join(' ')}>
