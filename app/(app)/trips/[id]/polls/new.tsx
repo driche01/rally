@@ -40,8 +40,8 @@ const tabStyles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
   },
-  inactive: { borderColor: '#E5E5E5', backgroundColor: '#FFFFFF' },
-  taken:    { borderColor: '#E5E5E5', backgroundColor: '#F5F5F5' },
+  inactive: { borderColor: '#E7DDCF', backgroundColor: '#FFFFFF' },
+  taken:    { borderColor: '#E7DDCF', backgroundColor: '#F5F5F5' },
   textActive:   { fontSize: 14, fontWeight: '500', color: '#FFFFFF' },
   textInactive: { fontSize: 14, fontWeight: '500', color: '#525252' },
   textTaken:    { fontSize: 14, fontWeight: '500', color: '#A3A3A3' },
@@ -537,8 +537,8 @@ export default function NewPollScreen() {
             <View className="items-center py-16 gap-5">
               <View className="items-center justify-center" style={{ width: 120, height: 120 }}>
                 <View className="absolute rounded-full bg-cream-warm" style={{ width: 120, height: 120, opacity: 0.6 }} />
-                <View className="absolute rounded-full bg-neutral-200" style={{ width: 88, height: 88, opacity: 0.7 }} />
-                <View className="items-center justify-center rounded-full bg-neutral-400" style={{ width: 64, height: 64 }}>
+                <View className="absolute rounded-full bg-line" style={{ width: 88, height: 88, opacity: 0.7 }} />
+                <View className="items-center justify-center rounded-full bg-muted" style={{ width: 64, height: 64 }}>
                   <Ionicons name="document-text" size={28} color="white" />
                 </View>
               </View>
