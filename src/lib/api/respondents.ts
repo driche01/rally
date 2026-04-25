@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import { supabase } from '../supabase';
+import { normalizePhone } from '../phone';
 import type { PollResponse, Respondent } from '../../types/database';
 
 // ─── Global session token (legacy / backward compat) ──────────────────────────
@@ -106,10 +107,16 @@ export async function getOrCreateRespondent(
   phone?: string | null,
 ): Promise<Respondent> {
   const trimmedEmail = email?.trim() || null;
+  // Normalize phone to E.164 so dedup across SMS/survey/app keys on the same
+  // canonical string. Falls back to trimmed raw if un-normalizable — the value
+  // still persists and the phone-level validation on the caller rejects the
+  // malformed case before we get here.
   const trimmedPhone = phone?.trim() || null;
+  const normalizedPhone = trimmedPhone ? normalizePhone(trimmedPhone) : null;
+  const storedPhone = normalizedPhone ?? trimmedPhone;
   const contactPatch = {
     ...(trimmedEmail != null ? { email: trimmedEmail } : {}),
-    ...(trimmedPhone != null ? { phone: trimmedPhone } : {}),
+    ...(storedPhone != null ? { phone: storedPhone } : {}),
   };
 
   // Helper: update a matched row with the latest details and adopt its token
@@ -138,11 +145,14 @@ export async function getOrCreateRespondent(
     // Token present but row gone — fall through
   }
 
-  // 2. Contact-based deduplication — same person, different device/browser
-  if (trimmedEmail || trimmedPhone) {
+  // 2. Contact-based deduplication — same person, different device/browser.
+  // Match on the normalized phone so legacy rows stored in different formats
+  // still coalesce (legacy raw-format rows will miss; that's acceptable —
+  // once they update via `adoptExisting` we persist the normalized value).
+  if (trimmedEmail || storedPhone) {
     const orParts: string[] = [];
     if (trimmedEmail) orParts.push(`email.eq.${trimmedEmail}`);
-    if (trimmedPhone) orParts.push(`phone.eq.${trimmedPhone}`);
+    if (storedPhone) orParts.push(`phone.eq.${storedPhone}`);
 
     const { data: contactMatch } = await supabase
       .from('respondents')
@@ -187,7 +197,7 @@ export async function getOrCreateRespondent(
     name,
     session_token: newToken,
     email: trimmedEmail ?? null,
-    phone: trimmedPhone ?? null,
+    phone: storedPhone ?? null,
     is_planner: false,
     rsvp: null,
     preferences: null,
