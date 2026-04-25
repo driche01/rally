@@ -1749,20 +1749,16 @@ export default function RespondScreen() {
               Answer the last question to continue
             </Text>
           ) : null}
-          <Pressable
+          <Button
+            variant="primary"
+            size="lg"
             onPress={handlePreferencesSubmit}
+            loading={submitting}
             disabled={!canSubmit || submitting}
-            style={{
-              backgroundColor: canSubmit ? '#235C38' : '#D4D4D4',
-              borderRadius: 999,
-              paddingVertical: 16,
-              alignItems: 'center',
-            }}
+            fullWidth
           >
-            <Text style={{ fontSize: 16, fontWeight: '700', color: '#fff' }}>
-              {submitting ? 'Sending…' : 'Submit'}
-            </Text>
-          </Pressable>
+            Submit
+          </Button>
         </ScrollView>
       </WebPageShell>
     );

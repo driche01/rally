@@ -44,6 +44,7 @@ import type {
   ParticipantBalance,
   Respondent,
 } from '@/types/database';
+import { Button } from '@/components/ui';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -532,23 +533,22 @@ function AddExpenseSheet({
 
               {/* Save */}
               <View style={{ flexDirection: 'row', gap: 10 }}>
-                <Pressable
-                  onPress={onClose}
-                  style={{ flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#D9CCB6', alignItems: 'center' }}
-                >
-                  <Text style={{ fontSize: 15, fontWeight: '600', color: '#5F685F' }}>Cancel</Text>
-                </Pressable>
-                <Pressable
-                  onPress={handleSave}
-                  disabled={!canSave || saving}
-                  style={{ flex: 2, paddingVertical: 14, borderRadius: 14, backgroundColor: canSave ? '#0F3F2E' : '#A0C0B2', alignItems: 'center', justifyContent: 'center' }}
-                >
-                  {saving ? (
-                    <ActivityIndicator size="small" color="white" />
-                  ) : (
-                    <Text style={{ fontSize: 15, fontWeight: '600', color: '#FFFCF6' }}>Save expense</Text>
-                  )}
-                </Pressable>
+                <View style={{ flex: 1 }}>
+                  <Button variant="secondary" onPress={onClose} fullWidth>
+                    Cancel
+                  </Button>
+                </View>
+                <View style={{ flex: 2 }}>
+                  <Button
+                    variant="primary"
+                    onPress={handleSave}
+                    loading={saving}
+                    disabled={!canSave || saving}
+                    fullWidth
+                  >
+                    Save expense
+                  </Button>
+                </View>
               </View>
             </Pressable>
           </ScrollView>

@@ -10,7 +10,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import {
-  ActivityIndicator,
   Animated,
   Pressable,
   ScrollView,
@@ -24,6 +23,7 @@ import { useItineraryBlocks } from '@/hooks/useItinerary';
 import { useExpenses } from '@/hooks/useExpenses';
 import { usePolls } from '@/hooks/usePolls';
 import { capture } from '@/lib/analytics';
+import { Button } from '@/components/ui';
 
 export default function TripRecapScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -157,26 +157,23 @@ export default function TripRecapScreen() {
             Your crew size is pre-filled.{'\n'}Just pick a destination and let's go again.
           </Text>
 
-          <Pressable
+          <Button
+            variant="primary"
+            size="lg"
             onPress={handleStartNextTrip}
+            loading={createTrip.isPending}
             disabled={createTrip.isPending || !trip}
-            className="items-center justify-center rounded-2xl bg-green py-4"
+            fullWidth
             style={{
-              opacity: createTrip.isPending || !trip ? 0.7 : 1,
               shadowColor: '#0F3F2E',
               shadowOffset: { width: 0, height: 4 },
               shadowOpacity: 0.3,
               shadowRadius: 8,
               elevation: 6,
             }}
-            accessibilityRole="button"
           >
-            {createTrip.isPending ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text className="text-base font-bold text-white">Plan another rally →</Text>
-            )}
-          </Pressable>
+            Plan another rally →
+          </Button>
 
           <Pressable
             onPress={() => router.replace('/(app)/(tabs)')}
