@@ -12,7 +12,7 @@
  * cards (green-soft) — swap with real assets when available.
  */
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
   Platform,
@@ -22,6 +22,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import { EmailCapture } from './EmailCapture';
 
 const HEADLINE_FONT = Platform.OS === 'android' ? 'serif' : 'Georgia';
 
@@ -53,35 +54,81 @@ const SHADOW = {
 interface LandingPageProps {
   /** True when the visitor is already authenticated — swap CTA to "Open Rally". */
   isSignedIn?: boolean;
+  /**
+   * When the visitor arrived via /t/<tripId> (a trip-specific install link),
+   * pass the tripId here. The hero copy adapts ("See your trip in Rally")
+   * and email signups attribute to the trip via beta_signups.trip_id.
+   */
+  tripId?: string;
+  /**
+   * Override the attribution tag stored in beta_signups.source.
+   * Defaults: 'landing_page' for /, 'trip_link' when tripId is set.
+   */
+  source?: string;
 }
 
-export default function LandingPage({ isSignedIn = false }: LandingPageProps) {
+export default function LandingPage({ isSignedIn = false, tripId, source }: LandingPageProps) {
   const router = useRouter();
   const { width } = useWindowDimensions();
+  // Allow attribution + trip context to be passed as URL query params too —
+  // covers the /download → / redirect (preserves ?source=...&trip=...).
+  const params = useLocalSearchParams<{ source?: string; trip?: string }>();
+  const effectiveTripId = tripId ?? (typeof params.trip === 'string' ? params.trip : undefined);
   const isMobile = width < 900;
   const isTiny = width < 620;
+  const isTripContext = !!effectiveTripId;
+  const attribution =
+    source ??
+    (typeof params.source === 'string' ? params.source : undefined) ??
+    (isTripContext ? 'trip_link' : 'landing_page');
 
-  const goEarlyAccess = () =>
-    router.push(
-      { pathname: '/download', params: { source: 'landing_page' } } as unknown as Parameters<typeof router.push>[0],
-    );
   const goApp = () => router.push('/(app)/(tabs)' as Parameters<typeof router.push>[0]);
+  const tryOpenInApp = () => {
+    if (Platform.OS === 'web' && effectiveTripId) {
+      // Try the deep link. If app is installed it opens; otherwise the
+      // user stays on this page with the inline email form.
+      window.location.href = `rally://trip/${effectiveTripId}`;
+    } else if (isSignedIn) {
+      goApp();
+    }
+  };
 
-  const primaryCta = isSignedIn ? goApp : goEarlyAccess;
-  const primaryCtaLabel = isSignedIn ? 'Open Rally' : 'Get early access';
+  // Nav CTA: signed-in → "Open Rally" routes into the app; signed-out → smooth
+  // scroll to the inline email form. (The email form is the conversion event;
+  // no separate page to navigate to.)
+  const navCta = isSignedIn
+    ? { label: 'Open Rally', onPress: goApp }
+    : isTripContext
+    ? { label: 'Open in Rally', onPress: tryOpenInApp }
+    : { label: 'Get early access', onPress: scrollToHeroEmailForm };
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: C.cream }}>
-      <Nav onPrimaryPress={primaryCta} primaryLabel={primaryCtaLabel} isMobile={isMobile} />
-      <Hero onCta={primaryCta} ctaLabel={primaryCtaLabel} isMobile={isMobile} isTiny={isTiny} />
+      <Nav onPrimaryPress={navCta.onPress} primaryLabel={navCta.label} isMobile={isMobile} />
+      <Hero
+        isMobile={isMobile}
+        isTiny={isTiny}
+        tripId={effectiveTripId}
+        source={attribution}
+      />
       <Divider />
       <HowItWorks isMobile={isMobile} />
       <SplitSection isMobile={isMobile} />
       <MoneySection isMobile={isMobile} />
       <Testimonials isMobile={isMobile} />
-      <FinalCTA onCta={primaryCta} ctaLabel={primaryCtaLabel} />
+      <FinalCTA tripId={effectiveTripId} source={attribution} />
     </ScrollView>
   );
+}
+
+function scrollToHeroEmailForm() {
+  if (Platform.OS !== 'web') return;
+  // The hero email field is the first input on the page.
+  const el = document.querySelector('input[type=email]');
+  if (el && 'scrollIntoView' in el) {
+    (el as HTMLInputElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => (el as HTMLInputElement).focus(), 350);
+  }
 }
 
 // ─── Container helper ────────────────────────────────────────────────────────
@@ -197,17 +244,28 @@ function PillButton({
 // ─── Hero ────────────────────────────────────────────────────────────────────
 
 function Hero({
-  onCta,
-  ctaLabel,
   isMobile,
   isTiny,
+  tripId,
+  source,
 }: {
-  onCta: () => void;
-  ctaLabel: string;
   isMobile: boolean;
   isTiny: boolean;
+  tripId?: string;
+  source: string;
 }) {
   const heroH1Size = isTiny ? 48 : Math.min(76, Math.max(48, 60));
+  const isTripContext = !!tripId;
+
+  // Trip-context hero: foregrounds "your trip is in Rally" with a smaller pitch
+  // recap below. Cold hero: standard pitch.
+  const headline = isTripContext
+    ? 'Your trip is in Rally.'
+    : 'Plan the trip. Skip the chaos.';
+  const subhead = isTripContext
+    ? 'Drop your email and we\'ll get you in as soon as Rally opens up — your group\'s trip will be waiting.'
+    : 'Rally handles the details so you don\'t have to.';
+
   return (
     <Container style={{ paddingTop: 18, paddingBottom: 64 }}>
       <View
@@ -217,7 +275,7 @@ function Hero({
           alignItems: 'center',
         }}
       >
-        {/* Left column: copy */}
+        {/* Left column: copy + email capture */}
         <View style={{ flex: isMobile ? undefined : 0.82, width: isMobile ? '100%' : undefined }}>
           <Text
             style={{
@@ -230,7 +288,7 @@ function Hero({
               maxWidth: 520,
             }}
           >
-            Plan the trip. Skip the chaos.
+            {headline}
           </Text>
           <Text
             style={{
@@ -241,7 +299,7 @@ function Hero({
               maxWidth: 440,
             }}
           >
-            Rally handles the details so you don't have to.
+            {subhead}
           </Text>
 
           {/* Check list */}
@@ -272,11 +330,16 @@ function Hero({
             ))}
           </View>
 
-          <View style={{ marginTop: 34, alignItems: 'flex-start' }}>
-            <PillButton onPress={onCta} label={ctaLabel} />
-            <Text style={{ marginTop: 14, color: C.muted, fontSize: 14 }}>
-              Be the first to plan with Rally
-            </Text>
+          {/* Inline email capture — replaces the prior "Get early access" CTA */}
+          <View style={{ marginTop: 30 }}>
+            <EmailCapture
+              source={source}
+              tripId={tripId}
+              variant="inline"
+              caption={isTripContext
+                ? 'We\'ll keep your trip linked to your account when you sign up.'
+                : 'Be the first to plan with Rally'}
+            />
           </View>
         </View>
 
@@ -1014,7 +1077,7 @@ function Testimonials({ isMobile }: { isMobile: boolean }) {
 
 // ─── Final CTA ───────────────────────────────────────────────────────────────
 
-function FinalCTA({ onCta, ctaLabel }: { onCta: () => void; ctaLabel: string }) {
+function FinalCTA({ tripId, source }: { tripId?: string; source: string }) {
   return (
     <Container style={{ paddingTop: 36, paddingBottom: 64, alignItems: 'center' }}>
       <Text
@@ -1030,12 +1093,10 @@ function FinalCTA({ onCta, ctaLabel }: { onCta: () => void; ctaLabel: string }) 
       >
         Your best trip starts with Rally
       </Text>
-      <Text style={{ marginTop: 10, marginBottom: 24, color: C.muted, fontSize: 18, textAlign: 'center' }}>
+      <Text style={{ marginTop: 10, marginBottom: 28, color: C.muted, fontSize: 18, textAlign: 'center' }}>
         Less stress. More memories.
       </Text>
-      <View style={{ alignSelf: 'center' }}>
-        <PillButton onPress={onCta} label={ctaLabel} size="lg" />
-      </View>
+      <EmailCapture source={source} tripId={tripId} variant="inline" />
     </Container>
   );
 }
