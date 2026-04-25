@@ -510,11 +510,11 @@ export default function MembersScreen() {
         <View style={{ flex: 1, backgroundColor: '#F5F4F0' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#EEE', backgroundColor: 'white' }}>
             <Pressable onPress={() => setAddModalVisible(false)}>
-              <Text style={{ fontSize: 16, color: '#D85A30' }}>Cancel</Text>
+              <Text style={{ fontSize: 16, color: '#0F3F2E' }}>Cancel</Text>
             </Pressable>
-            <Text style={{ fontSize: 17, fontWeight: '600', color: '#1A1A1A' }}>Add member</Text>
+            <Text style={{ fontSize: 17, fontWeight: '600', color: '#163026' }}>Add member</Text>
             <Pressable onPress={handleAddMember} disabled={createMember.isPending}>
-              <Text style={{ fontSize: 16, fontWeight: '600', color: createMember.isPending ? '#CCC' : '#D85A30' }}>
+              <Text style={{ fontSize: 16, fontWeight: '600', color: createMember.isPending ? '#CCC' : '#0F3F2E' }}>
                 {createMember.isPending ? 'Adding…' : 'Add'}
               </Text>
             </Pressable>
@@ -528,7 +528,7 @@ export default function MembersScreen() {
                   onChangeText={setAddFirstName}
                   placeholder="First"
                   placeholderTextColor="#A3A3A3"
-                  style={{ backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#E5E5E5', paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1A1A1A' }}
+                  style={{ backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#E5E5E5', paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026' }}
                   autoCapitalize="words"
                   autoFocus
                 />
@@ -540,7 +540,7 @@ export default function MembersScreen() {
                   onChangeText={setAddLastName}
                   placeholder="Last"
                   placeholderTextColor="#A3A3A3"
-                  style={{ backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#E5E5E5', paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1A1A1A' }}
+                  style={{ backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#E5E5E5', paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026' }}
                   autoCapitalize="words"
                 />
               </View>
@@ -552,7 +552,7 @@ export default function MembersScreen() {
                 onChangeText={setAddEmail}
                 placeholder="email@example.com"
                 placeholderTextColor="#A3A3A3"
-                style={{ backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#E5E5E5', paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1A1A1A' }}
+                style={{ backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#E5E5E5', paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026' }}
                 keyboardType="email-address"
                 autoCapitalize="none"
               />
@@ -564,7 +564,7 @@ export default function MembersScreen() {
                 onChangeText={setAddPhone}
                 placeholder="+1 555 000 0000"
                 placeholderTextColor="#A3A3A3"
-                style={{ backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#E5E5E5', paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1A1A1A' }}
+                style={{ backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#E5E5E5', paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026' }}
                 keyboardType="phone-pad"
               />
             </View>
@@ -585,7 +585,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   backBtn: { fontSize: 15, width: 60 },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: '#1A1A1A' },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: '#163026' },
   scroll: { paddingHorizontal: 16, paddingTop: 8 },
 
   // Progress card
@@ -599,7 +599,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   progressRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  progressTitle: { fontSize: 15, fontWeight: '700', color: '#1A1A1A' },
+  progressTitle: { fontSize: 15, fontWeight: '700', color: '#163026' },
   progressPct: { fontSize: 13, color: '#888' },
   progressTrack: { height: 6, borderRadius: 3, backgroundColor: '#EBEBEB', overflow: 'hidden' },
   progressFill: { height: '100%', borderRadius: 3 },
@@ -674,17 +674,17 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#E0EEFA',
+    backgroundColor: '#DFE8D2',
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarPlanner: {
     backgroundColor: '#FFF3CD',
   },
-  avatarText: { fontSize: 15, fontWeight: '700', color: '#3B6FA0' },
-  avatarTextPlanner: { color: '#92640A' },
+  avatarText: { fontSize: 15, fontWeight: '700', color: '#0F3F2E' },
+  avatarTextPlanner: { color: '#7C5A0A' },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
-  name: { fontSize: 14, fontWeight: '600', color: '#1A1A1A' },
+  name: { fontSize: 14, fontWeight: '600', color: '#163026' },
 
   // Planner badge
   plannerBadge: {
@@ -726,6 +726,6 @@ const styles = StyleSheet.create({
   // Empty state
   emptyState: { alignItems: 'center', paddingTop: 60, gap: 8 },
   emptyIcon: { fontSize: 40 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#1A1A1A' },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#163026' },
   emptySubtitle: { fontSize: 14, color: '#888', textAlign: 'center', lineHeight: 20, paddingHorizontal: 24 },
 });

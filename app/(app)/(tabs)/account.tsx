@@ -37,11 +37,11 @@ export default function AccountScreen() {
   const version = Constants.expoConfig?.version ?? '1.0.0';
 
   return (
-    <View className="flex-1 bg-neutral-50" style={{ paddingTop: insets.top }}>
+    <View className="flex-1 bg-cream" style={{ paddingTop: insets.top }}>
 
       {/* Header */}
-      <View className="border-b border-neutral-200 bg-white px-6 pb-4 pt-4">
-        <Text className="text-2xl font-bold text-neutral-800">Account</Text>
+      <View className="border-b border-line bg-card px-6 pb-4 pt-4">
+        <Text className="text-2xl font-bold text-ink">Account</Text>
       </View>
 
       <ScrollView
@@ -52,9 +52,9 @@ export default function AccountScreen() {
         {/* Avatar + info */}
         <View className="items-center py-10 gap-3">
           <View
-            className="h-20 w-20 items-center justify-center rounded-full bg-coral-500"
+            className="h-20 w-20 items-center justify-center rounded-full bg-green"
             style={{
-              shadowColor: '#D85A30',
+              shadowColor: '#0F3F2E',
               shadowOffset: { width: 0, height: 4 },
               shadowOpacity: 0.25,
               shadowRadius: 10,
@@ -64,16 +64,16 @@ export default function AccountScreen() {
             <Text className="text-2xl font-bold text-white">{initials}</Text>
           </View>
           {name ? (
-            <Text className="text-xl font-semibold text-neutral-800">{name}</Text>
+            <Text className="text-xl font-semibold text-ink">{name}</Text>
           ) : null}
           {email ? (
-            <Text className="text-sm text-neutral-500">{email}</Text>
+            <Text className="text-sm text-muted">{email}</Text>
           ) : null}
         </View>
 
         {/* Actions card */}
         <View
-          className="mx-6 overflow-hidden rounded-2xl bg-white"
+          className="mx-6 overflow-hidden rounded-2xl bg-card"
           style={{
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 2 },
@@ -95,7 +95,7 @@ export default function AccountScreen() {
         </View>
 
         {/* App version */}
-        <Text className="mt-8 text-center text-xs text-neutral-400">
+        <Text className="mt-8 text-center text-xs text-muted">
           Rally v{version}
         </Text>
 

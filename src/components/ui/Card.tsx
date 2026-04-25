@@ -13,7 +13,7 @@ export function Card({ children, className, ...props }: CardProps & { className?
   return (
     <View
       className={[
-        'rounded-2xl bg-white p-4',
+        'rounded-2xl bg-card p-4',
         'shadow-sm',
         className ?? '',
       ]
@@ -42,7 +42,7 @@ export function PressableCard({
   return (
     <Pressable
       className={[
-        'rounded-2xl bg-white p-4 active:bg-neutral-50',
+        'rounded-2xl bg-card p-4 active:bg-cream',
         className ?? '',
       ]
         .filter(Boolean)

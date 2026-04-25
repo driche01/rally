@@ -445,7 +445,7 @@ export default function NewPollScreen() {
 
   return (
     <KeyboardAvoidingView
-      className="flex-1 bg-neutral-50"
+      className="flex-1 bg-cream"
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       {/* Header */}
@@ -456,7 +456,7 @@ export default function NewPollScreen() {
         <TouchableOpacity onPress={() => router.back()} accessibilityRole="button">
           <Text className="text-base" style={{ color: accentColor }}>{allTaken ? 'Back' : 'Cancel'}</Text>
         </TouchableOpacity>
-        <Text className="text-lg font-semibold text-neutral-800">Add poll</Text>
+        <Text className="text-lg font-semibold text-ink">Add poll</Text>
         <View style={{ width: 60 }} />
       </View>
 
@@ -516,16 +516,16 @@ export default function NewPollScreen() {
           {allTaken && allLiveOrDecided && (
             <View className="items-center py-16 gap-5">
               <View className="items-center justify-center" style={{ width: 120, height: 120 }}>
-                <View className="absolute rounded-full bg-coral-100" style={{ width: 120, height: 120, opacity: 0.5 }} />
+                <View className="absolute rounded-full bg-green-soft" style={{ width: 120, height: 120, opacity: 0.5 }} />
                 <View className="absolute rounded-full bg-coral-200" style={{ width: 88, height: 88, opacity: 0.6 }} />
-                <View className="items-center justify-center rounded-full bg-coral-500" style={{ width: 64, height: 64 }}>
+                <View className="items-center justify-center rounded-full bg-green" style={{ width: 64, height: 64 }}>
                   <Ionicons name="airplane" size={30} color="white" />
                 </View>
               </View>
               <View className="items-center gap-2">
-                <Text className="text-2xl font-bold text-neutral-800">Almost rallied!</Text>
-                <Text className="text-sm font-semibold text-coral-500">All polls are live or decided</Text>
-                <Text className="text-sm text-center text-neutral-400 px-6" style={{ lineHeight: 20 }}>
+                <Text className="text-2xl font-bold text-ink">Almost rallied!</Text>
+                <Text className="text-sm font-semibold text-green">All polls are live or decided</Text>
+                <Text className="text-sm text-center text-muted px-6" style={{ lineHeight: 20 }}>
                   Your group is voting — once results are in, lock in the trip!
                 </Text>
               </View>
@@ -536,16 +536,16 @@ export default function NewPollScreen() {
           {allTaken && !allLiveOrDecided && (
             <View className="items-center py-16 gap-5">
               <View className="items-center justify-center" style={{ width: 120, height: 120 }}>
-                <View className="absolute rounded-full bg-neutral-100" style={{ width: 120, height: 120, opacity: 0.6 }} />
+                <View className="absolute rounded-full bg-cream-warm" style={{ width: 120, height: 120, opacity: 0.6 }} />
                 <View className="absolute rounded-full bg-neutral-200" style={{ width: 88, height: 88, opacity: 0.7 }} />
                 <View className="items-center justify-center rounded-full bg-neutral-400" style={{ width: 64, height: 64 }}>
                   <Ionicons name="document-text" size={28} color="white" />
                 </View>
               </View>
               <View className="items-center gap-2">
-                <Text className="text-2xl font-bold text-neutral-800">All polls drafted</Text>
-                <Text className="text-sm font-semibold text-neutral-500">Ready to go live</Text>
-                <Text className="text-sm text-center text-neutral-400 px-6" style={{ lineHeight: 20 }}>
+                <Text className="text-2xl font-bold text-ink">All polls drafted</Text>
+                <Text className="text-sm font-semibold text-muted">Ready to go live</Text>
+                <Text className="text-sm text-center text-muted px-6" style={{ lineHeight: 20 }}>
                   Head back and go live to start getting your group's votes.
                 </Text>
               </View>
@@ -556,10 +556,10 @@ export default function NewPollScreen() {
           {!allTaken && activeTab !== 'custom' && takenTypes.has(activeTab) && (
             <View className="items-center py-16 gap-3">
               <Ionicons name="checkmark-circle" size={48} color="#D1D5DB" />
-              <Text className="text-base font-semibold text-neutral-500">
+              <Text className="text-base font-semibold text-muted">
                 {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} poll already added
               </Text>
-              <Text className="text-sm text-center text-neutral-400 px-4">
+              <Text className="text-sm text-center text-muted px-4">
                 Edit or replace it from the polls screen.
               </Text>
             </View>
@@ -667,28 +667,28 @@ export default function NewPollScreen() {
           className="flex-1 items-center justify-center"
           style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}
         >
-          <View className="mx-6 rounded-2xl bg-white p-6">
-            <Text className="mb-2 text-lg font-bold text-neutral-800">
+          <View className="mx-6 rounded-2xl bg-card p-6">
+            <Text className="mb-2 text-lg font-bold text-ink">
               Not quite done, mate
             </Text>
-            <Text className="mb-4 text-sm text-neutral-500">
+            <Text className="mb-4 text-sm text-muted">
               These sections still need filling in:
             </Text>
             {incompleteSections.map((s) => (
               <View key={s} className="mb-1.5 flex-row items-center gap-2">
-                <Ionicons name="alert-circle-outline" size={16} color="#D85A30" />
-                <Text className="text-base text-neutral-700">{s}</Text>
+                <Ionicons name="alert-circle-outline" size={16} color="#0F3F2E" />
+                <Text className="text-base text-ink">{s}</Text>
               </View>
             ))}
-            <Text className="mt-4 text-sm text-neutral-400">
+            <Text className="mt-4 text-sm text-muted">
               Only the completed ones will go live. Send it anyway?
             </Text>
             <View className="mt-5 flex-row gap-3">
               <Pressable
                 onPress={() => setShowIncompleteModal(false)}
-                className="flex-1 items-center rounded-xl border border-neutral-200 bg-white py-3"
+                className="flex-1 items-center rounded-xl border border-line bg-card py-3"
               >
-                <Text className="text-base font-medium text-neutral-700">Go back</Text>
+                <Text className="text-base font-medium text-ink">Go back</Text>
               </Pressable>
               <Pressable
                 onPress={() => { setShowIncompleteModal(false); doSave('live'); }}

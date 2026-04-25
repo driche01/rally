@@ -9,11 +9,11 @@ interface BadgeProps {
 }
 
 const variantClasses: Record<BadgeVariant, { container: string; text: string }> = {
-  default: { container: 'bg-neutral-100', text: 'text-neutral-700' },
+  default: { container: 'bg-cream-warm', text: 'text-ink' },
   success: { container: 'bg-teal-50', text: 'text-teal-700' },
   warning: { container: 'bg-amber-50', text: 'text-amber-700' },
-  coral: { container: 'bg-coral-50', text: 'text-coral-700' },
-  muted: { container: 'bg-neutral-50', text: 'text-neutral-400' },
+  coral: { container: 'bg-green-soft', text: 'text-green-dark' },
+  muted: { container: 'bg-cream', text: 'text-muted' },
 };
 
 export function Badge({ children, variant = 'default' }: BadgeProps) {

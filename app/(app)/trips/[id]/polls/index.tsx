@@ -65,18 +65,18 @@ function PollResultBar({
         <Text
           className={[
             'flex-1 text-sm',
-            isLeading || isDecided ? 'font-semibold text-neutral-800' : 'text-neutral-600',
+            isLeading || isDecided ? 'font-semibold text-ink' : 'text-muted',
           ].join(' ')}
           numberOfLines={1}
         >
           {label}
           {isDecided ? '  ✓' : ''}
         </Text>
-        <Text className="ml-2 text-sm text-neutral-400">
+        <Text className="ml-2 text-sm text-muted">
           {votes} vote{votes !== 1 ? 's' : ''}
         </Text>
       </View>
-      <View className="h-2 overflow-hidden rounded-full bg-neutral-100">
+      <View className="h-2 overflow-hidden rounded-full bg-cream-warm">
         <View
           className="h-full rounded-full bg-neutral-300"
           style={{ width: `${pct}%`, ...(isLeading || isDecided ? { backgroundColor: barColor } : {}) }}
@@ -219,7 +219,7 @@ const PollCard = memo(function PollCard({
     <Card className="mb-3">
       <View className="flex-row items-start justify-between gap-2">
         <View className="flex-1 gap-1.5">
-          <Text className="text-base font-semibold text-neutral-800">{poll.title}</Text>
+          <Text className="text-base font-semibold text-ink">{poll.title}</Text>
           <Badge variant={statusBadge[poll.status] ?? 'default'}>
             {statusLabel}
           </Badge>
@@ -229,10 +229,10 @@ const PollCard = memo(function PollCard({
             {isEditable && (
               <Pressable
                 onPress={() => router.push(`/(app)/trips/${tripId}/polls/${poll.id}/edit`)}
-                className="rounded-xl border border-neutral-200 bg-white px-3 py-1.5"
+                className="rounded-xl border border-line bg-card px-3 py-1.5"
                 accessibilityRole="button"
               >
-                <Text className="text-xs font-medium text-neutral-600">Edit</Text>
+                <Text className="text-xs font-medium text-muted">Edit</Text>
               </Pressable>
             )}
             {poll.status === 'draft' && (
@@ -248,28 +248,28 @@ const PollCard = memo(function PollCard({
             {poll.status === 'live' && (
               <Pressable
                 onPress={handleClose}
-                className="rounded-xl border border-neutral-200 bg-white px-3 py-1.5"
+                className="rounded-xl border border-line bg-card px-3 py-1.5"
                 accessibilityRole="button"
               >
-                <Text className="text-xs font-medium text-neutral-600">Close</Text>
+                <Text className="text-xs font-medium text-muted">Close</Text>
               </Pressable>
             )}
             {poll.status === 'decided' && (
               <Pressable
                 onPress={() => undecide.mutate(poll.id, { onError: mutationError('undo decision') })}
-                className="rounded-xl border border-neutral-200 bg-white px-3 py-1.5"
+                className="rounded-xl border border-line bg-card px-3 py-1.5"
                 accessibilityRole="button"
               >
-                <Text className="text-xs font-medium text-neutral-600">Undo</Text>
+                <Text className="text-xs font-medium text-muted">Undo</Text>
               </Pressable>
             )}
             {showCopy && (
               <Pressable
                 onPress={handleCopy}
-                className="rounded-xl border border-neutral-200 bg-white px-3 py-1.5"
+                className="rounded-xl border border-line bg-card px-3 py-1.5"
                 accessibilityRole="button"
               >
-                <Text className="text-xs font-medium text-neutral-600">Clone</Text>
+                <Text className="text-xs font-medium text-muted">Clone</Text>
               </Pressable>
             )}
             <Pressable onPress={handleDelete} className="p-1" accessibilityRole="button">
@@ -321,13 +321,13 @@ const PollCard = memo(function PollCard({
                   <>
                     {participation ? (
                       <>
-                        <View className="h-1.5 overflow-hidden rounded-full bg-neutral-100">
+                        <View className="h-1.5 overflow-hidden rounded-full bg-cream-warm">
                           <View
                             className="h-full rounded-full"
                             style={{ width: `${participation.percent}%`, backgroundColor: accentColor + 'AA' }}
                           />
                         </View>
-                        <Text className="mt-1 text-xs text-neutral-400">
+                        <Text className="mt-1 text-xs text-muted">
                           {participation.count} of {participation.total} responded
                           {canManagePolls && (poll.status === 'live' || poll.status === 'closed')
                             ? '  ·  Tap an option to decide.'
@@ -337,7 +337,7 @@ const PollCard = memo(function PollCard({
                         </Text>
                       </>
                     ) : (
-                      <Text className="text-xs text-neutral-400">
+                      <Text className="text-xs text-muted">
                         {totalVotes === 0
                           ? 'No responses yet.'
                           : `${totalVotes} response${totalVotes !== 1 ? 's' : ''}`}
@@ -495,10 +495,10 @@ export default function PollsScreen() {
 
   return (
     <>
-    <View className="flex-1 bg-neutral-50" style={{ paddingTop: insets.top }}>
+    <View className="flex-1 bg-cream" style={{ paddingTop: insets.top }}>
 
       {/* Sticky header */}
-      <View className="px-6 pb-3 pt-4 border-b border-neutral-200 bg-neutral-50">
+      <View className="px-6 pb-3 pt-4 border-b border-line bg-cream">
         <View className="flex-row items-center justify-between">
           <TouchableOpacity onPress={() => router.back()} accessibilityRole="button">
             <Text className="text-base" style={{ color: accentColor }}>← Back</Text>
@@ -534,7 +534,7 @@ export default function PollsScreen() {
               if (trimmed && trip) updateTrip.mutate({ id: trip.id, name: trimmed });
               setEditingName(false);
             }}
-            className="mt-2 text-2xl font-bold text-neutral-800 rounded-xl bg-white px-3 py-2"
+            className="mt-2 text-2xl font-bold text-ink rounded-xl bg-card px-3 py-2"
             style={{ borderWidth: 1, borderColor: '#E5E5E5' }}
           />
         ) : (
@@ -546,7 +546,7 @@ export default function PollsScreen() {
             } : undefined}
             hitSlop={4}
           >
-            <Text className="mt-2 text-2xl font-bold text-neutral-800">{trip?.name ?? ''}</Text>
+            <Text className="mt-2 text-2xl font-bold text-ink">{trip?.name ?? ''}</Text>
           </Pressable>
         )}
 
@@ -556,23 +556,23 @@ export default function PollsScreen() {
                 <Pressable
                   key={season}
                   onPress={canManagePolls ? () => setTravelWindowModalVisible(true) : undefined}
-                  className="flex-row items-center gap-1 rounded-full border border-neutral-200 bg-white px-2.5 py-1"
+                  className="flex-row items-center gap-1 rounded-full border border-line bg-card px-2.5 py-1"
                   hitSlop={6}
                 >
                   <Ionicons name={SEASON_ICON[season] ?? 'sunny-outline'} size={12} color="#737373" />
-                  <Text className="text-xs text-neutral-500">{season}</Text>
+                  <Text className="text-xs text-muted">{season}</Text>
                 </Pressable>
               ))
             : null}
           {trip ? (
             <Pressable
               onPress={canManagePolls ? () => setPreciseModalVisible(true) : undefined}
-              className="flex-row items-center gap-1 rounded-full border border-neutral-200 bg-white px-2.5 py-1"
+              className="flex-row items-center gap-1 rounded-full border border-line bg-card px-2.5 py-1"
               accessibilityRole="button"
               hitSlop={6}
             >
               <Ionicons name="people-outline" size={12} color="#737373" />
-              <Text className="text-xs text-neutral-500">
+              <Text className="text-xs text-muted">
                 {trip.group_size_precise != null
                   ? `${trip.group_size_precise} people`
                   : `${trip.group_size_bucket} people`}
@@ -628,7 +628,7 @@ export default function PollsScreen() {
             className="mt-2 flex-row items-center gap-1.5"
           >
             <Ionicons name="people-outline" size={14} color="#A8A8A8" />
-            <Text className="text-xs text-neutral-400">
+            <Text className="text-xs text-muted">
               {respondents.slice(0, 3).map((r) => r.name).join(', ')}
               {respondents.length > 3 ? ` +${respondents.length - 3} more` : ''}
               {' · Tap to see all'}
@@ -643,7 +643,7 @@ export default function PollsScreen() {
           </Button>
           <Pressable
             onPress={handleCopyLink}
-            className="items-center justify-center rounded-2xl border border-neutral-200 bg-white px-4"
+            className="items-center justify-center rounded-2xl border border-line bg-card px-4"
             style={{ elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 }}
             accessibilityRole="button"
             accessibilityLabel="Copy share link"
@@ -678,10 +678,10 @@ export default function PollsScreen() {
                 Add first poll
               </Button>
             ) : null}
-            <Text className="text-lg font-semibold text-neutral-800">
+            <Text className="text-lg font-semibold text-ink">
               {canManagePolls ? 'Create a poll to rally your squad' : 'No polls yet'}
             </Text>
-            <Text className="text-center text-sm text-neutral-400">
+            <Text className="text-center text-sm text-muted">
               {canManagePolls
                 ? 'Build polls for destination, dates, and budget — then share the link.'
                 : 'The trip planner hasn\'t created any polls yet.'}
@@ -691,14 +691,14 @@ export default function PollsScreen() {
 
         {sortedPolls.length > 0 ? (
           <View className="flex-row items-center justify-between pt-4 pb-2">
-            <Text className="text-base font-bold text-neutral-800">Polls</Text>
+            <Text className="text-base font-bold text-ink">Polls</Text>
             <Pressable
               onPress={() => setSortNewest((prev) => !prev)}
               className="flex-row items-center gap-1"
               accessibilityRole="button"
             >
               <Ionicons name={sortNewest ? 'arrow-down' : 'arrow-up'} size={13} color="#A8A8A8" />
-              <Text className="text-xs text-neutral-400">
+              <Text className="text-xs text-muted">
                 {sortNewest ? 'Newest first' : 'Oldest first'}
               </Text>
             </Pressable>
@@ -728,7 +728,7 @@ export default function PollsScreen() {
               className="mb-2 flex-row items-center justify-between"
               accessibilityRole="button"
             >
-              <Text className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Draft</Text>
+              <Text className="text-xs font-semibold uppercase tracking-wider text-muted">Draft</Text>
               <Ionicons name={draftCollapsed ? 'chevron-up' : 'chevron-down'} size={13} color="#A8A8A8" />
             </Pressable>
             {!draftCollapsed && draftPolls.map((poll) => (
@@ -744,7 +744,7 @@ export default function PollsScreen() {
               className="mb-2 flex-row items-center justify-between"
               accessibilityRole="button"
             >
-              <Text className="text-xs font-semibold uppercase tracking-wider text-neutral-700">Closed</Text>
+              <Text className="text-xs font-semibold uppercase tracking-wider text-ink">Closed</Text>
               <Ionicons name={closedCollapsed ? 'chevron-up' : 'chevron-down'} size={13} color="#A8A8A8" />
             </Pressable>
             {!closedCollapsed && closedPolls.map((poll) => (
@@ -854,7 +854,7 @@ function TravelWindowModal({
             <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#E5E5E5' }} />
           </View>
           <Pressable onPress={() => {}} style={{ padding: 24, paddingTop: 12, gap: 16 }}>
-            <Text style={{ fontSize: 17, fontWeight: '600', color: '#1C1C1C' }}>Rough travel window</Text>
+            <Text style={{ fontSize: 17, fontWeight: '600', color: '#163026' }}>Rough travel window</Text>
             <Text style={{ fontSize: 14, color: '#737373', marginTop: -8 }}>Select the seasons you're considering.</Text>
             <View style={{ flexDirection: 'row', gap: 8 }}>
               {SEASONS.map((season) => {
@@ -866,12 +866,12 @@ function TravelWindowModal({
                     style={{
                       flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
                       gap: 6, paddingVertical: 10, borderRadius: 999, borderWidth: 1.5,
-                      borderColor: isSelected ? '#D85A30' : '#E5E5E5',
+                      borderColor: isSelected ? '#0F3F2E' : '#E5E5E5',
                       backgroundColor: isSelected ? '#FFF4F2' : 'white',
                     }}
                   >
-                    <Ionicons name={SEASON_ICON[season] ?? 'sunny-outline'} size={14} color={isSelected ? '#D85A30' : '#737373'} />
-                    <Text style={{ fontSize: 14, fontWeight: '500', color: isSelected ? '#D85A30' : '#525252' }}>{season}</Text>
+                    <Ionicons name={SEASON_ICON[season] ?? 'sunny-outline'} size={14} color={isSelected ? '#0F3F2E' : '#737373'} />
+                    <Text style={{ fontSize: 14, fontWeight: '500', color: isSelected ? '#0F3F2E' : '#525252' }}>{season}</Text>
                   </Pressable>
                 );
               })}
@@ -880,7 +880,7 @@ function TravelWindowModal({
               <Pressable onPress={onClose} style={{ flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#E5E5E5', alignItems: 'center' }}>
                 <Text style={{ fontSize: 15, fontWeight: '600', color: '#525252' }}>Cancel</Text>
               </Pressable>
-              <Pressable onPress={handleSave} style={{ flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: '#D85A30', alignItems: 'center' }}>
+              <Pressable onPress={handleSave} style={{ flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: '#0F3F2E', alignItems: 'center' }}>
                 <Text style={{ fontSize: 15, fontWeight: '600', color: 'white' }}>{selected.length === 0 ? 'Clear' : 'Save'}</Text>
               </Pressable>
             </View>
