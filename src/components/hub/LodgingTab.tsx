@@ -5,11 +5,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Alert,
-  ActivityIndicator,
-  KeyboardAvoidingView,
   Linking,
-  Modal,
-  Platform,
   Pressable,
   ScrollView,
   Share,
@@ -18,7 +14,7 @@ import {
   View,
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
-import { PlacesAutocompleteInput } from '@/components/ui';
+import { PlacesAutocompleteInput, FormField, Input, Pill, Sheet, Spinner } from '@/components/ui';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTrip } from '@/hooks/useTrips';
@@ -102,97 +98,69 @@ function BookingSheet({
   const canSave = true; // all fields optional
 
   return (
-    <Modal
+    <Sheet
       visible={state.visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-      statusBarTranslucent
+      onClose={onClose}
+      title={local.isEditing ? 'Edit booking' : 'Mark as booked'}
     >
-      <Pressable
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}
-        onPress={onClose}
-      >
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <Pressable onPress={() => {}} style={{ backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, gap: 16 }}>
-            <View style={{ alignItems: 'center', marginBottom: 4 }}>
-              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#D9CCB6' }} />
-            </View>
+      <FormField label="Confirmation #">
+        <Input
+          value={local.confirmation}
+          onChangeText={(v) => set('confirmation', v)}
+          placeholder="e.g. ABC123"
+          autoCapitalize="characters"
+        />
+      </FormField>
 
-            <Text style={{ fontSize: 17, fontWeight: '700', color: '#163026' }}>{local.isEditing ? 'Edit booking' : 'Mark as booked'}</Text>
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        <View style={{ flex: 1 }}>
+          <FormField label="Check-in time">
+            <Input
+              value={local.checkInTime}
+              onChangeText={(v) => set('checkInTime', v)}
+              placeholder="e.g. 3:00 PM"
+            />
+          </FormField>
+        </View>
+        <View style={{ flex: 1 }}>
+          <FormField label="Check-out time">
+            <Input
+              value={local.checkOutTime}
+              onChangeText={(v) => set('checkOutTime', v)}
+              placeholder="e.g. 11:00 AM"
+            />
+          </FormField>
+        </View>
+      </View>
 
-            <View>
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Confirmation #</Text>
-              <TextInput
-                value={local.confirmation}
-                onChangeText={(v) => set('confirmation', v)}
-                placeholder="e.g. ABC123"
-                placeholderTextColor="#A3A3A3"
-                style={{ borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026' }}
-                autoCapitalize="characters"
-              />
-            </View>
+      <FormField label="Total cost">
+        <Input
+          value={local.totalCost}
+          onChangeText={(v) => set('totalCost', v.replace(/[^0-9.]/g, ''))}
+          placeholder="$ 0.00"
+          keyboardType="decimal-pad"
+        />
+      </FormField>
 
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Check-in time</Text>
-                <TextInput
-                  value={local.checkInTime}
-                  onChangeText={(v) => set('checkInTime', v)}
-                  placeholder="e.g. 3:00 PM"
-                  placeholderTextColor="#A3A3A3"
-                  style={{ borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026' }}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Check-out time</Text>
-                <TextInput
-                  value={local.checkOutTime}
-                  onChangeText={(v) => set('checkOutTime', v)}
-                  placeholder="e.g. 11:00 AM"
-                  placeholderTextColor="#A3A3A3"
-                  style={{ borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026' }}
-                />
-              </View>
-            </View>
-
-            <View>
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Total cost</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14 }}>
-                <Text style={{ fontSize: 15, color: '#737373', marginRight: 4 }}>$</Text>
-                <TextInput
-                  value={local.totalCost}
-                  onChangeText={(v) => set('totalCost', v.replace(/[^0-9.]/g, ''))}
-                  placeholder="0.00"
-                  placeholderTextColor="#A3A3A3"
-                  keyboardType="decimal-pad"
-                  style={{ flex: 1, paddingVertical: 12, fontSize: 15, color: '#163026' }}
-                />
-              </View>
-            </View>
-
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <View style={{ flex: 1 }}>
-                <Button variant="secondary" onPress={onClose} fullWidth>
-                  Cancel
-                </Button>
-              </View>
-              <View style={{ flex: 2 }}>
-                <Button
-                  variant="primary"
-                  onPress={() => onSave(local)}
-                  loading={saving}
-                  disabled={saving}
-                  fullWidth
-                >
-                  Mark as booked
-                </Button>
-              </View>
-            </View>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Pressable>
-    </Modal>
+      <Sheet.Actions>
+        <View style={{ flex: 1 }}>
+          <Button variant="secondary" onPress={onClose} fullWidth>
+            Cancel
+          </Button>
+        </View>
+        <View style={{ flex: 2 }}>
+          <Button
+            variant="primary"
+            onPress={() => onSave(local)}
+            loading={saving}
+            disabled={saving}
+            fullWidth
+          >
+            Mark as booked
+          </Button>
+        </View>
+      </Sheet.Actions>
+    </Sheet>
   );
 }
 
@@ -250,151 +218,110 @@ function ManualEntrySheet({
   const canSave = local.title.trim().length > 0;
 
   return (
-    <Modal
-      visible={state.visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-      statusBarTranslucent
-    >
-      <Pressable
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}
-        onPress={onClose}
-      >
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <ScrollView
-            style={{ backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '90%' }}
-            contentContainerStyle={{ padding: 24, gap: 16 }}
-            keyboardShouldPersistTaps="handled"
+    <Sheet visible={state.visible} onClose={onClose} title="Add property">
+      {/* Platform */}
+      <FormField label="Platform">
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {PLATFORMS.map((p) => (
+              <Pill
+                key={p.value}
+                onPress={() => set('platform', p.value)}
+                selected={local.platform === p.value}
+                size="sm"
+              >
+                {p.label}
+              </Pill>
+            ))}
+          </View>
+        </ScrollView>
+      </FormField>
+
+      {/* Title */}
+      <FormField label="Name" required>
+        <Input
+          value={local.title}
+          onChangeText={(v) => set('title', v)}
+          placeholder="e.g. Cozy Cabin in the Woods"
+          autoFocus
+        />
+      </FormField>
+
+      {/* URL */}
+      <FormField label="Listing URL">
+        <Input
+          value={local.url}
+          onChangeText={(v) => set('url', v)}
+          placeholder="https://…"
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="url"
+        />
+      </FormField>
+
+      {/* Dates */}
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        <View style={{ flex: 1 }}>
+          <FormField label="Check-in">
+            <Input
+              value={local.checkIn}
+              onChangeText={(v) => set('checkIn', v)}
+              placeholder="YYYY-MM-DD"
+              maxLength={10}
+            />
+          </FormField>
+        </View>
+        <View style={{ flex: 1 }}>
+          <FormField label="Check-out">
+            <Input
+              value={local.checkOut}
+              onChangeText={(v) => set('checkOut', v)}
+              placeholder="YYYY-MM-DD"
+              maxLength={10}
+            />
+          </FormField>
+        </View>
+      </View>
+
+      {/* Total cost */}
+      <FormField label="Total cost">
+        <Input
+          value={local.totalCost}
+          onChangeText={(v) => set('totalCost', v.replace(/[^0-9.]/g, ''))}
+          placeholder="$ 0.00"
+          keyboardType="decimal-pad"
+        />
+      </FormField>
+
+      {/* Notes */}
+      <FormField label="Notes">
+        <Input
+          value={local.notes}
+          onChangeText={(v) => set('notes', v)}
+          placeholder="Any details…"
+          multiline
+        />
+      </FormField>
+
+      <Sheet.Actions>
+        <View style={{ flex: 1 }}>
+          <Button variant="secondary" onPress={onClose} fullWidth>
+            Cancel
+          </Button>
+        </View>
+        <View style={{ flex: 2 }}>
+          <Button
+            variant="primary"
+            onPress={() => canSave && onSave(local)}
+            loading={saving}
+            disabled={!canSave || saving}
+            fullWidth
           >
-            <Pressable onPress={() => {}}>
-              <View style={{ alignItems: 'center', marginBottom: 4 }}>
-                <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#D9CCB6' }} />
-              </View>
-              <Text style={{ fontSize: 17, fontWeight: '700', color: '#163026', marginBottom: 16 }}>Add property</Text>
-
-              {/* Platform */}
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Platform</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, marginBottom: 16 }}>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  {PLATFORMS.map((p) => (
-                    <Pressable
-                      key={p.value}
-                      onPress={() => set('platform', p.value)}
-                      style={{
-                        paddingHorizontal: 14,
-                        paddingVertical: 7,
-                        borderRadius: 20,
-                        borderWidth: 1.5,
-                        borderColor: local.platform === p.value ? '#0F3F2E' : '#D9CCB6',
-                        backgroundColor: local.platform === p.value ? '#FFF1F0' : 'white',
-                      }}
-                    >
-                      <Text style={{ fontSize: 13, fontWeight: '600', color: local.platform === p.value ? '#0F3F2E' : '#737373' }}>{p.label}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </ScrollView>
-
-              {/* Title */}
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Name *</Text>
-              <TextInput
-                value={local.title}
-                onChangeText={(v) => set('title', v)}
-                placeholder="e.g. Cozy Cabin in the Woods"
-                placeholderTextColor="#A3A3A3"
-                style={{ borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026', marginBottom: 16 }}
-                autoFocus
-              />
-
-              {/* URL */}
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Listing URL</Text>
-              <TextInput
-                value={local.url}
-                onChangeText={(v) => set('url', v)}
-                placeholder="https://…"
-                placeholderTextColor="#A3A3A3"
-                style={{ borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026', marginBottom: 16 }}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="url"
-              />
-
-              {/* Dates */}
-              <View style={{ flexDirection: 'row', gap: 12, marginBottom: 16 }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Check-in</Text>
-                  <TextInput
-                    value={local.checkIn}
-                    onChangeText={(v) => set('checkIn', v)}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor="#A3A3A3"
-                    style={{ borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026' }}
-                    maxLength={10}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Check-out</Text>
-                  <TextInput
-                    value={local.checkOut}
-                    onChangeText={(v) => set('checkOut', v)}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor="#A3A3A3"
-                    style={{ borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026' }}
-                    maxLength={10}
-                  />
-                </View>
-              </View>
-
-              {/* Total cost */}
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Total cost</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, marginBottom: 16 }}>
-                <Text style={{ fontSize: 15, color: '#737373', marginRight: 4 }}>$</Text>
-                <TextInput
-                  value={local.totalCost}
-                  onChangeText={(v) => set('totalCost', v.replace(/[^0-9.]/g, ''))}
-                  placeholder="0.00"
-                  placeholderTextColor="#A3A3A3"
-                  keyboardType="decimal-pad"
-                  style={{ flex: 1, paddingVertical: 12, fontSize: 15, color: '#163026' }}
-                />
-              </View>
-
-              {/* Notes */}
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Notes</Text>
-              <TextInput
-                value={local.notes}
-                onChangeText={(v) => set('notes', v)}
-                placeholder="Any details…"
-                placeholderTextColor="#A3A3A3"
-                multiline
-                numberOfLines={2}
-                style={{ borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026', minHeight: 72, textAlignVertical: 'top', marginBottom: 16 }}
-              />
-
-              <View style={{ flexDirection: 'row', gap: 10 }}>
-                <View style={{ flex: 1 }}>
-                  <Button variant="secondary" onPress={onClose} fullWidth>
-                    Cancel
-                  </Button>
-                </View>
-                <View style={{ flex: 2 }}>
-                  <Button
-                    variant="primary"
-                    onPress={() => canSave && onSave(local)}
-                    loading={saving}
-                    disabled={!canSave || saving}
-                    fullWidth
-                  >
-                    Add property
-                  </Button>
-                </View>
-              </View>
-            </Pressable>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Pressable>
-    </Modal>
+            Add property
+          </Button>
+        </View>
+      </Sheet.Actions>
+    </Sheet>
   );
 }
 
@@ -654,7 +581,7 @@ function LodgingAiSuggestionCard({
           accessibilityRole="button"
         >
           {getSuggestions.isPending ? (
-            <ActivityIndicator size="small" color="white" />
+            <Spinner tone="onPrimary" />
           ) : (
             <Text style={{ fontSize: 14, fontWeight: '700', color: '#FFFCF6' }}>Get suggestions</Text>
           )}
@@ -678,7 +605,7 @@ function LodgingAiSuggestionCard({
           <Text style={{ fontSize: 14, fontWeight: '700', color: '#1A4060' }}>AI lodging suggestions</Text>
         </View>
         {getSuggestions.isPending ? (
-          <ActivityIndicator size="small" color="#1A4060" />
+          <Spinner />
         ) : (
           <Ionicons
             name={expanded ? 'chevron-up' : 'chevron-down'}
@@ -1067,26 +994,24 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
               {/* Dates */}
               <View className="flex-row gap-3">
                 <View className="flex-1">
-                  <Text className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted">Check-in</Text>
-                  <TextInput
-                    value={checkIn}
-                    onChangeText={setCheckIn}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor="#A3A3A3"
-                    className="rounded-xl border border-line bg-cream px-4 py-3 text-sm text-ink"
-                    maxLength={10}
-                  />
+                  <FormField label="Check-in">
+                    <Input
+                      value={checkIn}
+                      onChangeText={setCheckIn}
+                      placeholder="YYYY-MM-DD"
+                      maxLength={10}
+                    />
+                  </FormField>
                 </View>
                 <View className="flex-1">
-                  <Text className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted">Check-out</Text>
-                  <TextInput
-                    value={checkOut}
-                    onChangeText={setCheckOut}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor="#A3A3A3"
-                    className="rounded-xl border border-line bg-cream px-4 py-3 text-sm text-ink"
-                    maxLength={10}
-                  />
+                  <FormField label="Check-out">
+                    <Input
+                      value={checkOut}
+                      onChangeText={setCheckOut}
+                      placeholder="YYYY-MM-DD"
+                      maxLength={10}
+                    />
+                  </FormField>
                 </View>
               </View>
 
@@ -1111,29 +1036,20 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
               </View>
 
               {/* Min bedrooms */}
-              <View>
-                <Text className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted">Min bedrooms</Text>
+              <FormField label="Min bedrooms">
                 <View className="flex-row gap-2">
                   {MIN_BEDROOMS_OPTIONS.map((n) => (
-                    <Pressable
+                    <Pill
                       key={n}
                       onPress={() => setMinBedrooms(n)}
-                      className={[
-                        'h-9 min-w-[36px] items-center justify-center rounded-xl border px-2',
-                        minBedrooms === n
-                          ? 'border-green bg-green-soft'
-                          : 'border-line bg-card',
-                      ].join(' ')}
+                      selected={minBedrooms === n}
+                      size="sm"
                     >
-                      <Text
-                        className={`text-sm font-semibold ${minBedrooms === n ? 'text-green-dark' : 'text-muted'}`}
-                      >
-                        {n === 5 ? '5+' : String(n)}
-                      </Text>
-                    </Pressable>
+                      {n === 5 ? '5+' : String(n)}
+                    </Pill>
                   ))}
                 </View>
-              </View>
+              </FormField>
 
               {/* Platform buttons */}
               <View className="flex-row gap-2 pt-1">
@@ -1181,16 +1097,16 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
 
             {/* URL paste row */}
             <View className="mb-2 flex-row items-center gap-2">
-              <TextInput
-                value={pasteUrl}
-                onChangeText={(v) => { setPasteUrl(v); setUrlError(''); setUrlParsed(null); }}
-                placeholder="Paste listing URL…"
-                placeholderTextColor="#A3A3A3"
-                className="flex-1 rounded-xl border border-line bg-cream px-4 py-3 text-sm text-ink"
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="url"
-              />
+              <View style={{ flex: 1 }}>
+                <Input
+                  value={pasteUrl}
+                  onChangeText={(v) => { setPasteUrl(v); setUrlError(''); setUrlParsed(null); }}
+                  placeholder="Paste listing URL…"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                />
+              </View>
               <Button
                 variant="primary"
                 onPress={handleAddFromUrl}
@@ -1213,20 +1129,16 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
                   </View>
                   <Text className="text-xs text-muted" numberOfLines={1}>{urlParsed.cleanUrl}</Text>
                 </View>
-                <TextInput
+                <Input
                   value={urlTitle}
                   onChangeText={setUrlTitle}
                   placeholder="Property name"
-                  placeholderTextColor="#A3A3A3"
-                  className="rounded-xl border border-line bg-card px-3 py-2.5 text-sm text-ink"
                   autoFocus
                 />
-                <TextInput
+                <Input
                   value={urlNotes}
                   onChangeText={setUrlNotes}
                   placeholder="Notes (optional)"
-                  placeholderTextColor="#A3A3A3"
-                  className="rounded-xl border border-line bg-card px-3 py-2.5 text-sm text-ink"
                 />
                 <Button
                   variant="primary"

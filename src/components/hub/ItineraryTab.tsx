@@ -4,16 +4,13 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
-  Modal,
   Pressable,
   ScrollView,
   Share,
   Text,
   TextInput,
   View,
-  KeyboardAvoidingView,
   Linking,
   Platform,
 } from 'react-native';
@@ -41,7 +38,7 @@ import { lookupRestaurantDetails, type RestaurantDetails } from '@/lib/api/resta
 import { useAuthStore } from '@/stores/authStore';
 import type { BlockType, ItineraryBlock, ItineraryDay } from '@/types/database';
 import type { CreateBlockInput } from '@/lib/api/itinerary';
-import { Button } from '@/components/ui';
+import { Button, EmptyState, FormField, Input, Pill, Sheet, Spinner } from '@/components/ui';
 import { DateRangePicker } from '@/components/DateRangePicker';
 import { BlockAlternativesSheet } from '@/components/hub/BlockAlternativesSheet';
 import { useAiItineraryDraft, useGenerateAiItinerary } from '@/hooks/useAiItinerary';
@@ -548,172 +545,122 @@ function BlockEditorModal({
   const canSave = state.title.trim().length > 0;
 
   return (
-    <Modal
+    <Sheet
       visible={editor.visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-      statusBarTranslucent
+      onClose={onClose}
+      title={timePickerFor ? undefined : (editor.mode === 'create' ? 'Add block' : 'Edit block')}
+      subtitle={timePickerFor ? undefined : (editor.dayDate ? formatDayLabel(editor.dayDate) : undefined)}
     >
-      <Pressable
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}
-        onPress={onClose}
-      >
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <Pressable
-            onPress={() => {}}
-            style={{
-              backgroundColor: 'white',
-              borderTopLeftRadius: 24,
-              borderTopRightRadius: 24,
-              padding: 24,
-              gap: timePickerFor ? 0 : 16,
-            }}
-          >
-            {/* Drag handle */}
-            <View style={{ alignItems: 'center', marginBottom: timePickerFor ? 0 : 4 }}>
-              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#D9CCB6' }} />
+      {timePickerFor !== null ? (
+        <InlineTimePicker
+          key={tpKey}
+          field={timePickerFor}
+          initialTime={timePickerFor === 'start' ? state.startTime : state.endTime}
+          onConfirm={(time) => {
+            set(timePickerFor === 'start' ? 'startTime' : 'endTime', time);
+            setTimePickerFor(null);
+          }}
+          onClear={() => {
+            set(timePickerFor === 'start' ? 'startTime' : 'endTime', '');
+            setTimePickerFor(null);
+          }}
+          onBack={() => setTimePickerFor(null)}
+        />
+      ) : (
+        <>
+          {/* Type selector */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              {BLOCK_TYPES.map((t) => (
+                <Pill
+                  key={t}
+                  onPress={() => set('type', t)}
+                  selected={state.type === t}
+                  size="sm"
+                >
+                  {BLOCK_TYPE_LABELS[t]}
+                </Pill>
+              ))}
             </View>
+          </ScrollView>
 
-            {timePickerFor !== null ? (
-              <InlineTimePicker
-                key={tpKey}
-                field={timePickerFor}
-                initialTime={timePickerFor === 'start' ? state.startTime : state.endTime}
-                onConfirm={(time) => {
-                  set(timePickerFor === 'start' ? 'startTime' : 'endTime', time);
-                  setTimePickerFor(null);
-                }}
-                onClear={() => {
-                  set(timePickerFor === 'start' ? 'startTime' : 'endTime', '');
-                  setTimePickerFor(null);
-                }}
-                onBack={() => setTimePickerFor(null)}
-              />
-            ) : (
-              <>
-                {/* Title + day label */}
-                <View style={{ gap: 2 }}>
-                  <Text style={{ fontSize: 17, fontWeight: '700', color: '#163026' }}>
-                    {editor.mode === 'create' ? 'Add block' : 'Edit block'}
+          {/* Title */}
+          <FormField label="Title" required>
+            <Input
+              value={state.title}
+              onChangeText={(v) => set('title', v)}
+              placeholder="e.g. Dinner at The Bistro"
+              autoFocus={editor.mode === 'create'}
+              maxLength={100}
+            />
+          </FormField>
+
+          {/* Times — tappable, open drum picker */}
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <Pressable
+              onPress={() => openTimePicker('start')}
+              style={{ flex: 1, borderWidth: 1, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: '#FFFCF6' }}
+            >
+              <Text style={{ fontSize: 11, fontWeight: '600', color: '#9DA8A0', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
+                Start time
+              </Text>
+              <Text style={{ fontSize: 15, color: state.startTime ? '#163026' : '#9DA8A0', fontWeight: state.startTime ? '500' : '400' }}>
+                {state.startTime ? formatTime(state.startTime) : 'Set time'}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => openTimePicker('end')}
+              style={{ flex: 1, borderWidth: 1, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: '#FFFCF6' }}
+            >
+              <Text style={{ fontSize: 11, fontWeight: '600', color: '#9DA8A0', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
+                End time
+              </Text>
+              <Text style={{ fontSize: 15, color: state.endTime ? '#163026' : '#9DA8A0', fontWeight: state.endTime ? '500' : '400' }}>
+                {state.endTime ? formatTime(state.endTime) : 'Set time'}
+              </Text>
+            </Pressable>
+          </View>
+
+          {/* Location */}
+          <FormField label="Location">
+            <Input
+              value={state.location}
+              onChangeText={(v) => { set('location', v); setRestaurantInfo(null); }}
+              placeholder="Address or place name"
+              maxLength={200}
+            />
+          </FormField>
+
+          {/* Restaurant lookup — meal blocks only */}
+          {state.type === 'meal' ? (
+            <View style={{ gap: 10 }}>
+              {/* Look up button */}
+              {!restaurantInfo ? (
+                <Pressable
+                  onPress={handleLookupRestaurant}
+                  disabled={restaurantLoading || (!state.title.trim() && !state.location.trim())}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    paddingVertical: 10,
+                    borderRadius: 12,
+                    borderWidth: 1.5,
+                    borderColor: restaurantLoading ? '#D9CCB6' : '#0F3F2E',
+                    backgroundColor: restaurantLoading ? '#EFE3D0' : '#DFE8D2',
+                  }}
+                >
+                  {restaurantLoading ? (
+                    <Spinner />
+                  ) : (
+                    <Ionicons name="storefront-outline" size={15} color="#0F3F2E" />
+                  )}
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: restaurantLoading ? '#9DA8A0' : '#0F3F2E' }}>
+                    {restaurantLoading ? 'Looking up…' : 'Look up restaurant info'}
                   </Text>
-                  {editor.dayDate ? (
-                    <Text style={{ fontSize: 13, color: '#9DA8A0' }}>
-                      {formatDayLabel(editor.dayDate)}
-                    </Text>
-                  ) : null}
-                </View>
-
-                {/* Type selector */}
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
-                  <View style={{ flexDirection: 'row', gap: 8 }}>
-                    {BLOCK_TYPES.map((t) => {
-                      const active = state.type === t;
-                      return (
-                        <Pressable
-                          key={t}
-                          onPress={() => set('type', t)}
-                          style={{
-                            paddingHorizontal: 12,
-                            paddingVertical: 6,
-                            borderRadius: 20,
-                            borderWidth: 1.5,
-                            borderColor: active ? '#0F3F2E' : '#D9CCB6',
-                            backgroundColor: active ? '#DFE8D2' : 'white',
-                          }}
-                        >
-                          <Text style={{ fontSize: 13, fontWeight: '600', color: active ? '#0F3F2E' : '#5F685F' }}>
-                            {BLOCK_TYPE_LABELS[t]}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </ScrollView>
-
-                {/* Title */}
-                <View>
-                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#5F685F', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Title *</Text>
-                  <TextInput
-                    value={state.title}
-                    onChangeText={(v) => set('title', v)}
-                    placeholder="e.g. Dinner at The Bistro"
-                    placeholderTextColor="#9DA8A0"
-                    style={{ borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026' }}
-                    autoFocus={editor.mode === 'create'}
-                    maxLength={100}
-                  />
-                </View>
-
-                {/* Times — tappable, open drum picker */}
-                <View style={{ flexDirection: 'row', gap: 12 }}>
-                  <Pressable
-                    onPress={() => openTimePicker('start')}
-                    style={{ flex: 1, borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12 }}
-                  >
-                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#9DA8A0', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
-                      Start time
-                    </Text>
-                    <Text style={{ fontSize: 15, color: state.startTime ? '#163026' : '#9DA8A0', fontWeight: state.startTime ? '500' : '400' }}>
-                      {state.startTime ? formatTime(state.startTime) : 'Set time'}
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => openTimePicker('end')}
-                    style={{ flex: 1, borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12 }}
-                  >
-                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#9DA8A0', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
-                      End time
-                    </Text>
-                    <Text style={{ fontSize: 15, color: state.endTime ? '#163026' : '#9DA8A0', fontWeight: state.endTime ? '500' : '400' }}>
-                      {state.endTime ? formatTime(state.endTime) : 'Set time'}
-                    </Text>
-                  </Pressable>
-                </View>
-
-                {/* Location */}
-                <View>
-                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#5F685F', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Location</Text>
-                  <TextInput
-                    value={state.location}
-                    onChangeText={(v) => { set('location', v); setRestaurantInfo(null); }}
-                    placeholder="Address or place name"
-                    placeholderTextColor="#9DA8A0"
-                    style={{ borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026' }}
-                    maxLength={200}
-                  />
-                </View>
-
-                {/* Restaurant lookup — meal blocks only */}
-                {state.type === 'meal' ? (
-                  <View style={{ gap: 10 }}>
-                    {/* Look up button */}
-                    {!restaurantInfo ? (
-                      <Pressable
-                        onPress={handleLookupRestaurant}
-                        disabled={restaurantLoading || (!state.title.trim() && !state.location.trim())}
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 6,
-                          paddingVertical: 10,
-                          borderRadius: 12,
-                          borderWidth: 1.5,
-                          borderColor: restaurantLoading ? '#D9CCB6' : '#0F3F2E',
-                          backgroundColor: restaurantLoading ? '#EFE3D0' : '#DFE8D2',
-                        }}
-                      >
-                        {restaurantLoading ? (
-                          <ActivityIndicator size="small" color="#0F3F2E" />
-                        ) : (
-                          <Ionicons name="storefront-outline" size={15} color="#0F3F2E" />
-                        )}
-                        <Text style={{ fontSize: 13, fontWeight: '600', color: restaurantLoading ? '#9DA8A0' : '#0F3F2E' }}>
-                          {restaurantLoading ? 'Looking up…' : 'Look up restaurant info'}
-                        </Text>
-                      </Pressable>
-                    ) : (
+                </Pressable>
+              ) : (
                       /* Restaurant info card */
                       <View style={{ backgroundColor: '#EFE3D0', borderRadius: 14, borderWidth: 1.5, borderColor: '#D9CCB6', padding: 14, gap: 10 }}>
                         {/* Name + dismiss */}
@@ -766,59 +713,52 @@ function BlockEditorModal({
                   </View>
                 ) : null}
 
-                {/* Notes */}
-                <View>
-                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#5F685F', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Notes</Text>
-                  <TextInput
-                    value={state.notes}
-                    onChangeText={(v) => set('notes', v)}
-                    placeholder="Any details…"
-                    placeholderTextColor="#9DA8A0"
-                    multiline
-                    numberOfLines={2}
-                    style={{ borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026', minHeight: 72, textAlignVertical: 'top' }}
-                    maxLength={500}
-                  />
-                </View>
+          {/* Notes */}
+          <FormField label="Notes">
+            <Input
+              value={state.notes}
+              onChangeText={(v) => set('notes', v)}
+              placeholder="Any details…"
+              multiline
+              maxLength={500}
+            />
+          </FormField>
 
-                {/* Actions — uses centralized Button so brand updates flow */}
-                <View style={{ flexDirection: 'row', gap: 10 }}>
-                  <View style={{ flex: 1 }}>
-                    {editor.mode === 'edit' ? (
-                      <Button
-                        variant="destructive"
-                        onPress={onDelete}
-                        loading={deleting}
-                        disabled={deleting}
-                        fullWidth
-                      >
-                        Delete
-                      </Button>
-                    ) : (
-                      <Button variant="secondary" onPress={onClose} fullWidth>
-                        Cancel
-                      </Button>
-                    )}
-                  </View>
+          {/* Actions — uses centralized Button so brand updates flow */}
+          <Sheet.Actions>
+            <View style={{ flex: 1 }}>
+              {editor.mode === 'edit' ? (
+                <Button
+                  variant="destructive"
+                  onPress={onDelete}
+                  loading={deleting}
+                  disabled={deleting}
+                  fullWidth
+                >
+                  Delete
+                </Button>
+              ) : (
+                <Button variant="secondary" onPress={onClose} fullWidth>
+                  Cancel
+                </Button>
+              )}
+            </View>
 
-                  <View style={{ flex: 2 }}>
-                    <Button
-                      variant="primary"
-                      onPress={() => canSave && onSave(state)}
-                      loading={saving}
-                      disabled={!canSave || saving}
-                      fullWidth
-                    >
-                      {editor.mode === 'create' ? 'Add block' : 'Save changes'}
-                    </Button>
-                  </View>
-                </View>
-              </>
-            )}
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Pressable>
-    </Modal>
+            <View style={{ flex: 2 }}>
+              <Button
+                variant="primary"
+                onPress={() => canSave && onSave(state)}
+                loading={saving}
+                disabled={!canSave || saving}
+                fullWidth
+              >
+                {editor.mode === 'create' ? 'Add block' : 'Save changes'}
+              </Button>
+            </View>
+          </Sheet.Actions>
+        </>
+      )}
+    </Sheet>
   );
 }
 
@@ -921,7 +861,7 @@ function AiItineraryBanner({
         borderWidth: 1,
         borderColor: '#DDE8D8',
       }}>
-        <ActivityIndicator size="small" color="#1A4060" />
+        <Spinner />
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 14, fontWeight: '600', color: '#0F3F2E' }}>
             {LOADING_MESSAGES[loadingMsgIdx]}
@@ -1234,21 +1174,17 @@ export function ItineraryTab({ tripId, isPlanner = true }: { tripId: string; isP
 
       {!hasDates ? (
         /* Empty state — no dates */
-        <View className="flex-1 items-center justify-center gap-4 px-8">
-          <View className="h-14 w-14 items-center justify-center rounded-2xl bg-green-soft">
-            <Ionicons name="calendar-outline" size={28} color="#0F3F2E" />
-          </View>
-          <Text className="text-base font-semibold text-ink">No trip dates yet</Text>
-          <Text className="text-center text-sm text-muted">
-            Set your trip start and end dates to build a day-by-day itinerary.
-          </Text>
-          <Button
-            variant="primary"
-            onPress={() => setDateSheetVisible(true)}
-            className="mt-1"
-          >
-            Set trip dates
-          </Button>
+        <View className="flex-1 justify-center">
+          <EmptyState
+            icon="calendar-outline"
+            title="No trip dates yet"
+            body="Set your trip start and end dates to build a day-by-day itinerary."
+            action={
+              <Button variant="primary" onPress={() => setDateSheetVisible(true)}>
+                Set trip dates
+              </Button>
+            }
+          />
         </View>
       ) : (
         <ScrollView
@@ -1284,13 +1220,11 @@ export function ItineraryTab({ tripId, isPlanner = true }: { tripId: string; isP
 
           {/* Empty state */}
           {blocks.length === 0 ? (
-            <View style={{ alignItems: 'center', paddingVertical: 48, gap: 10 }}>
-              <Ionicons name="calendar-outline" size={44} color="#D0D0D0" />
-              <Text style={{ fontSize: 16, fontWeight: '600', color: '#163026' }}>No activities yet</Text>
-              <Text style={{ fontSize: 14, color: '#888', textAlign: 'center', lineHeight: 20, paddingHorizontal: 32 }}>
-                Tap any day above to start building your itinerary, or use AI to generate options.
-              </Text>
-            </View>
+            <EmptyState
+              icon="calendar-outline"
+              title="No activities yet"
+              body="Tap any day above to start building your itinerary, or use AI to generate options."
+            />
           ) : null}
         </ScrollView>
       )}

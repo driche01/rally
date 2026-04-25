@@ -5,17 +5,12 @@
 import { useState, useMemo, useCallback } from 'react';
 import {
   Alert,
-  ActivityIndicator,
   FlatList,
-  KeyboardAvoidingView,
   Linking,
-  Modal,
-  Platform,
   Pressable,
   ScrollView,
   Share,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -44,7 +39,7 @@ import type {
   ParticipantBalance,
   Respondent,
 } from '@/types/database';
-import { Button } from '@/components/ui';
+import { Avatar, Button, EmptyState, FormField, Input, Pill, Sheet } from '@/components/ui';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -199,9 +194,12 @@ function ExpenseCard({
         </View>
         <View className="flex-1">
           <Text className="text-sm font-semibold text-ink">{expense.description}</Text>
-          <Text className="text-xs text-muted">
-            {cat?.label} · Paid by {payerName}
-          </Text>
+          <View className="flex-row items-center gap-1.5 mt-0.5">
+            <Avatar name={payerName} size="xs" />
+            <Text className="text-xs text-muted">
+              {cat?.label} · Paid by {payerName}
+            </Text>
+          </View>
         </View>
         <Text className="text-base font-bold text-ink">
           {formatCents(expense.amount_cents)}
@@ -350,211 +348,148 @@ function AddExpenseSheet({
   }
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-      statusBarTranslucent
-    >
-      <Pressable
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}
-        onPress={onClose}
-      >
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <ScrollView
-            style={{ backgroundColor: '#FFFCF6', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '90%' }}
-            contentContainerStyle={{ padding: 24, gap: 16 }}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            <Pressable onPress={() => {}}>
-              <View style={{ alignItems: 'center', marginBottom: 4 }}>
-                <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#D9CCB6' }} />
+    <Sheet visible={visible} onClose={onClose} title="Add expense">
+      {/* Description */}
+      <FormField label="Description" required>
+        <Input
+          value={description}
+          onChangeText={setDescription}
+          placeholder="e.g. Airbnb deposit"
+          autoFocus
+        />
+      </FormField>
+
+      {/* Amount */}
+      <FormField label="Amount" required>
+        <Input
+          value={amountRaw}
+          onChangeText={(v) => setAmountRaw(v.replace(/[^0-9.]/g, ''))}
+          placeholder="$ 0.00"
+          keyboardType="decimal-pad"
+        />
+      </FormField>
+
+      {/* Category */}
+      <FormField label="Category">
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {CATEGORIES.map((c) => (
+              <Pill
+                key={c.value}
+                onPress={() => setCategory(c.value)}
+                selected={category === c.value}
+                leadingIcon={c.icon}
+                size="sm"
+              >
+                {c.label}
+              </Pill>
+            ))}
+          </View>
+        </ScrollView>
+      </FormField>
+
+      {/* Paid by */}
+      <FormField label="Paid by">
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {participants.map((p) => (
+              <Pill
+                key={p.id}
+                onPress={() => setPaidById(p.id)}
+                selected={paidById === p.id}
+                size="sm"
+              >
+                {p.name}
+              </Pill>
+            ))}
+          </View>
+        </ScrollView>
+      </FormField>
+
+      {/* Split section */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 12, fontWeight: '600', color: '#5F685F', textTransform: 'uppercase', letterSpacing: 0.5 }}>Split</Text>
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          {(['equal', 'custom'] as const).map((mode) => (
+            <Pill
+              key={mode}
+              onPress={() => setSplitMode(mode)}
+              selected={splitMode === mode}
+              size="sm"
+            >
+              {mode === 'equal' ? 'Equal' : 'Custom'}
+            </Pill>
+          ))}
+        </View>
+      </View>
+
+      {splitMode === 'equal' ? (
+        <View style={{ gap: 6 }}>
+          {participants.map((p) => {
+            const share = equalSplits.find((s) => s.id === p.id)?.amountCents ?? 0;
+            return (
+              <View key={p.id} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Avatar name={p.name} size="sm" />
+                  <Text style={{ fontSize: 14, color: '#5F685F' }}>{p.name}</Text>
+                </View>
+                <Text style={{ fontSize: 14, fontWeight: '500', color: '#163026' }}>
+                  {share > 0 ? formatCents(share) : '—'}
+                </Text>
               </View>
-
-              <Text style={{ fontSize: 17, fontWeight: '700', color: '#163026', marginBottom: 20 }}>
-                Add expense
-              </Text>
-
-              {/* Description */}
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#5F685F', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Description *</Text>
-              <TextInput
-                value={description}
-                onChangeText={setDescription}
-                placeholder="e.g. Airbnb deposit"
-                placeholderTextColor="#9DA8A0"
-                style={{ borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026', marginBottom: 16 }}
-                autoFocus
-              />
-
-              {/* Amount */}
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#5F685F', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Amount *</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, marginBottom: 16 }}>
-                <Text style={{ fontSize: 18, fontWeight: '600', color: '#5F685F', marginRight: 4 }}>$</Text>
-                <TextInput
-                  value={amountRaw}
-                  onChangeText={(v) => setAmountRaw(v.replace(/[^0-9.]/g, ''))}
-                  placeholder="0.00"
-                  placeholderTextColor="#9DA8A0"
+            );
+          })}
+        </View>
+      ) : (
+        <View style={{ gap: 8 }}>
+          {participants.map((p) => (
+            <View key={p.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <Avatar name={p.name} size="sm" />
+              <Text style={{ fontSize: 14, color: '#5F685F', flex: 1 }}>{p.name}</Text>
+              <View style={{ width: 110 }}>
+                <Input
+                  value={customSplits[p.id] ?? ''}
+                  onChangeText={(v) =>
+                    setCustomSplits((prev) => ({ ...prev, [p.id]: v.replace(/[^0-9.]/g, '') }))
+                  }
+                  placeholder="$ 0.00"
                   keyboardType="decimal-pad"
-                  style={{ flex: 1, paddingVertical: 12, fontSize: 18, fontWeight: '600', color: '#163026' }}
                 />
               </View>
+            </View>
+          ))}
 
-              {/* Category */}
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#5F685F', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Category</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, marginBottom: 16 }}>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  {CATEGORIES.map((c) => {
-                    const active = category === c.value;
-                    return (
-                      <Pressable
-                        key={c.value}
-                        onPress={() => setCategory(c.value)}
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          gap: 6,
-                          paddingHorizontal: 12,
-                          paddingVertical: 7,
-                          borderRadius: 20,
-                          borderWidth: 1.5,
-                          borderColor: active ? '#0F3F2E' : '#D9CCB6',
-                          backgroundColor: active ? '#DFE8D2' : '#FFFCF6',
-                        }}
-                      >
-                        <Ionicons name={c.icon} size={13} color={active ? '#0F3F2E' : '#5F685F'} />
-                        <Text style={{ fontSize: 12, fontWeight: '600', color: active ? '#0F3F2E' : '#5F685F' }}>
-                          {c.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </ScrollView>
+          {/* Running total */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingTop: 8, borderTopWidth: 1, borderTopColor: '#D9CCB6' }}>
+            <Text style={{ fontSize: 13, fontWeight: '600', color: '#5F685F' }}>
+              {customDiff === 0 ? 'Splits match total ✓' : `Difference: ${customDiff > 0 ? '+' : ''}${formatCents(Math.abs(customDiff))}`}
+            </Text>
+            <Text style={{ fontSize: 13, fontWeight: '600', color: customDiff === 0 ? '#0F3F2E' : '#EF4444' }}>
+              {formatCents(customTotal)} / {formatCents(amountCents)}
+            </Text>
+          </View>
+        </View>
+      )}
 
-              {/* Paid by */}
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#5F685F', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Paid by</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, marginBottom: 16 }}>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  {participants.map((p) => {
-                    const active = paidById === p.id;
-                    return (
-                      <Pressable
-                        key={p.id}
-                        onPress={() => setPaidById(p.id)}
-                        style={{
-                          paddingHorizontal: 12,
-                          paddingVertical: 7,
-                          borderRadius: 20,
-                          borderWidth: 1.5,
-                          borderColor: active ? '#0F3F2E' : '#D9CCB6',
-                          backgroundColor: active ? '#DFE8D2' : '#FFFCF6',
-                        }}
-                      >
-                        <Text style={{ fontSize: 12, fontWeight: '600', color: active ? '#0F3F2E' : '#5F685F' }}>
-                          {p.name}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </ScrollView>
-
-              {/* Split section */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                <Text style={{ fontSize: 12, fontWeight: '600', color: '#5F685F', textTransform: 'uppercase', letterSpacing: 0.5 }}>Split</Text>
-                <View style={{ flexDirection: 'row', borderRadius: 10, borderWidth: 1, borderColor: '#D9CCB6', overflow: 'hidden' }}>
-                  {(['equal', 'custom'] as const).map((mode) => (
-                    <Pressable
-                      key={mode}
-                      onPress={() => setSplitMode(mode)}
-                      style={{
-                        paddingHorizontal: 12,
-                        paddingVertical: 5,
-                        backgroundColor: splitMode === mode ? '#0F3F2E' : '#FFFCF6',
-                      }}
-                    >
-                      <Text style={{ fontSize: 12, fontWeight: '600', color: splitMode === mode ? '#FFFCF6' : '#5F685F' }}>
-                        {mode === 'equal' ? 'Equal' : 'Custom'}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-
-              {splitMode === 'equal' ? (
-                <View style={{ gap: 6, marginBottom: 20 }}>
-                  {participants.map((p) => {
-                    const share = equalSplits.find((s) => s.id === p.id)?.amountCents ?? 0;
-                    return (
-                      <View key={p.id} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <Text style={{ fontSize: 14, color: '#5F685F' }}>{p.name}</Text>
-                        <Text style={{ fontSize: 14, fontWeight: '500', color: '#163026' }}>
-                          {share > 0 ? formatCents(share) : '—'}
-                        </Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              ) : (
-                <View style={{ gap: 8, marginBottom: 20 }}>
-                  {participants.map((p) => (
-                    <View key={p.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                      <Text style={{ fontSize: 14, color: '#5F685F', flex: 1 }}>{p.name}</Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 10, paddingHorizontal: 10, width: 100 }}>
-                        <Text style={{ fontSize: 14, color: '#5F685F', marginRight: 3 }}>$</Text>
-                        <TextInput
-                          value={customSplits[p.id] ?? ''}
-                          onChangeText={(v) =>
-                            setCustomSplits((prev) => ({ ...prev, [p.id]: v.replace(/[^0-9.]/g, '') }))
-                          }
-                          placeholder="0.00"
-                          placeholderTextColor="#9DA8A0"
-                          keyboardType="decimal-pad"
-                          style={{ flex: 1, paddingVertical: 8, fontSize: 14, color: '#163026' }}
-                        />
-                      </View>
-                    </View>
-                  ))}
-
-                  {/* Running total */}
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingTop: 8, borderTopWidth: 1, borderTopColor: '#D9CCB6' }}>
-                    <Text style={{ fontSize: 13, fontWeight: '600', color: '#5F685F' }}>
-                      {customDiff === 0 ? 'Splits match total ✓' : `Difference: ${customDiff > 0 ? '+' : ''}${formatCents(Math.abs(customDiff))}`}
-                    </Text>
-                    <Text style={{ fontSize: 13, fontWeight: '600', color: customDiff === 0 ? '#0F3F2E' : '#EF4444' }}>
-                      {formatCents(customTotal)} / {formatCents(amountCents)}
-                    </Text>
-                  </View>
-                </View>
-              )}
-
-              {/* Save */}
-              <View style={{ flexDirection: 'row', gap: 10 }}>
-                <View style={{ flex: 1 }}>
-                  <Button variant="secondary" onPress={onClose} fullWidth>
-                    Cancel
-                  </Button>
-                </View>
-                <View style={{ flex: 2 }}>
-                  <Button
-                    variant="primary"
-                    onPress={handleSave}
-                    loading={saving}
-                    disabled={!canSave || saving}
-                    fullWidth
-                  >
-                    Save expense
-                  </Button>
-                </View>
-              </View>
-            </Pressable>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Pressable>
-    </Modal>
+      <Sheet.Actions>
+        <View style={{ flex: 1 }}>
+          <Button variant="secondary" onPress={onClose} fullWidth>
+            Cancel
+          </Button>
+        </View>
+        <View style={{ flex: 2 }}>
+          <Button
+            variant="primary"
+            onPress={handleSave}
+            loading={saving}
+            disabled={!canSave || saving}
+            fullWidth
+          >
+            Save expense
+          </Button>
+        </View>
+      </Sheet.Actions>
+    </Sheet>
   );
 }
 

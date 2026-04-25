@@ -5,16 +5,12 @@
  */
 import { useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
   Linking,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
   Share,
-  Switch,
   Text,
   TextInput,
   View,
@@ -33,7 +29,7 @@ import {
 import { useGetTravelSuggestions } from '@/hooks/useAiSuggestions';
 import type { TravelSuggestion } from '@/lib/api/aiSuggestions';
 import type { TravelLeg, TransportMode } from '@/types/database';
-import { Button } from '@/components/ui';
+import { Avatar, Button, FormField, Input, Pill, Sheet, Spinner, Toggle } from '@/components/ui';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -176,78 +172,51 @@ function LegForm({
     <View style={{ gap: 14 }}>
       {/* Mode selector */}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-        {MODES.map((m) => {
-          const sel = mode === m;
-          return (
-            <Pressable
-              key={m}
-              onPress={() => setMode(m)}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 5,
-                paddingHorizontal: 12,
-                paddingVertical: 7,
-                borderRadius: 999,
-                borderWidth: 1.5,
-                borderColor: sel ? '#0F3F2E' : '#D9CCB6',
-                backgroundColor: sel ? '#fff5f2' : '#fff',
-              }}
-            >
-              <Ionicons name={MODE_CONFIG[m].icon} size={14} color={sel ? '#0F3F2E' : '#888'} />
-              <Text style={{ fontSize: 13, fontWeight: '500', color: sel ? '#0F3F2E' : '#555' }}>
-                {MODE_CONFIG[m].label}
-              </Text>
-            </Pressable>
-          );
-        })}
+        {MODES.map((m) => (
+          <Pill
+            key={m}
+            onPress={() => setMode(m)}
+            selected={mode === m}
+            leadingIcon={MODE_CONFIG[m].icon}
+            size="sm"
+          >
+            {MODE_CONFIG[m].label}
+          </Pill>
+        ))}
       </View>
 
       {/* Description + search */}
-      <View style={{ gap: 6 }}>
-        <Text style={{ fontSize: 12, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-          Description
-        </Text>
+      <FormField label="Description">
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          <TextInput
-            style={{
-              flex: 1,
-              height: 44,
-              borderWidth: 1.5,
-              borderColor: '#D9CCB6',
-              borderRadius: 10,
-              paddingHorizontal: 12,
-              fontSize: 15,
-              color: '#163026',
-              backgroundColor: '#FBF7EF',
-            }}
-            placeholder={
-              mode === 'flight'
-                ? 'e.g. JFK → LAX'
-                : mode === 'car'
-                ? 'e.g. Drive to Yosemite'
-                : `e.g. ${MODE_CONFIG[mode].label} to destination`
-            }
-            placeholderTextColor="#A8A8A8"
-            value={label}
-            onChangeText={setLabel}
-          />
+          <View style={{ flex: 1 }}>
+            <Input
+              placeholder={
+                mode === 'flight'
+                  ? 'e.g. JFK → LAX'
+                  : mode === 'car'
+                  ? 'e.g. Drive to Yosemite'
+                  : `e.g. ${MODE_CONFIG[mode].label} to destination`
+              }
+              value={label}
+              onChangeText={setLabel}
+            />
+          </View>
           <Pressable
             onPress={handleSearch}
             style={{
-              width: 44,
-              height: 44,
+              width: 48,
+              height: 48,
               borderRadius: 10,
-              backgroundColor: '#F3F3F3',
+              backgroundColor: '#EFE3D0',
               alignItems: 'center',
               justifyContent: 'center',
             }}
             accessibilityLabel={`Search ${MODE_CONFIG[mode].label}`}
           >
-            <Ionicons name="search-outline" size={20} color="#555" />
+            <Ionicons name="search-outline" size={20} color="#5F685F" />
           </Pressable>
         </View>
-      </View>
+      </FormField>
 
       {/* Dates — calendar picker */}
       <View style={{ gap: 6 }}>
@@ -296,49 +265,25 @@ function LegForm({
 
       {/* Times — departure and arrival */}
       <View style={{ flexDirection: 'row', gap: 8 }}>
-        <View style={{ flex: 1, gap: 6 }}>
-          <Text style={{ fontSize: 12, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            Departs
-          </Text>
-          <TextInput
-            style={{
-              height: 44,
-              borderWidth: 1.5,
-              borderColor: '#D9CCB6',
-              borderRadius: 10,
-              paddingHorizontal: 12,
-              fontSize: 15,
-              color: '#163026',
-              backgroundColor: '#FBF7EF',
-            }}
-            placeholder="HH:MM"
-            placeholderTextColor="#A8A8A8"
-            value={departureTime}
-            onChangeText={setDepartureTime}
-            keyboardType="numbers-and-punctuation"
-          />
+        <View style={{ flex: 1 }}>
+          <FormField label="Departs">
+            <Input
+              placeholder="HH:MM"
+              value={departureTime}
+              onChangeText={setDepartureTime}
+              keyboardType="numbers-and-punctuation"
+            />
+          </FormField>
         </View>
-        <View style={{ flex: 1, gap: 6 }}>
-          <Text style={{ fontSize: 12, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            Arrives
-          </Text>
-          <TextInput
-            style={{
-              height: 44,
-              borderWidth: 1.5,
-              borderColor: '#D9CCB6',
-              borderRadius: 10,
-              paddingHorizontal: 12,
-              fontSize: 15,
-              color: '#163026',
-              backgroundColor: '#FBF7EF',
-            }}
-            placeholder="HH:MM"
-            placeholderTextColor="#A8A8A8"
-            value={arrivalTime}
-            onChangeText={setArrivalTime}
-            keyboardType="numbers-and-punctuation"
-          />
+        <View style={{ flex: 1 }}>
+          <FormField label="Arrives">
+            <Input
+              placeholder="HH:MM"
+              value={arrivalTime}
+              onChangeText={setArrivalTime}
+              keyboardType="numbers-and-punctuation"
+            />
+          </FormField>
         </View>
       </View>
 
@@ -359,55 +304,24 @@ function LegForm({
       />
 
       {/* Booking ref */}
-      <View style={{ gap: 6 }}>
-        <Text style={{ fontSize: 12, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-          Confirmation / Booking ref{' '}
-          <Text style={{ fontWeight: '400', textTransform: 'none' }}>(optional)</Text>
-        </Text>
-        <TextInput
-          style={{
-            height: 44,
-            borderWidth: 1.5,
-            borderColor: '#D9CCB6',
-            borderRadius: 10,
-            paddingHorizontal: 12,
-            fontSize: 15,
-            color: '#163026',
-            backgroundColor: '#FBF7EF',
-          }}
+      <FormField label="Confirmation / Booking ref" trailing={<Text style={{ fontSize: 11, color: '#888' }}>(optional)</Text>}>
+        <Input
           placeholder="e.g. ABC123"
-          placeholderTextColor="#A8A8A8"
           value={bookingRef}
           onChangeText={setBookingRef}
           autoCapitalize="characters"
         />
-      </View>
+      </FormField>
 
       {/* Notes */}
-      <View style={{ gap: 6 }}>
-        <Text style={{ fontSize: 12, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-          Notes <Text style={{ fontWeight: '400', textTransform: 'none' }}>(optional)</Text>
-        </Text>
-        <TextInput
-          style={{
-            minHeight: 72,
-            borderWidth: 1.5,
-            borderColor: '#D9CCB6',
-            borderRadius: 10,
-            paddingHorizontal: 12,
-            paddingVertical: 10,
-            fontSize: 15,
-            color: '#163026',
-            backgroundColor: '#FBF7EF',
-            textAlignVertical: 'top',
-          }}
+      <FormField label="Notes" trailing={<Text style={{ fontSize: 11, color: '#888' }}>(optional)</Text>}>
+        <Input
           placeholder="e.g. Meet at Terminal 4, baggage claim"
-          placeholderTextColor="#A8A8A8"
           value={notes}
           onChangeText={setNotes}
           multiline
         />
-      </View>
+      </FormField>
 
       {/* Share with group toggle */}
       <View
@@ -427,12 +341,9 @@ function LegForm({
             Visible to all group members in their travel section
           </Text>
         </View>
-        <Switch
+        <Toggle
           value={shareWithGroup}
           onValueChange={setShareWithGroup}
-          trackColor={{ false: '#D9CCB6', true: '#C8ECD9' }}
-          thumbColor={shareWithGroup ? '#235C38' : '#fff'}
-          ios_backgroundColor="#D9CCB6"
         />
       </View>
 
@@ -483,52 +394,17 @@ function LegFormSheet({
 }) {
   const isEditing = Boolean(initialValues);
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-      statusBarTranslucent
-    >
-      <Pressable
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}
-        onPress={onClose}
-      >
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <Pressable onPress={() => {}} style={{ backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '90%' }}>
-            {/* Drag handle + header */}
-            <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
-              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#D9CCB6' }} />
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' }}>
-              <Pressable onPress={onClose}>
-                <Text style={{ fontSize: 15, color: '#0F3F2E' }}>Cancel</Text>
-              </Pressable>
-              <Text style={{ fontSize: 17, fontWeight: '700', color: '#163026' }}>
-                {isEditing ? 'Edit leg' : 'Add leg'}
-              </Text>
-              <View style={{ width: 56 }} />
-            </View>
-            {/* Scrollable form content */}
-            <ScrollView
-              contentContainerStyle={{ padding: 20, paddingBottom: 32 }}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              <LegForm
-                tripName={tripName}
-                tripStartDate={tripStartDate}
-                tripEndDate={tripEndDate}
-                initialValues={initialValues}
-                saving={saving}
-                onSave={onSave}
-                onCancel={onClose}
-              />
-            </ScrollView>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Pressable>
-    </Modal>
+    <Sheet visible={visible} onClose={onClose} title={isEditing ? 'Edit leg' : 'Add leg'}>
+      <LegForm
+        tripName={tripName}
+        tripStartDate={tripStartDate}
+        tripEndDate={tripEndDate}
+        initialValues={initialValues}
+        saving={saving}
+        onSave={onSave}
+        onCancel={onClose}
+      />
+    </Sheet>
   );
 }
 
@@ -753,20 +629,7 @@ function MemberLegCard({
     >
       {/* Member name */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <View
-          style={{
-            width: 26,
-            height: 26,
-            borderRadius: 13,
-            backgroundColor: '#E8F4EE',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Text style={{ fontSize: 12, fontWeight: '700', color: '#235C38' }}>
-            {respondentName.trim().charAt(0).toUpperCase()}
-          </Text>
-        </View>
+        <Avatar name={respondentName} size="sm" />
         <Text style={{ fontSize: 13, fontWeight: '600', color: '#555', flex: 1 }}>{respondentName}</Text>
         <Pressable
           onPress={handleShare}
@@ -909,24 +772,24 @@ function TravelAiSuggestionCard({ tripId, defaultExpanded = true, onApply }: { t
         {showOriginInput ? (
           <View style={{ gap: 8 }}>
             <Text style={{ fontSize: 12, color: '#4A6E8A' }}>Where are you traveling from? (optional)</Text>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <TextInput
-                value={origin}
-                onChangeText={setOrigin}
-                placeholder="e.g. New York, NY"
-                placeholderTextColor="#A3A3A3"
-                style={{ flex: 1, borderWidth: 1.5, borderColor: '#C8D9E8', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#163026', backgroundColor: 'white' }}
-                autoFocus
-                returnKeyType="done"
-                onSubmitEditing={handleSubmitOrigin}
-              />
+            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+              <View style={{ flex: 1 }}>
+                <Input
+                  value={origin}
+                  onChangeText={setOrigin}
+                  placeholder="e.g. New York, NY"
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={handleSubmitOrigin}
+                />
+              </View>
               <Pressable
                 onPress={handleSubmitOrigin}
                 disabled={getSuggestions.isPending}
                 style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: '#1A4060', justifyContent: 'center' }}
               >
                 {getSuggestions.isPending ? (
-                  <ActivityIndicator size="small" color="white" />
+                  <Spinner tone="onPrimary" />
                 ) : (
                   <Text style={{ fontSize: 13, fontWeight: '600', color: 'white' }}>Go</Text>
                 )}
@@ -941,7 +804,7 @@ function TravelAiSuggestionCard({ tripId, defaultExpanded = true, onApply }: { t
             accessibilityRole="button"
           >
             {getSuggestions.isPending ? (
-              <ActivityIndicator size="small" color="white" />
+              <Spinner tone="onPrimary" />
             ) : (
               <Text style={{ fontSize: 14, fontWeight: '700', color: '#FFFCF6' }}>Get suggestions</Text>
             )}
@@ -977,7 +840,7 @@ function TravelAiSuggestionCard({ tripId, defaultExpanded = true, onApply }: { t
           <Text style={{ fontSize: 14, fontWeight: '700', color: '#1A4060' }}>AI travel suggestions</Text>
         </View>
         {getSuggestions.isPending ? (
-          <ActivityIndicator size="small" color="#1A4060" />
+          <Spinner />
         ) : (
           <Ionicons
             name={expanded ? 'chevron-up' : 'chevron-down'}

@@ -34,6 +34,7 @@ import { getShareUrl } from '@/lib/api/trips';
 import { getTripStage, STAGE_ACCENT } from '@/lib/tripStage';
 import { GROUP_SIZE_MIDPOINTS } from '@/types/database';
 import type { Respondent } from '@/types/database';
+import { Avatar } from '@/components/ui';
 
 // ─── Swipeable member row ──────────────────────────────────────────────────────
 
@@ -300,11 +301,7 @@ export default function MembersScreen() {
                 <View style={[styles.row, respondents.length > 0 && styles.rowBorder]}>
                   <View style={styles.avatarWrap}>
                     <Ionicons name="ribbon" size={13} color="#D97706" style={styles.crownIcon} />
-                    <View style={[styles.avatar, styles.avatarPlanner]}>
-                      <Text style={[styles.avatarText, styles.avatarTextPlanner]}>
-                        {(plannerName || plannerEmail).trim().charAt(0).toUpperCase()}
-                      </Text>
-                    </View>
+                    <Avatar name={plannerName || plannerEmail} size="md" />
                   </View>
                   <View style={{ flex: 1, gap: 3 }}>
                     <Text style={styles.name}>{plannerName || plannerEmail}</Text>
@@ -362,11 +359,7 @@ export default function MembersScreen() {
                       {r.is_planner ? (
                         <Ionicons name="ribbon" size={13} color="#D97706" style={styles.crownIcon} />
                       ) : null}
-                      <View style={[styles.avatar, r.is_planner && styles.avatarPlanner]}>
-                        <Text style={[styles.avatarText, r.is_planner && styles.avatarTextPlanner]}>
-                          {r.name.trim().charAt(0).toUpperCase()}
-                        </Text>
-                      </View>
+                      <Avatar name={r.name} size="md" />
                     </View>
                     <View style={{ flex: 1, gap: 3 }}>
                       {/* Name + RSVP badge */}

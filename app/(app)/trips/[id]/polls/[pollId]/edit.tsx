@@ -7,14 +7,13 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  Switch,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Divider } from '@/components/ui';
+import { Button, Divider, Input, Pill, Toggle } from '@/components/ui';
 import { POPULAR_DESTINATIONS } from '@/lib/constants/destinations';
 import { usePolls } from '@/hooks/usePolls';
 import { pollKeys } from '@/hooks/usePolls';
@@ -480,15 +479,11 @@ export default function EditPollScreen() {
           {/* ── Destination ──────────────────────────────────────────────── */}
           {poll.type === 'destination' && (
             <>
-              <View className="gap-1">
-                <Text className="text-sm font-medium text-ink">Question</Text>
-                <TextInput
-                  value={destTitle}
-                  onChangeText={setDestTitle}
-                  className="min-h-[48px] rounded-2xl border border-line bg-card px-4 py-3 text-base text-ink"
-                  placeholderTextColor="#A8A8A8"
-                />
-              </View>
+              <Input
+                label="Question"
+                value={destTitle}
+                onChangeText={setDestTitle}
+              />
               <Divider />
               <View className="gap-2">
                 <Text className="text-sm font-medium text-ink">
@@ -525,7 +520,7 @@ export default function EditPollScreen() {
                   <Text className="text-base font-medium text-ink">Allow multiple choices</Text>
                   <Text className="text-sm text-muted">Group members can select more than one</Text>
                 </View>
-                <Switch value={destAllowMulti} onValueChange={setDestAllowMulti} trackColor={{ false: '#E8E8E8', true: '#0F3F2E' }} thumbColor="white" />
+                <Toggle value={destAllowMulti} onValueChange={setDestAllowMulti} />
               </View>
             </>
           )}
@@ -533,15 +528,11 @@ export default function EditPollScreen() {
           {/* ── Dates ────────────────────────────────────────────────────── */}
           {poll.type === 'dates' && (
             <>
-              <View className="gap-1">
-                <Text className="text-sm font-medium text-ink">Question</Text>
-                <TextInput
-                  value={datesTitle}
-                  onChangeText={setDatesTitle}
-                  className="min-h-[48px] rounded-2xl border border-line bg-card px-4 py-3 text-base text-ink"
-                  placeholderTextColor="#A8A8A8"
-                />
-              </View>
+              <Input
+                label="Question"
+                value={datesTitle}
+                onChangeText={setDatesTitle}
+              />
               <Divider />
               {isDatesAvailability ? (
                 <>
@@ -552,25 +543,19 @@ export default function EditPollScreen() {
                 <View className="gap-3">
                   <Text className="text-sm font-medium text-ink">Duration options</Text>
                   <View className="flex-row flex-wrap gap-2">
-                    {DURATION_OPTIONS.map((dur) => {
-                      const sel = selectedDurations.includes(dur);
-                      return (
-                        <Pressable
-                          key={dur}
-                          onPress={() => toggleDuration(dur)}
-                          className={['rounded-full border px-4 py-2', sel ? 'border-green bg-green' : 'border-line bg-cream-warm'].join(' ')}
-                        >
-                          <Text className={['text-sm font-medium', sel ? 'text-white' : 'text-ink'].join(' ')}>{dur}</Text>
-                        </Pressable>
-                      );
-                    })}
+                    {DURATION_OPTIONS.map((dur) => (
+                      <Pill
+                        key={dur}
+                        onPress={() => toggleDuration(dur)}
+                        selected={selectedDurations.includes(dur)}
+                      >
+                        {dur}
+                      </Pill>
+                    ))}
                     {selectedDurations.filter((d) => !DURATION_OPTIONS.includes(d)).map((dur) => (
-                      <View key={dur} className="flex-row items-center gap-1 rounded-full border border-green bg-green px-4 py-2">
-                        <Text className="text-sm font-medium text-white">{dur}</Text>
-                        <Pressable onPress={() => toggleDuration(dur)} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
-                          <Ionicons name="close" size={13} color="white" />
-                        </Pressable>
-                      </View>
+                      <Pill key={dur} selected onPress={() => toggleDuration(dur)}>
+                        {`${dur}  ✕`}
+                      </Pill>
                     ))}
                   </View>
                   <View className="flex-row items-center gap-2">
@@ -585,20 +570,19 @@ export default function EditPollScreen() {
                       className="w-20 min-h-[44px] rounded-2xl border border-line bg-card px-4 py-2 text-sm text-ink text-center"
                       placeholderTextColor="#A8A8A8"
                     />
-                    {(['days', 'weeks', 'months'] as const).map((u) => {
-                      const sel = customDurationUnit === u;
-                      return (
-                        <Pressable
-                          key={u}
+                    {(['days', 'weeks', 'months'] as const).map((u) => (
+                      <View key={u} style={{ flex: 1 }}>
+                        <Pill
                           onPress={() => setCustomDurationUnit(u)}
-                          className={['flex-1 items-center justify-center rounded-2xl border min-h-[44px] px-1', sel ? 'border-green bg-green' : 'border-line bg-card'].join(' ')}
+                          selected={customDurationUnit === u}
+                          size="sm"
                           accessibilityRole="radio"
-                          accessibilityState={{ selected: sel }}
+                          accessibilityState={{ selected: customDurationUnit === u }}
                         >
-                          <Text className={['text-xs font-medium', sel ? 'text-white' : 'text-muted'].join(' ')}>{u}</Text>
-                        </Pressable>
-                      );
-                    })}
+                          {u}
+                        </Pill>
+                      </View>
+                    ))}
                     <Pressable
                       onPress={addCustomDuration}
                       disabled={!customDurationInput.trim()}
@@ -616,15 +600,11 @@ export default function EditPollScreen() {
           {/* ── Budget ───────────────────────────────────────────────────── */}
           {poll.type === 'budget' && (
             <>
-              <View className="gap-1">
-                <Text className="text-sm font-medium text-ink">Question</Text>
-                <TextInput
-                  value={budgetTitle}
-                  onChangeText={setBudgetTitle}
-                  className="min-h-[48px] rounded-2xl border border-line bg-card px-4 py-3 text-base text-ink"
-                  placeholderTextColor="#A8A8A8"
-                />
-              </View>
+              <Input
+                label="Question"
+                value={budgetTitle}
+                onChangeText={setBudgetTitle}
+              />
               <Divider />
               <View className="gap-2">
                 <Text className="text-sm font-medium text-ink">Budget tiers</Text>
@@ -669,16 +649,12 @@ export default function EditPollScreen() {
           {/* ── Custom ───────────────────────────────────────────────────── */}
           {poll.type === 'custom' && (
             <>
-              <View className="gap-1">
-                <Text className="text-sm font-medium text-ink">Question</Text>
-                <TextInput
-                  value={customTitle}
-                  onChangeText={setCustomTitle}
-                  placeholder="e.g. What activities do you want?"
-                  className="min-h-[48px] rounded-2xl border border-line bg-card px-4 py-3 text-base text-ink"
-                  placeholderTextColor="#A8A8A8"
-                />
-              </View>
+              <Input
+                label="Question"
+                value={customTitle}
+                onChangeText={setCustomTitle}
+                placeholder="e.g. What activities do you want?"
+              />
               <Divider />
               <View className="gap-2">
                 <Text className="text-sm font-medium text-ink">
@@ -686,14 +662,14 @@ export default function EditPollScreen() {
                 </Text>
                 {customOptions.map((opt, i) => (
                   <View key={i} className="flex-row items-center gap-2">
-                    <TextInput
-                      value={opt}
-                      onChangeText={(v) => updateCustomOption(i, v)}
-                      placeholder={`Option ${i + 1}${i < 2 ? ' *' : ''}`}
-                      maxLength={60}
-                      className="flex-1 min-h-[48px] rounded-2xl border border-line bg-card px-4 py-3 text-base text-ink"
-                      placeholderTextColor="#A8A8A8"
-                    />
+                    <View style={{ flex: 1 }}>
+                      <Input
+                        value={opt}
+                        onChangeText={(v) => updateCustomOption(i, v)}
+                        placeholder={`Option ${i + 1}${i < 2 ? ' *' : ''}`}
+                        maxLength={60}
+                      />
+                    </View>
                     {customOptions.length > 2 ? (
                       <Pressable onPress={() => removeCustomOption(i)} className="p-2" accessibilityRole="button">
                         <Ionicons name="close-circle" size={22} color="#A8A8A8" />
@@ -714,7 +690,7 @@ export default function EditPollScreen() {
                   <Text className="text-base font-medium text-ink">Allow multiple choices</Text>
                   <Text className="text-sm text-muted">Group members can select more than one</Text>
                 </View>
-                <Switch value={customAllowMulti} onValueChange={setCustomAllowMulti} trackColor={{ false: '#E8E8E8', true: '#0F3F2E' }} thumbColor="white" />
+                <Toggle value={customAllowMulti} onValueChange={setCustomAllowMulti} />
               </View>
             </>
           )}

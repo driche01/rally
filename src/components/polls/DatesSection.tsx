@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
-import { Divider, Input } from '@/components/ui';
+import { Divider, Input, Pill } from '@/components/ui';
 import {
   MONTH_NAMES,
   DAY_NAMES,
@@ -230,40 +230,28 @@ export function DatesSection({
           {DURATION_OPTIONS.map((dur) => {
             const sel = selectedDurations.includes(dur);
             return (
-              <Pressable
+              <Pill
                 key={dur}
                 onPress={() => onDurationToggle(dur)}
-                className="rounded-full border px-4 py-2"
-                style={sel
-                  ? { borderColor: accentColor, backgroundColor: accentColor }
-                  : { borderColor: '#E7DDCF', backgroundColor: '#F4ECDF' }
-                }
+                selected={sel}
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: sel }}
               >
-                <Text className="text-sm font-medium" style={{ color: sel ? '#F4ECDF' : '#525252' }}>
-                  {dur}
-                </Text>
-              </Pressable>
+                {dur}
+              </Pill>
             );
           })}
           {/* Custom (user-added) duration chips */}
           {selectedDurations
             .filter((d) => !DURATION_OPTIONS.includes(d))
             .map((dur) => (
-              <View
+              <Pill
                 key={dur}
-                className="flex-row items-center gap-1 rounded-full border px-4 py-2"
-                style={{ borderColor: accentColor, backgroundColor: accentColor }}
+                selected
+                onPress={() => onDurationToggle(dur)}
               >
-                <Text className="text-sm font-medium text-white">{dur}</Text>
-                <Pressable
-                  onPress={() => onDurationToggle(dur)}
-                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-                >
-                  <Ionicons name="close" size={13} color="white" />
-                </Pressable>
-              </View>
+                {`${dur}  ✕`}
+              </Pill>
             ))}
         </View>
 
@@ -283,22 +271,18 @@ export function DatesSection({
           {DURATION_UNITS.map((u) => {
             const sel = customDurationUnit === u;
             return (
-              <Pressable
-                key={u}
-                onPress={() => onCustomDurationUnitChange(u)}
-                className="flex-1 items-center justify-center rounded-2xl border min-h-[44px] px-1"
-                style={sel
-                  ? { borderColor: accentColor, backgroundColor: accentColor }
-                  : { borderColor: '#E7DDCF', backgroundColor: '#F4ECDF' }
-                }
-                accessibilityRole="radio"
-                accessibilityState={{ selected: sel }}
-                accessibilityLabel={u}
-              >
-                <Text className="text-xs font-medium" style={{ color: sel ? '#F4ECDF' : '#525252' }}>
+              <View key={u} style={{ flex: 1 }}>
+                <Pill
+                  onPress={() => onCustomDurationUnitChange(u)}
+                  selected={sel}
+                  size="sm"
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: sel }}
+                  accessibilityLabel={u}
+                >
                   {u}
-                </Text>
-              </Pressable>
+                </Pill>
+              </View>
             );
           })}
           {/* FUTURE: icon-only Button variant */}
