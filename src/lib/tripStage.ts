@@ -54,12 +54,22 @@ export function getStageIndex(stage: TripStage): number {
   return STAGES.indexOf(stage);
 }
 
-/** Primary accent color for each stage — use for nav elements, CTAs, progress fills. */
+/**
+ * Primary accent color for each stage — use for nav elements, CTAs, progress fills.
+ *
+ * 2026-04-24 brand: primary CTA = deep green across the whole app. Per-stage
+ * differentiation (coral, blue, bright-green) was retired because (a) the
+ * blue planning accent violated the "no blue" rule and (b) the trip-hub
+ * stage banners already carry stage storytelling via their dark moody
+ * backgrounds. Nav/CTA accents stay constant so the brand reads as one app
+ * regardless of which stage you're looking at. Reconciling + done get a
+ * quieter ink-tone since those stages are post-active.
+ */
 export const STAGE_ACCENT: Record<TripStage, string> = {
-  deciding:     '#E05A28',
-  confirmed:    '#1A9E5A',
-  planning:     '#1563B0',
-  experiencing: '#0A8A6A',
-  reconciling:  '#888888',
-  done:         '#2C2C2A',
+  deciding:     '#0F3F2E',
+  confirmed:    '#0F3F2E',
+  planning:     '#0F3F2E',
+  experiencing: '#0F3F2E',
+  reconciling:  '#5F685F',
+  done:         '#163026',
 };
