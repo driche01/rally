@@ -3,6 +3,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { capture, Events } from './analytics';
 import { supabase } from './supabase';
+import { T } from '../theme';
 
 // Show banner + sound while app is foregrounded
 Notifications.setNotificationHandler({
@@ -48,7 +49,7 @@ export async function registerPushToken(): Promise<void> {
       name: 'Rally',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#D85A30',
+      lightColor: T.green,
     });
   }
 
