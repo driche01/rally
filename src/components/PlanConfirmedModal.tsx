@@ -94,7 +94,7 @@ export function PlanConfirmedModal({
 
             {/* Drag handle */}
             <View style={{ alignItems: 'center', marginTop: -8, marginBottom: 4 }}>
-              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#E5E5E5' }} />
+              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#D9CCB6' }} />
             </View>
 
             {/* Celebration icon */}
@@ -117,7 +117,7 @@ export function PlanConfirmedModal({
                 style={{
                   fontSize: 24,
                   fontWeight: '700',
-                  color: '#1C1C1C',
+                  color: '#163026',
                   textAlign: 'center',
                   marginBottom: 8,
                 }}
@@ -135,7 +135,7 @@ export function PlanConfirmedModal({
                 }}
               >
                 Your group decided on{' '}
-                <Text style={{ color: '#D85A30', fontWeight: '600' }}>{destination}</Text>
+                <Text style={{ color: '#0F3F2E', fontWeight: '600' }}>{destination}</Text>
                 {'. '}
                 Time to turn that decision into a real trip.
               </Text>
@@ -163,7 +163,7 @@ export function PlanConfirmedModal({
                       justifyContent: 'center',
                     }}
                   >
-                    <Ionicons name={icon} size={16} color="#D85A30" />
+                    <Ionicons name={icon} size={16} color="#0F3F2E" />
                   </View>
                   <Text style={{ flex: 1, fontSize: 14, color: '#525252' }}>{text}</Text>
                 </View>
@@ -174,7 +174,7 @@ export function PlanConfirmedModal({
             <Pressable
               onPress={handleBuildTrip}
               style={{
-                backgroundColor: '#D85A30',
+                backgroundColor: '#0F3F2E',
                 borderRadius: 16,
                 paddingVertical: 16,
                 alignItems: 'center',

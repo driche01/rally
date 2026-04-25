@@ -41,7 +41,7 @@ const BLOCK_TYPE_COLORS: Record<string, string> = {
   activity:      '#2563EB',
   meal:          '#EA580C',
   travel:        '#9333EA',
-  accommodation: '#D85A30',
+  accommodation: '#0F3F2E',
   free_time:     '#16A34A',
 };
 
@@ -339,7 +339,7 @@ export function BlockAlternativesSheet({ visible, block, tripId, onClose, onAppl
                       <View style={{ marginTop: 4 }}>
                         <AlternativeCard
                           alt={customAlt}
-                          accent="#D85A30"
+                          accent="#0F3F2E"
                           onUse={() => onApply(customAlt)}
                           applying={applying}
                         />
@@ -365,7 +365,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FFFCF6',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingHorizontal: 24,
@@ -380,12 +380,12 @@ const styles = StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#E5E5E5',
+    backgroundColor: '#D9CCB6',
   },
   sheetTitle: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: '#163026',
   },
   sheetSubtitle: {
     fontSize: 12,
@@ -406,7 +406,7 @@ const styles = StyleSheet.create({
   currentBlockTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1A1A1A',
+    color: '#163026',
   },
   divider: {
     height: 1,
@@ -444,7 +444,7 @@ const styles = StyleSheet.create({
   altTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: '#163026',
     lineHeight: 19,
   },
   altMeta: {
@@ -469,7 +469,7 @@ const styles = StyleSheet.create({
   useBtnText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: '#FFFCF6',
   },
   // ── Custom prompt ──────────────────────────────────────────────────────────
   customSection: {
@@ -483,12 +483,12 @@ const styles = StyleSheet.create({
   },
   customInput: {
     borderWidth: 1.5,
-    borderColor: '#E5E5E5',
+    borderColor: '#D9CCB6',
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 14,
-    color: '#1A1A1A',
+    color: '#163026',
     minHeight: 64,
     textAlignVertical: 'top',
   },
@@ -497,7 +497,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    backgroundColor: '#D85A30',
+    backgroundColor: '#0F3F2E',
     borderRadius: 12,
     paddingVertical: 12,
   },
@@ -507,7 +507,7 @@ const styles = StyleSheet.create({
   customBtnText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: '#FFFCF6',
   },
   customError: {
     fontSize: 13,

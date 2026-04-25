@@ -87,7 +87,7 @@ function BalanceCard({
     : `Owes ${formatCents(Math.abs(balance.net))}`;
 
   const netColor = isEven
-    ? 'text-neutral-400'
+    ? 'text-muted'
     : isOwed
     ? 'text-green-600'
     : 'text-red-500';
@@ -103,7 +103,7 @@ function BalanceCard({
 
   return (
     <View
-      className="mr-3 w-40 rounded-2xl bg-white p-3"
+      className="mr-3 w-40 rounded-2xl bg-card p-3"
       style={{
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
@@ -112,18 +112,20 @@ function BalanceCard({
         elevation: 2,
       }}
     >
-      <Text className="text-sm font-semibold text-neutral-800" numberOfLines={1}>
+      <Text className="text-sm font-semibold text-ink" numberOfLines={1}>
         {balance.name}
       </Text>
       <Text className={`mt-0.5 text-xs font-medium ${netColor}`}>{netLabel}</Text>
 
       {!isEven && !isOwed ? (
+        // Venmo logo retains its blue brand identity (per Venmo brand guidelines),
+        // but the button bg + text are brand-coherent so the action reads as Rally's.
         <Pressable
           onPress={handleVenmo}
-          className="mt-2 flex-row items-center justify-center gap-1 rounded-xl bg-blue-50 py-1.5"
+          className="mt-2 flex-row items-center justify-center gap-1 rounded-xl bg-green-soft py-1.5"
         >
-          <Ionicons name="logo-venmo" size={12} color="#2563EB" />
-          <Text className="text-xs font-semibold text-blue-600">Settle</Text>
+          <Ionicons name="logo-venmo" size={12} color="#3D95CE" />
+          <Text className="text-xs font-semibold text-green-dark">Settle</Text>
         </Pressable>
       ) : null}
     </View>
@@ -180,7 +182,7 @@ function ExpenseCard({
   return (
     <Pressable
       onLongPress={handleLongPress}
-      className="mb-3 rounded-2xl bg-white p-4"
+      className="mb-3 rounded-2xl bg-card p-4"
       style={{
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
@@ -191,16 +193,16 @@ function ExpenseCard({
     >
       {/* Header */}
       <View className="flex-row items-start gap-3">
-        <View className="mt-0.5 h-9 w-9 items-center justify-center rounded-xl bg-neutral-100">
+        <View className="mt-0.5 h-9 w-9 items-center justify-center rounded-xl bg-cream-warm">
           <Ionicons name={icon} size={18} color="#737373" />
         </View>
         <View className="flex-1">
-          <Text className="text-sm font-semibold text-neutral-800">{expense.description}</Text>
-          <Text className="text-xs text-neutral-400">
+          <Text className="text-sm font-semibold text-ink">{expense.description}</Text>
+          <Text className="text-xs text-muted">
             {cat?.label} · Paid by {payerName}
           </Text>
         </View>
-        <Text className="text-base font-bold text-neutral-800">
+        <Text className="text-base font-bold text-ink">
           {formatCents(expense.amount_cents)}
         </Text>
       </View>
@@ -208,7 +210,7 @@ function ExpenseCard({
       {/* Splits */}
       {expense.splits.length > 0 ? (
         <View className="mt-3 gap-1.5">
-          <Text className="text-xs font-semibold uppercase tracking-wider text-neutral-400">Splits</Text>
+          <Text className="text-xs font-semibold uppercase tracking-wider text-muted">Splits</Text>
           {expense.splits.map((split) => (
             <TouchableOpacity
               key={split.id}
@@ -221,7 +223,7 @@ function ExpenseCard({
                   className={`h-5 w-5 items-center justify-center rounded-full border ${
                     split.is_settled
                       ? 'border-green-400 bg-green-50'
-                      : 'border-neutral-200 bg-white'
+                      : 'border-line bg-card'
                   }`}
                 >
                   {split.is_settled ? (
@@ -229,13 +231,13 @@ function ExpenseCard({
                   ) : null}
                 </View>
                 <Text
-                  className={`text-sm ${split.is_settled ? 'text-neutral-400 line-through' : 'text-neutral-700'}`}
+                  className={`text-sm ${split.is_settled ? 'text-muted line-through' : 'text-ink'}`}
                 >
                   {splitPersonName(split)}
                 </Text>
               </View>
               <Text
-                className={`text-sm font-medium ${split.is_settled ? 'text-neutral-400' : 'text-neutral-700'}`}
+                className={`text-sm font-medium ${split.is_settled ? 'text-muted' : 'text-ink'}`}
               >
                 {formatCents(split.amount_cents)}
               </Text>
@@ -367,10 +369,10 @@ function AddExpenseSheet({
           >
             <Pressable onPress={() => {}}>
               <View style={{ alignItems: 'center', marginBottom: 4 }}>
-                <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#E5E5E5' }} />
+                <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#D9CCB6' }} />
               </View>
 
-              <Text style={{ fontSize: 17, fontWeight: '700', color: '#1C1C1C', marginBottom: 20 }}>
+              <Text style={{ fontSize: 17, fontWeight: '700', color: '#163026', marginBottom: 20 }}>
                 Add expense
               </Text>
 
@@ -381,13 +383,13 @@ function AddExpenseSheet({
                 onChangeText={setDescription}
                 placeholder="e.g. Airbnb deposit"
                 placeholderTextColor="#A3A3A3"
-                style={{ borderWidth: 1.5, borderColor: '#E5E5E5', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1C1C1C', marginBottom: 16 }}
+                style={{ borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026', marginBottom: 16 }}
                 autoFocus
               />
 
               {/* Amount */}
               <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Amount *</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#E5E5E5', borderRadius: 12, paddingHorizontal: 14, marginBottom: 16 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, marginBottom: 16 }}>
                 <Text style={{ fontSize: 18, fontWeight: '600', color: '#737373', marginRight: 4 }}>$</Text>
                 <TextInput
                   value={amountRaw}
@@ -395,7 +397,7 @@ function AddExpenseSheet({
                   placeholder="0.00"
                   placeholderTextColor="#A3A3A3"
                   keyboardType="decimal-pad"
-                  style={{ flex: 1, paddingVertical: 12, fontSize: 18, fontWeight: '600', color: '#1C1C1C' }}
+                  style={{ flex: 1, paddingVertical: 12, fontSize: 18, fontWeight: '600', color: '#163026' }}
                 />
               </View>
 
@@ -417,12 +419,12 @@ function AddExpenseSheet({
                           paddingVertical: 7,
                           borderRadius: 20,
                           borderWidth: 1.5,
-                          borderColor: active ? '#D85A30' : '#E5E5E5',
+                          borderColor: active ? '#0F3F2E' : '#D9CCB6',
                           backgroundColor: active ? '#FFF1F0' : 'white',
                         }}
                       >
-                        <Ionicons name={c.icon} size={13} color={active ? '#D85A30' : '#737373'} />
-                        <Text style={{ fontSize: 12, fontWeight: '600', color: active ? '#D85A30' : '#737373' }}>
+                        <Ionicons name={c.icon} size={13} color={active ? '#0F3F2E' : '#737373'} />
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: active ? '#0F3F2E' : '#737373' }}>
                           {c.label}
                         </Text>
                       </Pressable>
@@ -446,11 +448,11 @@ function AddExpenseSheet({
                           paddingVertical: 7,
                           borderRadius: 20,
                           borderWidth: 1.5,
-                          borderColor: active ? '#D85A30' : '#E5E5E5',
+                          borderColor: active ? '#0F3F2E' : '#D9CCB6',
                           backgroundColor: active ? '#FFF1F0' : 'white',
                         }}
                       >
-                        <Text style={{ fontSize: 12, fontWeight: '600', color: active ? '#D85A30' : '#737373' }}>
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: active ? '#0F3F2E' : '#737373' }}>
                           {p.name}
                         </Text>
                       </Pressable>
@@ -462,7 +464,7 @@ function AddExpenseSheet({
               {/* Split section */}
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                 <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', textTransform: 'uppercase', letterSpacing: 0.5 }}>Split</Text>
-                <View style={{ flexDirection: 'row', borderRadius: 10, borderWidth: 1, borderColor: '#E5E5E5', overflow: 'hidden' }}>
+                <View style={{ flexDirection: 'row', borderRadius: 10, borderWidth: 1, borderColor: '#D9CCB6', overflow: 'hidden' }}>
                   {(['equal', 'custom'] as const).map((mode) => (
                     <Pressable
                       key={mode}
@@ -470,7 +472,7 @@ function AddExpenseSheet({
                       style={{
                         paddingHorizontal: 12,
                         paddingVertical: 5,
-                        backgroundColor: splitMode === mode ? '#D85A30' : 'white',
+                        backgroundColor: splitMode === mode ? '#0F3F2E' : 'white',
                       }}
                     >
                       <Text style={{ fontSize: 12, fontWeight: '600', color: splitMode === mode ? 'white' : '#737373' }}>
@@ -488,7 +490,7 @@ function AddExpenseSheet({
                     return (
                       <View key={p.id} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                         <Text style={{ fontSize: 14, color: '#525252' }}>{p.name}</Text>
-                        <Text style={{ fontSize: 14, fontWeight: '500', color: '#1C1C1C' }}>
+                        <Text style={{ fontSize: 14, fontWeight: '500', color: '#163026' }}>
                           {share > 0 ? formatCents(share) : '—'}
                         </Text>
                       </View>
@@ -500,7 +502,7 @@ function AddExpenseSheet({
                   {participants.map((p) => (
                     <View key={p.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                       <Text style={{ fontSize: 14, color: '#525252', flex: 1 }}>{p.name}</Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#E5E5E5', borderRadius: 10, paddingHorizontal: 10, width: 100 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 10, paddingHorizontal: 10, width: 100 }}>
                         <Text style={{ fontSize: 14, color: '#737373', marginRight: 3 }}>$</Text>
                         <TextInput
                           value={customSplits[p.id] ?? ''}
@@ -510,7 +512,7 @@ function AddExpenseSheet({
                           placeholder="0.00"
                           placeholderTextColor="#A3A3A3"
                           keyboardType="decimal-pad"
-                          style={{ flex: 1, paddingVertical: 8, fontSize: 14, color: '#1C1C1C' }}
+                          style={{ flex: 1, paddingVertical: 8, fontSize: 14, color: '#163026' }}
                         />
                       </View>
                     </View>
@@ -532,14 +534,14 @@ function AddExpenseSheet({
               <View style={{ flexDirection: 'row', gap: 10 }}>
                 <Pressable
                   onPress={onClose}
-                  style={{ flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#E5E5E5', alignItems: 'center' }}
+                  style={{ flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#D9CCB6', alignItems: 'center' }}
                 >
                   <Text style={{ fontSize: 15, fontWeight: '600', color: '#525252' }}>Cancel</Text>
                 </Pressable>
                 <Pressable
                   onPress={handleSave}
                   disabled={!canSave || saving}
-                  style={{ flex: 2, paddingVertical: 14, borderRadius: 14, backgroundColor: canSave ? '#D85A30' : '#FCA99F', alignItems: 'center', justifyContent: 'center' }}
+                  style={{ flex: 2, paddingVertical: 14, borderRadius: 14, backgroundColor: canSave ? '#0F3F2E' : '#FCA99F', alignItems: 'center', justifyContent: 'center' }}
                 >
                   {saving ? (
                     <ActivityIndicator size="small" color="white" />
@@ -623,7 +625,7 @@ export function ExpensesTab({ tripId, isPlanner = true }: { tripId: string; isPl
   const hasExpenses = expenses.length > 0;
 
   return (
-    <View className="flex-1 bg-neutral-50">
+    <View className="flex-1 bg-cream">
       <ScrollView
         contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 80 }}
         keyboardDismissMode="on-drag"
@@ -631,7 +633,7 @@ export function ExpensesTab({ tripId, isPlanner = true }: { tripId: string; isPl
       >
         {/* Header */}
         <View className="flex-row items-center justify-between pt-4 pb-3">
-          <Text className="text-base font-bold text-neutral-800">Expenses</Text>
+          <Text className="text-base font-bold text-ink">Expenses</Text>
           {hasExpenses ? (
             <View className="flex-row items-center gap-2">
               <Pressable
@@ -645,10 +647,10 @@ export function ExpensesTab({ tripId, isPlanner = true }: { tripId: string; isPl
                   });
                   try { await Share.share({ message: lines.join('\n') }); } catch {}
                 }}
-                className="flex-row items-center gap-1 rounded-xl border border-neutral-200 px-3 py-1.5"
+                className="flex-row items-center gap-1 rounded-xl border border-line px-3 py-1.5"
               >
                 <Ionicons name="share-outline" size={14} color="#737373" />
-                <Text className="text-xs font-medium text-neutral-600">Share</Text>
+                <Text className="text-xs font-medium text-muted">Share</Text>
               </Pressable>
               <Pressable
                 onPress={() => {
@@ -656,10 +658,10 @@ export function ExpensesTab({ tripId, isPlanner = true }: { tripId: string; isPl
                   Alert.alert('Export', 'CSV data copied to clipboard.', [{ text: 'OK' }]);
                   void csv;
                 }}
-                className="flex-row items-center gap-1 rounded-xl border border-neutral-200 px-3 py-1.5"
+                className="flex-row items-center gap-1 rounded-xl border border-line px-3 py-1.5"
               >
                 <Ionicons name="download-outline" size={14} color="#737373" />
-                <Text className="text-xs font-medium text-neutral-600">Export CSV</Text>
+                <Text className="text-xs font-medium text-muted">Export CSV</Text>
               </Pressable>
             </View>
           ) : null}
@@ -668,7 +670,7 @@ export function ExpensesTab({ tripId, isPlanner = true }: { tripId: string; isPl
         {/* ── Section A: Balance strip ── */}
         {balances.length > 0 ? (
           <View className="mb-5">
-            <Text className="mb-2 text-xs font-semibold uppercase tracking-wider text-neutral-400">
+            <Text className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
               Balances
             </Text>
             <ScrollView
@@ -686,7 +688,7 @@ export function ExpensesTab({ tripId, isPlanner = true }: { tripId: string; isPl
         {/* ── Section B: Expense feed ── */}
         {!hasExpenses ? (
           <View className="mt-2 gap-3">
-            <Text className="text-xs text-neutral-400">
+            <Text className="text-xs text-muted">
               Accommodation costs from your booking will appear here automatically.
             </Text>
             {isPlanner ? (
@@ -710,7 +712,7 @@ export function ExpensesTab({ tripId, isPlanner = true }: { tripId: string; isPl
           </View>
         ) : (
           <>
-            <Text className="mb-2 text-xs font-semibold uppercase tracking-wider text-neutral-400">
+            <Text className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
               All expenses
             </Text>
             {expenses.map((expense) => (
