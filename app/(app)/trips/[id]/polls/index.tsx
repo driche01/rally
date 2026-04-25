@@ -20,6 +20,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Badge, Button, Card } from '@/components/ui';
+import { T } from '@/theme';
 import { PreciseGroupSizeModal } from '@/components/PreciseGroupSizeModal';
 import { usePolls, useUpdatePollStatus, useDecidePoll, useUndecidePoll, useDeletePoll, useDuplicatePoll, pollKeys } from '@/hooks/usePolls';
 import { useRespondents, respondentKeys } from '@/hooks/useRespondents';
@@ -227,53 +228,41 @@ const PollCard = memo(function PollCard({
         {canManagePolls ? (
           <View className="flex-row items-center gap-2">
             {isEditable && (
-              <Pressable
+              <Button
+                variant="secondary"
+                size="sm"
                 onPress={() => router.push(`/(app)/trips/${tripId}/polls/${poll.id}/edit`)}
-                className="rounded-xl border border-line bg-card px-3 py-1.5"
-                accessibilityRole="button"
               >
-                <Text className="text-xs font-medium text-muted">Edit</Text>
-              </Pressable>
+                Edit
+              </Button>
             )}
             {poll.status === 'draft' && (
-              <Pressable
-                onPress={handleGoLive}
-                className="rounded-xl px-3 py-1.5"
-                style={{ backgroundColor: accentColor }}
-                accessibilityRole="button"
-              >
-                <Text className="text-xs font-semibold text-white">Go live</Text>
-              </Pressable>
+              <Button variant="primary" size="sm" onPress={handleGoLive}>
+                Go live
+              </Button>
             )}
             {poll.status === 'live' && (
-              <Pressable
-                onPress={handleClose}
-                className="rounded-xl border border-line bg-card px-3 py-1.5"
-                accessibilityRole="button"
-              >
-                <Text className="text-xs font-medium text-muted">Close</Text>
-              </Pressable>
+              <Button variant="secondary" size="sm" onPress={handleClose}>
+                Close
+              </Button>
             )}
             {poll.status === 'decided' && (
-              <Pressable
+              <Button
+                variant="secondary"
+                size="sm"
                 onPress={() => undecide.mutate(poll.id, { onError: mutationError('undo decision') })}
-                className="rounded-xl border border-line bg-card px-3 py-1.5"
-                accessibilityRole="button"
               >
-                <Text className="text-xs font-medium text-muted">Undo</Text>
-              </Pressable>
+                Undo
+              </Button>
             )}
             {showCopy && (
-              <Pressable
-                onPress={handleCopy}
-                className="rounded-xl border border-line bg-card px-3 py-1.5"
-                accessibilityRole="button"
-              >
-                <Text className="text-xs font-medium text-muted">Clone</Text>
-              </Pressable>
+              <Button variant="secondary" size="sm" onPress={handleCopy}>
+                Clone
+              </Button>
             )}
+            {/* Icon-only delete — kept as Pressable since Button doesn't have an icon-only variant. */}
             <Pressable onPress={handleDelete} className="p-1" accessibilityRole="button">
-              <Ionicons name="trash-outline" size={16} color="#A8A8A8" />
+              <Ionicons name="trash-outline" size={16} color={T.muted} />
             </Pressable>
           </View>
         ) : null}
@@ -511,15 +500,14 @@ export default function PollsScreen() {
             <Text className="text-base" style={{ color: accentColor }}>← Back</Text>
           </TouchableOpacity>
           {canManagePolls && sortedPolls.length > 0 ? (
-            <Pressable
+            <Button
+              variant="primary"
+              size="sm"
+              leadingIcon="add"
               onPress={() => router.push(`/(app)/trips/${id}/polls/new`)}
-              className="flex-row items-center gap-1 rounded-xl px-4 py-2"
-              style={{ backgroundColor: accentColor }}
-              accessibilityRole="button"
             >
-              <Ionicons name="add" size={16} color="white" />
-              <Text className="text-sm font-semibold text-white">Add poll</Text>
-            </Pressable>
+              Add poll
+            </Button>
           ) : <View />}
         </View>
 

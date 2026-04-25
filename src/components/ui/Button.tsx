@@ -5,6 +5,7 @@ import {
   Text,
   type PressableProps,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { T } from '@/theme';
 
 /**
@@ -44,7 +45,24 @@ interface ButtonProps extends PressableProps {
   loading?: boolean;
   children: React.ReactNode;
   fullWidth?: boolean;
+  /** Optional Ionicons name to render before the label. */
+  leadingIcon?: React.ComponentProps<typeof Ionicons>['name'];
+  /** Optional Ionicons name to render after the label. */
+  trailingIcon?: React.ComponentProps<typeof Ionicons>['name'];
 }
+
+const ICON_COLOR: Record<Variant, string> = {
+  primary:     T.white,
+  secondary:   T.ink,
+  ghost:       T.green,
+  destructive: DESTRUCTIVE_RUST,
+};
+
+const ICON_SIZE: Record<Size, number> = {
+  sm: 14,
+  md: 16,
+  lg: 18,
+};
 
 // 2026-04-24 brand palette:
 //   primary     → deep green (filled CTA)
@@ -93,6 +111,8 @@ export function Button({
   loading = false,
   children,
   fullWidth = false,
+  leadingIcon,
+  trailingIcon,
   disabled,
   className,
   ...props
@@ -100,11 +120,13 @@ export function Button({
   const isDisabled = disabled || loading;
   const v = variantClasses[variant];
   const s = sizeClasses[size];
+  const iconColor = ICON_COLOR[variant];
+  const iconSize = ICON_SIZE[size];
 
   return (
     <Pressable
       className={[
-        'flex-row items-center justify-center',
+        'flex-row items-center justify-center gap-2',
         v.container,
         s.container,
         fullWidth ? 'w-full' : 'self-start',
@@ -122,9 +144,17 @@ export function Button({
       {loading ? (
         <ActivityIndicator size="small" color={SPINNER_COLOR[variant]} />
       ) : (
-        <Text className={[v.text, s.text].join(' ')} style={v.textStyle}>
-          {children}
-        </Text>
+        <>
+          {leadingIcon ? (
+            <Ionicons name={leadingIcon} size={iconSize} color={iconColor} />
+          ) : null}
+          <Text className={[v.text, s.text].join(' ')} style={v.textStyle}>
+            {children}
+          </Text>
+          {trailingIcon ? (
+            <Ionicons name={trailingIcon} size={iconSize} color={iconColor} />
+          ) : null}
+        </>
       )}
     </Pressable>
   );
