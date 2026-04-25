@@ -14,7 +14,7 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_APP_URL": "https://rally-app.vercel.app"
+        "EXPO_PUBLIC_APP_URL": "https://rallysurveys.netlify.app"
       }
     }
   },
