@@ -558,9 +558,9 @@ export default function EditPollScreen() {
                         <Pressable
                           key={dur}
                           onPress={() => toggleDuration(dur)}
-                          className={['rounded-full border px-4 py-2', sel ? 'border-green bg-green' : 'border-line bg-card'].join(' ')}
+                          className={['rounded-full border px-4 py-2', sel ? 'border-green bg-green' : 'border-line bg-cream-warm'].join(' ')}
                         >
-                          <Text className={['text-sm font-medium', sel ? 'text-white' : 'text-muted'].join(' ')}>{dur}</Text>
+                          <Text className={['text-sm font-medium', sel ? 'text-white' : 'text-ink'].join(' ')}>{dur}</Text>
                         </Pressable>
                       );
                     })}

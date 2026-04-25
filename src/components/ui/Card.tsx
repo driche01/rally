@@ -9,23 +9,27 @@ interface PressableCardProps extends PressableProps {
   children: React.ReactNode;
 }
 
+// Card surface: bg-card alone is barely distinguishable from bg-cream
+// (only 5 hex points apart). Adding (a) a hairline border and (b) a slightly
+// stronger drop shadow gives the card a clear edge against the page.
+const CARD_SHADOW = {
+  shadowColor:   '#1A1A1A',
+  shadowOffset:  { width: 0, height: 4 },
+  shadowOpacity: 0.06,
+  shadowRadius:  14,
+  elevation:     3,
+};
+
 export function Card({ children, className, ...props }: CardProps & { className?: string }) {
   return (
     <View
       className={[
-        'rounded-2xl bg-card p-4',
-        'shadow-sm',
+        'rounded-2xl border border-line bg-card p-4',
         className ?? '',
       ]
         .filter(Boolean)
         .join(' ')}
-      style={{
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 8,
-        elevation: 3,
-      }}
+      style={CARD_SHADOW}
       {...props}
     >
       {children}
@@ -42,21 +46,12 @@ export function PressableCard({
   return (
     <Pressable
       className={[
-        'rounded-2xl bg-card p-4 active:bg-cream',
+        'rounded-2xl border border-line bg-card p-4 active:bg-cream-warm',
         className ?? '',
       ]
         .filter(Boolean)
         .join(' ')}
-      style={[
-        {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.08,
-          shadowRadius: 8,
-          elevation: 3,
-        },
-        style,
-      ]}
+      style={[CARD_SHADOW, style]}
       accessible
       accessibilityRole="button"
       {...props}

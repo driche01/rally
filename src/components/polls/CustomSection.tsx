@@ -30,11 +30,11 @@ export function CustomSection({
   return (
     <>
       <View className="gap-1 -mt-1">
-        <Text className="text-sm font-medium text-neutral-700">
+        <Text className="text-sm font-medium text-ink">
           Custom questions{' '}
-          <Text className="font-normal text-neutral-400">({customPolls.length}/3)</Text>
+          <Text className="font-normal text-muted">({customPolls.length}/3)</Text>
         </Text>
-        <Text className="text-xs text-neutral-400">
+        <Text className="text-xs text-muted">
           Add up to 3 free-form polls alongside Destination, Dates, and Budget.
         </Text>
       </View>
@@ -49,23 +49,23 @@ export function CustomSection({
           return (
             <View
               key={cp.id}
-              className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4 gap-3 opacity-60"
+              className="rounded-2xl border border-line bg-cream p-4 gap-3 opacity-60"
             >
               <View className="flex-row items-center justify-between">
-                <Text className="text-sm font-semibold text-neutral-500">
+                <Text className="text-sm font-semibold text-muted">
                   Question {pollIdx + 1}
                 </Text>
                 {statusLabel ? (
-                  <View className="rounded-full bg-neutral-200 px-2.5 py-0.5">
-                    <Text className="text-xs font-medium text-neutral-500">{statusLabel}</Text>
+                  <View className="rounded-full bg-line px-2.5 py-0.5">
+                    <Text className="text-xs font-medium text-muted">{statusLabel}</Text>
                   </View>
                 ) : null}
               </View>
-              <Text className="text-base text-neutral-600 px-1">{cp.question}</Text>
+              <Text className="text-base text-muted px-1">{cp.question}</Text>
               <View className="gap-1.5">
                 {cp.options.filter((o) => o.trim()).map((opt, optIdx) => (
-                  <View key={optIdx} className="rounded-2xl border border-neutral-200 bg-white px-4 py-2.5">
-                    <Text className="text-sm text-neutral-500">{opt}</Text>
+                  <View key={optIdx} className="rounded-2xl border border-line bg-cream-warm px-4 py-2.5">
+                    <Text className="text-sm text-muted">{opt}</Text>
                   </View>
                 ))}
               </View>
@@ -79,10 +79,10 @@ export function CustomSection({
         ).length;
 
         return (
-          <View key={cp.id} className="rounded-2xl border border-neutral-200 bg-white p-4 gap-4">
+          <View key={cp.id} className="rounded-2xl border border-line bg-cream-warm p-4 gap-4">
             {/* Poll header */}
             <View className="flex-row items-center justify-between">
-              <Text className="text-sm font-semibold text-neutral-700">
+              <Text className="text-sm font-semibold text-ink">
                 Question {pollIdx + 1}
               </Text>
               {editableDraftCount > 1 ? (
@@ -103,15 +103,15 @@ export function CustomSection({
               onChangeText={(v) => onQuestionChange(cp.id, v)}
               placeholder="e.g. What vibe are we going for?"
               maxLength={80}
-              className="min-h-[48px] rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-base text-neutral-800"
+              className="min-h-[48px] rounded-2xl border border-line bg-cream px-4 py-3 text-base text-ink"
               placeholderTextColor="#A8A8A8"
             />
 
             {/* Options */}
             <View className="gap-2">
-              <Text className="text-xs font-medium text-neutral-500">
+              <Text className="text-xs font-medium text-muted">
                 Options{' '}
-                <Text className="font-normal text-neutral-400">({cp.options.length}/6)</Text>
+                <Text className="font-normal text-muted">({cp.options.length}/6)</Text>
               </Text>
               {cp.options.map((opt, optIdx) => (
                 <View key={optIdx} className="flex-row items-center gap-2">
@@ -120,7 +120,7 @@ export function CustomSection({
                     onChangeText={(v) => onOptionChange(cp.id, optIdx, v)}
                     placeholder={`Option ${optIdx + 1}${optIdx < 2 ? ' *' : ''}`}
                     maxLength={60}
-                    className="flex-1 min-h-[44px] rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-sm text-neutral-800"
+                    className="flex-1 min-h-[44px] rounded-2xl border border-line bg-cream px-4 py-2.5 text-sm text-ink"
                     placeholderTextColor="#A8A8A8"
                   />
                   {cp.options.length > 2 ? (
@@ -147,8 +147,8 @@ export function CustomSection({
             </View>
 
             {/* Allow multi toggle */}
-            <View className="flex-row items-center justify-between pt-1 border-t border-neutral-100">
-              <Text className="text-sm text-neutral-700">Allow multiple picks</Text>
+            <View className="flex-row items-center justify-between pt-1 border-t border-line">
+              <Text className="text-sm text-ink">Allow multiple picks</Text>
               <Switch
                 value={cp.allowMulti}
                 onValueChange={() => onMultiToggle(cp.id)}

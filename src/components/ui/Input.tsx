@@ -11,10 +11,20 @@ interface InputProps extends TextInputProps {
   hint?: string;
 }
 
+// Subtle drop shadow gives the input a clear lift off cream-page surfaces.
+// Without it, bg-card (#FFFAF2) on bg-cream (#FBF7EF) is barely visible.
+const INPUT_SHADOW = {
+  shadowColor:   '#1A1A1A',
+  shadowOffset:  { width: 0, height: 2 },
+  shadowOpacity: 0.04,
+  shadowRadius:  6,
+  elevation:     1,
+};
+
 // 2026-04-24 brand palette: warm cream surfaces, ink text, hairline borders,
 // green focus state. No pure white, no neutral grays in primary surfaces.
 export const Input = forwardRef<TextInput, InputProps>(
-  ({ label, error, hint, className, ...props }, ref) => {
+  ({ label, error, hint, className, style, ...props }, ref) => {
     return (
       <View className="gap-1">
         {label ? (
@@ -33,6 +43,7 @@ export const Input = forwardRef<TextInput, InputProps>(
             .filter(Boolean)
             .join(' ')}
           placeholderTextColor={PLACEHOLDER}
+          style={[INPUT_SHADOW, style]}
           accessible
           accessibilityLabel={label}
           {...props}

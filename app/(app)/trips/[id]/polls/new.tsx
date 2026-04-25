@@ -40,11 +40,14 @@ const tabStyles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
   },
-  inactive: { borderColor: '#E7DDCF', backgroundColor: '#FFFFFF' },
-  taken:    { borderColor: '#E7DDCF', backgroundColor: '#F5F5F5' },
+  // Inactive uses cream-warm (#F4ECDF) — clearly differentiated from the
+  // page bg (#FBF7EF). bg-card (#FFFAF2) is too close to read as a distinct
+  // pill on cream surfaces.
+  inactive: { borderColor: '#E7DDCF', backgroundColor: '#F4ECDF' },
+  taken:    { borderColor: '#E7DDCF', backgroundColor: '#EFE8DA' },
   textActive:   { fontSize: 14, fontWeight: '500', color: '#FFFFFF' },
-  textInactive: { fontSize: 14, fontWeight: '500', color: '#525252' },
-  textTaken:    { fontSize: 14, fontWeight: '500', color: '#A3A3A3' },
+  textInactive: { fontSize: 14, fontWeight: '500', color: '#163026' },
+  textTaken:    { fontSize: 14, fontWeight: '500', color: '#9DA8A0' },
 });
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
