@@ -20,6 +20,21 @@ import {
 import { routeMessage } from './message-router.ts';
 import type { RoutedMessage } from './message-router.ts';
 import { track } from './telemetry.ts';
+import {
+  introMessage,
+  plannerWelcomeOneToOne,
+  appKeywordReply,
+  isAppKeyword,
+} from './templates.ts';
+
+// Read lazily so tests / alternate deployments can set this dynamically.
+function getAppDownloadUrl(): string | null {
+  try {
+    return Deno.env.get('APP_DOWNLOAD_URL') ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export interface ParsedTwilioMessage {
   MessageSid: string;
@@ -75,6 +90,36 @@ export async function processInboundMessage(
 
   // ─── Resolve user ───────────────────────────────────────────────────────
   const user = await findOrCreateUser(admin, senderPhone);
+
+  // ─── APP keyword short-circuit ──────────────────────────────────────────
+  // Works in any context (1:1 or group, any session state). Always available
+  // so anyone in a Rally-planned thread can pull the install link on demand.
+  // Silent no-op if the CTA URL isn't configured (appKeywordReply returns null).
+  if (isAppKeyword(msg.Body.trim())) {
+    const kwResponse = appKeywordReply({ appDownloadUrl: getAppDownloadUrl() });
+    if (kwResponse) {
+      const kwThreadId = isGroupMms ? 'unknown' : `1to1_${senderPhone}`;
+      await admin.from('thread_messages').insert({
+        thread_id: kwThreadId,
+        trip_session_id: null,
+        direction: 'inbound',
+        sender_phone: senderPhone,
+        sender_role: 'participant',
+        body: msg.Body.trim(),
+        message_sid: msg.MessageSid,
+      });
+      await admin.from('thread_messages').insert({
+        thread_id: kwThreadId,
+        trip_session_id: null,
+        direction: 'outbound',
+        sender_phone: null,
+        sender_role: 'rally',
+        body: kwResponse,
+        message_sid: null,
+      });
+      return { response: kwResponse, sessionId: null, phase: null };
+    }
+  }
 
   // ─── Handle non-text MMS ────────────────────────────────────────────────
   let body = msg.Body.trim();
@@ -288,10 +333,7 @@ export async function processInboundMessage(
           }).eq('id', session.id);
         }
 
-        introResponse =
-          `Hey! I'm Rally \ud83d\udc4b I help groups plan trips fast. ` +
-          `Everyone drop your name and a destination you'd wanna hit \u2014 ` +
-          `format it like "Name \u2014 destination". Reply STOP anytime to opt out.`;
+        introResponse = introMessage({ channel: 'sms' });
 
         // Telemetry: new SMS session created
         track('sms_session_created', {
@@ -301,6 +343,29 @@ export async function processInboundMessage(
           threadName: msg.FriendlyName ?? null,
         }).catch(() => {});
       }
+    }
+  }
+
+  // ─── First-time 1:1 welcome ─────────────────────────────────────────────
+  // When a phone that's brand new to Rally texts the Rally number 1:1, send
+  // a welcome + install CTA. The "brand new" check keys on `user.returning`
+  // (false = no prior trip participation). Idempotency: gate on whether we've
+  // ever sent an outbound to this 1:1 thread before — so repeat 1:1 messages
+  // from the same new user don't spam the welcome.
+  if (is1to1 && !introResponse && !user.returning) {
+    const oneToOneThreadId = `1to1_${senderPhone}`;
+    const { data: priorOutbound } = await admin
+      .from('thread_messages')
+      .select('id')
+      .eq('thread_id', oneToOneThreadId)
+      .eq('direction', 'outbound')
+      .limit(1)
+      .maybeSingle();
+    if (!priorOutbound) {
+      introResponse = plannerWelcomeOneToOne({
+        channel: 'sms',
+        appDownloadUrl: getAppDownloadUrl(),
+      });
     }
   }
 
