@@ -1,16 +1,22 @@
 /**
- * Members Roster — shows everyone who responded to polls via the share link.
- * Respondents become group members the moment they submit their name, email,
- * and phone number on the respond page.
+ * Group Dashboard — replaces the legacy "Members" roster.
  *
- * Planners can promote/demote any member to co-planner status from here.
+ * Phase 4 of the 1:1 SMS pivot. Sourced primarily from
+ * trip_session_participants (the SMS-active humans). Falls back to
+ * respondents-only mode when no trip_session exists yet (web-only trip
+ * with poll responses but no SMS handshake). Adds a planner-only
+ * broadcast composer that fans a message to every active+attending
+ * participant via the sms-broadcast edge function.
+ *
+ * Route stays `/(app)/trips/[id]/members` so existing navigation works.
  */
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  KeyboardAvoidingView,
   Linking,
   Modal,
   Platform,
@@ -25,34 +31,48 @@ import {
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRespondents, useSetRespondentPlanner, useCreateRespondentManually, useDeleteRespondent } from '@/hooks/useRespondents';
+
+import { Avatar, Button } from '@/components/ui';
+import {
+  useRespondents,
+  useSetRespondentPlanner,
+  useCreateRespondentManually,
+  useDeleteRespondent,
+} from '@/hooks/useRespondents';
+import {
+  useTripSession,
+  useSessionParticipants,
+  useBroadcastToSession,
+  useRemoveSessionParticipant,
+} from '@/hooks/useTripSession';
 import { useTrip } from '@/hooks/useTrips';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useProfile } from '@/hooks/useProfile';
 import { useAuthStore } from '@/stores/authStore';
 import { getShareUrl } from '@/lib/api/trips';
 import { getTripStage, STAGE_ACCENT } from '@/lib/tripStage';
+import { capture } from '@/lib/analytics';
 import { GROUP_SIZE_MIDPOINTS } from '@/types/database';
-import type { Respondent } from '@/types/database';
-import { Avatar } from '@/components/ui';
+import type { Respondent, TripSessionParticipant } from '@/types/database';
+import { normalizePhone } from '@/lib/phone';
 
-// ─── Swipeable member row ──────────────────────────────────────────────────────
+// ─── Swipeable row helper (preserved from legacy screen) ───────────────────────
 
-function DeleteMemberAction({ onPress }: { onPress: () => void }) {
+function DeleteAction({ onPress, label = 'Remove' }: { onPress: () => void; label?: string }) {
   return (
     <Pressable
       onPress={onPress}
       style={{ backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center', width: 80 }}
       accessibilityRole="button"
-      accessibilityLabel="Remove member"
+      accessibilityLabel={`${label} member`}
     >
       <Ionicons name="trash-outline" size={20} color="white" />
-      <Text style={{ color: 'white', fontSize: 11, fontWeight: '600', marginTop: 3 }}>Remove</Text>
+      <Text style={{ color: 'white', fontSize: 11, fontWeight: '600', marginTop: 3 }}>{label}</Text>
     </Pressable>
   );
 }
 
-function MemberRow({
+function SwipeRow({
   children,
   canManage,
   onPress,
@@ -68,23 +88,51 @@ function MemberRow({
   const swipeRef = useRef<Swipeable>(null);
   return (
     <Swipeable
-      ref={swipeRef}
-      renderRightActions={onDelete ? () => <DeleteMemberAction onPress={() => onDelete(swipeRef)} /> : undefined}
+      ref={swipeRef as any}
+      renderRightActions={onDelete ? () => <DeleteAction onPress={() => onDelete(swipeRef as any)} /> : undefined}
       overshootRight={false}
       friction={2}
     >
-      <Pressable
-        onPress={onPress}
-        style={style}
-        accessibilityRole={canManage ? 'button' : 'none'}
-      >
+      <Pressable onPress={onPress} style={style} accessibilityRole={canManage ? 'button' : 'none'}>
         {children}
       </Pressable>
     </Swipeable>
   );
 }
 
-export default function MembersScreen() {
+// ─── Phase / state badge helpers ───────────────────────────────────────────────
+
+function StatusBadge({ kind }: { kind: 'attending' | 'not_going' | 'opted_out' | 'committed' | 'flight_booked' }) {
+  const map = {
+    attending:    { bg: '#EAF3EC', fg: '#235C38', label: 'In' },
+    not_going:    { bg: '#F0F0F0', fg: '#888',    label: 'Not going' },
+    opted_out:    { bg: '#FCE8E8', fg: '#9A2A2A', label: 'Opted out' },
+    committed:    { bg: '#E1EEF7', fg: '#1F4E79', label: 'Committed' },
+    flight_booked:{ bg: '#E8F4EE', fg: '#235C38', label: 'Flight booked' },
+  } as const;
+  const c = map[kind];
+  return (
+    <View style={{ backgroundColor: c.bg, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2 }}>
+      <Text style={{ fontSize: 11, fontWeight: '700', color: c.fg }}>{c.label}</Text>
+    </View>
+  );
+}
+
+function relativeTime(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 60_000) return 'just now';
+  const min = Math.round(ms / 60_000);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const d = Math.round(hr / 24);
+  return `${d}d ago`;
+}
+
+// ─── Screen ────────────────────────────────────────────────────────────────────
+
+export default function GroupDashboardScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -92,21 +140,29 @@ export default function MembersScreen() {
   const { data: trip } = useTrip(id);
   const accentColor = STAGE_ACCENT[trip ? getTripStage(trip) : 'deciding'];
   const { data: respondents = [] } = useRespondents(id);
+  const { data: tripSession } = useTripSession(id);
+  const { data: participants = [] } = useSessionParticipants(tripSession?.id);
   const { canDesignatePlanners } = usePermissions(id);
   const setPlanner = useSetRespondentPlanner(id);
-  const deleteMember = useDeleteRespondent(id);
+  const deleteRespondent = useDeleteRespondent(id);
+  const removeParticipant = useRemoveSessionParticipant(tripSession?.id);
+  const broadcastMutation = useBroadcastToSession(tripSession?.id);
   const currentUser = useAuthStore((s) => s.user);
-  // Fetch the planner's profile directly by trip.created_by so any trip member
-  // (not just the creator themselves) can see the planner row.
   const { data: plannerProfile } = useProfile(trip?.created_by);
 
-  const [expandedPrefs, setExpandedPrefs] = useState<Set<string>>(new Set());
+  // Add-member modal (preserved)
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [addFirstName, setAddFirstName] = useState('');
   const [addLastName, setAddLastName] = useState('');
   const [addEmail, setAddEmail] = useState('');
   const [addPhone, setAddPhone] = useState('');
   const createMember = useCreateRespondentManually(id);
+
+  // Broadcast composer
+  const [broadcastVisible, setBroadcastVisible] = useState(false);
+  const [broadcastBody, setBroadcastBody] = useState('');
+  const [confirmVisible, setConfirmVisible] = useState(false);
+  const [lastSent, setLastSent] = useState<{ count: number; ts: number } | null>(null);
 
   function handleAddMember() {
     const firstName = addFirstName.trim();
@@ -121,107 +177,169 @@ export default function MembersScreen() {
     createMember.mutate({ name, email, phone }, {
       onSuccess: () => {
         setAddModalVisible(false);
-        setAddFirstName('');
-        setAddLastName('');
-        setAddEmail('');
-        setAddPhone('');
+        setAddFirstName(''); setAddLastName(''); setAddEmail(''); setAddPhone('');
       },
       onError: (e: unknown) => Alert.alert('Could not add member', e instanceof Error ? e.message : 'Please try again.'),
     });
   }
 
+  // Match respondents to participants by normalized phone for badge merging.
+  const respondentByPhone = useMemo(() => {
+    const map = new Map<string, Respondent>();
+    for (const r of respondents) {
+      const norm = normalizePhone(r.phone ?? '');
+      if (norm) map.set(norm, r);
+    }
+    return map;
+  }, [respondents]);
+
+  const participantPhones = useMemo(
+    () => new Set(participants.map((p) => p.phone)),
+    [participants],
+  );
+
+  // Respondents who haven't done the SMS handshake — shown in the secondary section.
+  const orphanRespondents = useMemo(() => {
+    return respondents.filter((r) => {
+      const norm = normalizePhone(r.phone ?? '');
+      if (!norm) return true; // no phone — definitely not in participants
+      return !participantPhones.has(norm);
+    });
+  }, [respondents, participantPhones]);
+
+  // Sort participants: planner first, then by joined_at.
+  const sortedParticipants = useMemo(() => {
+    return [...participants].sort((a, b) => {
+      if (a.is_planner !== b.is_planner) return a.is_planner ? -1 : 1;
+      return new Date(a.joined_at).getTime() - new Date(b.joined_at).getTime();
+    });
+  }, [participants]);
+
+  // Active participants = exclude opted_out / removed_by_planner for "X people will receive" copy.
+  const activeAttendingCount = participants.filter(
+    (p) => p.status === 'active' && p.is_attending,
+  ).length;
+
+  // Counts for the progress card (legacy + participants merged)
   const isCreator = !!trip && !!currentUser && trip.created_by === currentUser.id;
-  // Fall back to auth user metadata for the creator viewing their own trip
-  // when the profiles row hasn't loaded yet.
   const plannerName = plannerProfile
     ? [plannerProfile.name, (plannerProfile as any).last_name].filter(Boolean).join(' ')
     : isCreator
       ? [currentUser?.user_metadata?.name, currentUser?.user_metadata?.last_name].filter(Boolean).join(' ')
       : '';
   const plannerEmail = (plannerProfile as any)?.email ?? (isCreator ? currentUser?.email : '') ?? '';
-  const plannerPhone = (plannerProfile as any)?.phone ?? null;
   const showPlanner = !!(plannerName || plannerEmail);
-
-  const total = trip
-    ? (trip.group_size_precise ?? GROUP_SIZE_MIDPOINTS[trip.group_size_bucket])
-    : 0;
+  const total = trip ? (trip.group_size_precise ?? GROUP_SIZE_MIDPOINTS[trip.group_size_bucket]) : 0;
   const joinUrl = trip ? getShareUrl(trip.share_token) : '';
-  // memberCount: everyone in the list (planner + poll respondents) — for the section label
-  const memberCount = (showPlanner ? 1 : 0) + respondents.length;
-  // confirmedCount: planner is always confirmed + respondents who explicitly RSVPed 'in'
-  const confirmedCount = (showPlanner ? 1 : 0) + respondents.filter((r) => r.rsvp === 'in').length;
-  // joinPercent: based on confirmed RSVPs vs expected group size
+  const memberCount = (showPlanner ? 1 : 0) + Math.max(participants.length, respondents.length);
+  const confirmedCount = participants.length > 0
+    ? activeAttendingCount + (showPlanner && !participants.some((p) => p.is_planner) ? 1 : 0)
+    : (showPlanner ? 1 : 0) + respondents.filter((r) => r.rsvp === 'in').length;
   const joinPercent = total > 0 ? Math.min(100, Math.round((confirmedCount / total) * 100)) : 0;
 
   async function handleCopyLink() {
     await Clipboard.setStringAsync(joinUrl);
     Alert.alert('Copied!', 'Invite link copied to clipboard.');
   }
-
   async function handleShare() {
-    try {
-      await Share.share({ message: `Join our trip on Rally: ${joinUrl}` });
-    } catch {}
+    try { await Share.share({ message: `Join our trip on Rally: ${joinUrl}` }); } catch {}
   }
 
-  // Collect phone numbers from confirmed respondents only
-  const confirmedRespondents = respondents.filter((r) => r.rsvp === 'in');
-  const phones = confirmedRespondents.map((r) => r.phone).filter(Boolean) as string[];
-  const allResponded = total > 0 && confirmedCount >= total;
-
-  function handleStartTextThread() {
-    if (phones.length === 0) {
-      Alert.alert('No phone numbers', 'None of your confirmed group members provided a phone number.');
+  // Broadcast send flow
+  function handleOpenBroadcast() {
+    setBroadcastVisible(true);
+  }
+  function handleSendBroadcast() {
+    const body = broadcastBody.trim();
+    if (!body) return;
+    setConfirmVisible(true);
+  }
+  async function confirmSendBroadcast() {
+    const body = broadcastBody.trim();
+    setConfirmVisible(false);
+    const result = await broadcastMutation.mutateAsync(body);
+    if (!result.ok) {
+      Alert.alert(
+        'Broadcast failed',
+        result.reason === 'forbidden'
+          ? 'Only the planner can broadcast.'
+          : `Couldn't send: ${result.reason ?? 'unknown error'}`,
+      );
       return;
     }
-
-    // iOS: sms:?addresses=num1,num2 opens iMessage/SMS with all recipients pre-filled
-    // Android: sms:num1;num2
-    const addresses = Platform.OS === 'ios' ? phones.join(',') : phones.join(';');
-    const url = Platform.OS === 'ios'
-      ? `sms:?addresses=${encodeURIComponent(addresses)}`
-      : `sms:${addresses}`;
-
-    Linking.openURL(url).catch(() => {
-      // Fallback: try without encoding
-      Linking.openURL(`sms:${addresses}`).catch(() =>
-        Alert.alert('Could not open Messages', 'Please open your Messages app manually.'),
-      );
-    });
+    setBroadcastBody('');
+    setBroadcastVisible(false);
+    setLastSent({ count: result.sent ?? 0, ts: Date.now() });
+    capture('dashboard_broadcast_sent', { trip_id: id, sent: result.sent });
   }
 
-  function handleMemberMenu(r: Respondent) {
+  // Per-participant remove flow
+  function handleRemoveParticipant(p: TripSessionParticipant, swipeRef: React.RefObject<Swipeable>) {
+    swipeRef.current?.close();
+    Alert.alert(
+      'Remove member?',
+      `${p.display_name ?? p.phone} will be removed from this trip. They won't receive further messages.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            const r = await removeParticipant.mutateAsync(p.id);
+            if (!r.ok) {
+              Alert.alert(
+                'Could not remove',
+                r.reason === 'planner_must_transfer_first'
+                  ? 'Transfer the planner role first, then try again.'
+                  : r.reason ?? 'Try again.',
+              );
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  function handleParticipantTap(p: TripSessionParticipant) {
     if (!canDesignatePlanners) return;
-    if (r.is_planner) {
+    // Reuse the respondent-side promote/demote logic when a matching respondent exists.
+    const norm = normalizePhone(p.phone) ?? '';
+    const respondent = respondentByPhone.get(norm);
+    if (!respondent) {
       Alert.alert(
-        r.name,
+        p.display_name ?? p.phone,
+        'This participant joined via the SMS link. Promote/demote planner is available once they\'ve also responded to a poll.',
+      );
+      return;
+    }
+    if (respondent.is_planner) {
+      Alert.alert(
+        respondent.name,
         "Remove planner access? They'll no longer be able to edit polls and trip details.",
         [
           { text: 'Cancel', style: 'cancel' },
           {
             text: 'Remove planner',
             style: 'destructive',
-            onPress: () =>
-              setPlanner.mutate(
-                { respondentId: r.id, isPlanner: false },
-                { onError: () => Alert.alert('Error', 'Could not update planner status.') },
-              ),
+            onPress: () => setPlanner.mutate(
+              { respondentId: respondent.id, isPlanner: false },
+              { onError: () => Alert.alert('Error', 'Could not update planner status.') },
+            ),
           },
         ],
       );
     } else {
       Alert.alert(
-        `Make ${r.name} a planner?`,
+        `Make ${respondent.name} a planner?`,
         "They'll be able to edit polls and trip details.",
         [
           { text: 'Cancel', style: 'cancel' },
           {
             text: 'Make planner',
-            onPress: () =>
-              setPlanner.mutate(
-                { respondentId: r.id, isPlanner: true },
-                { onError: () => Alert.alert('Error', 'Could not update planner status.') },
-              ),
+            onPress: () => setPlanner.mutate(
+              { respondentId: respondent.id, isPlanner: true },
+              { onError: () => Alert.alert('Error', 'Could not update planner status.') },
+            ),
           },
         ],
       );
@@ -235,7 +353,7 @@ export default function MembersScreen() {
         <TouchableOpacity onPress={() => router.back()} accessibilityRole="button">
           <Text style={[styles.backBtn, { color: accentColor }]}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Group members</Text>
+        <Text style={styles.headerTitle}>Group</Text>
         <View style={{ width: 60 }} />
       </View>
 
@@ -243,28 +361,20 @@ export default function MembersScreen() {
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Join progress */}
+        {/* Progress card */}
         <View style={styles.progressCard}>
           <View style={styles.progressRow}>
-            <Text style={styles.progressTitle}>
-              {confirmedCount} of {total} confirmed
-            </Text>
+            <Text style={styles.progressTitle}>{confirmedCount} of {total} in</Text>
             <Text style={styles.progressPct}>{joinPercent}%</Text>
           </View>
           <View style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: `${joinPercent}%`, backgroundColor: accentColor }]} />
           </View>
 
-          {/* Invite link */}
           <View style={styles.linkRow}>
             <Ionicons name="link-outline" size={14} color="#888" />
             <Text style={styles.linkText} numberOfLines={1}>{joinUrl}</Text>
-            <Pressable
-              onPress={handleCopyLink}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Copy link"
-            >
+            <Pressable onPress={handleCopyLink} hitSlop={8} accessibilityRole="button" accessibilityLabel="Copy link">
               <Ionicons name="copy-outline" size={16} color="#888" />
             </Pressable>
           </View>
@@ -273,241 +383,241 @@ export default function MembersScreen() {
             <Ionicons name="share-outline" size={15} color={accentColor} />
             <Text style={[styles.shareBtnText, { color: accentColor }]}>Share invite link</Text>
           </Pressable>
-
-          {/* Text thread CTA — shown once everyone has responded */}
-          {allResponded && (
-            <Pressable
-              onPress={handleStartTextThread}
-              style={[styles.textThreadBtn, { backgroundColor: accentColor }]}
-              accessibilityRole="button"
-              accessibilityLabel="Start a group text thread"
-            >
-              <Ionicons name="chatbubbles-outline" size={15} color="#fff" />
-              <Text style={styles.textThreadBtnText}>Start a text thread</Text>
-            </Pressable>
-          )}
         </View>
 
-        {/* Member list */}
-        {(showPlanner || respondents.length > 0) ? (
+        {/* Participants section — primary list when SMS session exists */}
+        {tripSession && sortedParticipants.length > 0 ? (
           <>
             <Text style={styles.sectionLabel}>
-              {memberCount} {memberCount === 1 ? 'MEMBER' : 'MEMBERS'}
+              {sortedParticipants.length} {sortedParticipants.length === 1 ? 'PARTICIPANT' : 'PARTICIPANTS'}
             </Text>
             <View style={styles.listCard}>
-
-              {/* Trip creator / planner — always first */}
-              {showPlanner ? (
-                <View style={[styles.row, respondents.length > 0 && styles.rowBorder]}>
-                  <View style={styles.avatarWrap}>
-                    <Ionicons name="ribbon" size={13} color="#D97706" style={styles.crownIcon} />
-                    <Avatar name={plannerName || plannerEmail} size="md" />
-                  </View>
-                  <View style={{ flex: 1, gap: 3 }}>
-                    <Text style={styles.name}>{plannerName || plannerEmail}</Text>
-                    {plannerEmail ? (
-                      <View style={styles.contactRow}>
-                        <Ionicons name="mail-outline" size={12} color="#888" />
-                        <Text style={styles.contactText}>{plannerEmail}</Text>
-                      </View>
-                    ) : null}
-                    {plannerPhone ? (
-                      <View style={styles.contactRow}>
-                        <Ionicons name="call-outline" size={12} color="#888" />
-                        <Text style={styles.contactText}>{plannerPhone}</Text>
-                      </View>
-                    ) : null}
-                  </View>
-                </View>
-              ) : null}
-
-              {[...respondents]
-                .sort((a, b) => (b.is_planner ? 1 : 0) - (a.is_planner ? 1 : 0))
-                .map((r, i) => {
-                function copyContact(value: string, label: string) {
-                  Clipboard.setStringAsync(value);
-                  Alert.alert('Copied', `${label} copied to clipboard.`);
-                }
-                function handleDelete(swipeRef: React.RefObject<Swipeable>) {
-                  swipeRef.current?.close();
-                  Alert.alert(
-                    'Remove member?',
-                    `${r.name} will be removed from this trip.`,
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      {
-                        text: 'Remove',
-                        style: 'destructive',
-                        onPress: () =>
-                          deleteMember.mutate(r.id, {
-                            onError: () => Alert.alert('Error', 'Could not remove member.'),
-                          }),
-                      },
-                    ],
-                  );
-                }
+              {sortedParticipants.map((p, i) => {
+                const norm = normalizePhone(p.phone) ?? '';
+                const respondent = respondentByPhone.get(norm);
+                const lastActive = relativeTime((p as any).updated_at ?? p.joined_at);
                 return (
-                  <MemberRow
-                    key={r.id}
+                  <SwipeRow
+                    key={p.id}
                     canManage={canDesignatePlanners}
-                    onPress={canDesignatePlanners ? () => handleMemberMenu(r) : undefined}
-                    onDelete={canDesignatePlanners ? handleDelete : undefined}
-                    style={[styles.row, i < respondents.length - 1 && styles.rowBorder]}
+                    onPress={canDesignatePlanners ? () => handleParticipantTap(p) : undefined}
+                    onDelete={canDesignatePlanners && !p.is_planner
+                      ? (ref) => handleRemoveParticipant(p, ref as any)
+                      : undefined}
+                    style={[styles.row, i < sortedParticipants.length - 1 && styles.rowBorder]}
                   >
-                    {/* Avatar — crown above circle for planners */}
                     <View style={styles.avatarWrap}>
-                      {r.is_planner ? (
+                      {p.is_planner ? (
                         <Ionicons name="ribbon" size={13} color="#D97706" style={styles.crownIcon} />
                       ) : null}
-                      <Avatar name={r.name} size="md" />
+                      <Avatar name={p.display_name ?? p.phone} size="md" />
                     </View>
                     <View style={{ flex: 1, gap: 3 }}>
-                      {/* Name + RSVP badge */}
                       <View style={styles.nameRow}>
-                        <Text style={styles.name}>{r.name}</Text>
-                        {r.rsvp === 'in' ? (
-                          <View style={styles.rsvpIn}>
-                            <Text style={styles.rsvpInText}>✓ In</Text>
-                          </View>
-                        ) : r.rsvp === 'out' ? (
-                          <View style={styles.rsvpOut}>
-                            <Text style={styles.rsvpOutText}>Out</Text>
-                          </View>
-                        ) : null}
+                        <Text style={styles.name}>{p.display_name ?? p.phone}</Text>
+                        {p.status === 'opted_out' || p.status === 'removed_by_planner' ? (
+                          <StatusBadge kind="opted_out" />
+                        ) : !p.is_attending ? (
+                          <StatusBadge kind="not_going" />
+                        ) : p.flight_status === 'confirmed' ? (
+                          <StatusBadge kind="flight_booked" />
+                        ) : p.committed ? (
+                          <StatusBadge kind="committed" />
+                        ) : (
+                          <StatusBadge kind="attending" />
+                        )}
                       </View>
-                      {r.email ? (
-                        <Pressable
-                          onPress={(e) => { e.stopPropagation(); copyContact(r.email!, 'Email'); }}
-                          style={styles.contactRow}
-                          accessibilityRole="button"
-                        >
+                      {respondent?.email ? (
+                        <View style={styles.contactRow}>
                           <Ionicons name="mail-outline" size={12} color="#888" />
-                          <Text style={styles.contactText}>{r.email}</Text>
-                          <Ionicons name="copy-outline" size={11} color="#CCC" />
-                        </Pressable>
-                      ) : null}
-                      {r.phone ? (
-                        <Pressable
-                          onPress={(e) => { e.stopPropagation(); copyContact(r.phone!, 'Phone'); }}
-                          style={styles.contactRow}
-                          accessibilityRole="button"
-                        >
-                          <Ionicons name="call-outline" size={12} color="#888" />
-                          <Text style={styles.contactText}>{r.phone}</Text>
-                          <Ionicons name="copy-outline" size={11} color="#CCC" />
-                        </Pressable>
-                      ) : null}
-                      {!r.email && !r.phone ? (
-                        <Text style={styles.noContact}>No contact info provided</Text>
-                      ) : null}
-
-                      {/* Preferences toggle */}
-                      {r.preferences ? (
-                        <Pressable
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            setExpandedPrefs((prev) => {
-                              const next = new Set(prev);
-                              next.has(r.id) ? next.delete(r.id) : next.add(r.id);
-                              return next;
-                            });
-                          }}
-                          style={{ marginTop: 4 }}
-                          accessibilityRole="button"
-                        >
-                          <Text style={styles.prefsToggle}>
-                            {expandedPrefs.has(r.id) ? '▲ Hide preferences' : '▼ See preferences'}
-                          </Text>
-                        </Pressable>
-                      ) : null}
-
-                      {/* Preferences detail */}
-                      {r.preferences && expandedPrefs.has(r.id) ? (
-                        <View style={styles.prefsBox}>
-                          {r.preferences.needs && r.preferences.needs.length > 0 ? (
-                            <View style={styles.prefSection}>
-                              <Text style={styles.prefLabel}>Needs</Text>
-                              {r.preferences.needs.map((n) => (
-                                <Text key={n} style={styles.prefItem}>· {n}</Text>
-                              ))}
-                            </View>
-                          ) : null}
-                          {r.preferences.vibes && r.preferences.vibes.length > 0 ? (
-                            <View style={styles.prefSection}>
-                              <Text style={styles.prefLabel}>Vibes</Text>
-                              <Text style={styles.prefItem}>{r.preferences.vibes.join(', ')}</Text>
-                            </View>
-                          ) : null}
-                          {r.preferences.pace ? (
-                            <View style={styles.prefSection}>
-                              <Text style={styles.prefLabel}>Pace</Text>
-                              <Text style={styles.prefItem}>{r.preferences.pace}</Text>
-                            </View>
-                          ) : null}
+                          <Text style={styles.contactText}>{respondent.email}</Text>
                         </View>
                       ) : null}
+                      <View style={styles.contactRow}>
+                        <Ionicons name="call-outline" size={12} color="#888" />
+                        <Text style={styles.contactText}>{p.phone}</Text>
+                      </View>
+                      {lastActive ? (
+                        <Text style={styles.metaText}>Joined {lastActive}</Text>
+                      ) : null}
                     </View>
-                    {/* Chevron hint for planners */}
                     {canDesignatePlanners ? (
                       <Ionicons name="ellipsis-horizontal" size={16} color="#CCC" />
                     ) : null}
-                  </MemberRow>
+                  </SwipeRow>
                 );
               })}
             </View>
-
-            {/* Planner designation hint */}
             {canDesignatePlanners ? (
-              <Text style={styles.plannerHint}>
-                Tap a member to manage their planner access
-              </Text>
+              <Text style={styles.plannerHint}>Tap a participant to manage planner access · Swipe to remove</Text>
             ) : null}
           </>
         ) : null}
 
-        {/* Empty state — only when planner not shown and no respondents */}
-        {!showPlanner && respondents.length === 0 ? (
+        {/* Also-responding section: respondents without a participant row */}
+        {orphanRespondents.length > 0 ? (
+          <>
+            <Text style={styles.sectionLabel}>
+              ALSO RESPONDING VIA WEB · {orphanRespondents.length}
+            </Text>
+            <View style={styles.listCard}>
+              {orphanRespondents.map((r, i) => (
+                <View key={r.id} style={[styles.row, i < orphanRespondents.length - 1 && styles.rowBorder]}>
+                  <View style={styles.avatarWrap}>
+                    {r.is_planner ? (
+                      <Ionicons name="ribbon" size={13} color="#D97706" style={styles.crownIcon} />
+                    ) : null}
+                    <Avatar name={r.name} size="md" />
+                  </View>
+                  <View style={{ flex: 1, gap: 3 }}>
+                    <View style={styles.nameRow}>
+                      <Text style={styles.name}>{r.name}</Text>
+                      {r.rsvp === 'in' ? <StatusBadge kind="attending" /> : null}
+                    </View>
+                    {r.email ? (
+                      <View style={styles.contactRow}>
+                        <Ionicons name="mail-outline" size={12} color="#888" />
+                        <Text style={styles.contactText}>{r.email}</Text>
+                      </View>
+                    ) : null}
+                    {r.phone ? (
+                      <View style={styles.contactRow}>
+                        <Ionicons name="call-outline" size={12} color="#888" />
+                        <Text style={styles.contactText}>{r.phone}</Text>
+                      </View>
+                    ) : null}
+                    <Text style={styles.metaText}>Hasn't joined the SMS thread yet</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </>
+        ) : null}
+
+        {/* Empty state */}
+        {!tripSession && respondents.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>👥</Text>
-            <Text style={styles.emptyTitle}>No members yet</Text>
+            <Ionicons name="people-outline" size={40} color="#C0C0C0" />
+            <Text style={styles.emptyTitle}>No one in yet</Text>
             <Text style={styles.emptySubtitle}>
-              Share the link above. When group members respond to polls they'll appear here with their contact info.
+              Share the link above. Friends fill it out, reply YES to confirm, and they show up here.
             </Text>
           </View>
         ) : null}
 
-        {/* Add member — planners only */}
+        {/* Add member CTA */}
         {canDesignatePlanners ? (
           <Pressable
             onPress={() => setAddModalVisible(true)}
             style={{
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 4,
-              paddingVertical: 20,
-              borderRadius: 16,
-              borderWidth: 2,
-              borderStyle: 'dashed',
-              borderColor: '#E5E5E5',
+              alignItems: 'center', justifyContent: 'center', gap: 4,
+              paddingVertical: 20, borderRadius: 16,
+              borderWidth: 2, borderStyle: 'dashed', borderColor: '#E5E5E5',
               marginTop: 12,
             }}
           >
             <Ionicons name="add-circle-outline" size={18} color="#D4D4D4" />
-            <Text style={{ fontSize: 12, color: '#D0D0D0' }}>Tap to add a group member</Text>
+            <Text style={{ fontSize: 12, color: '#D0D0D0' }}>Tap to add a member manually</Text>
           </Pressable>
+        ) : null}
+
+        {/* Last broadcast confirmation */}
+        {lastSent && Date.now() - lastSent.ts < 60_000 ? (
+          <View style={styles.broadcastConfirm}>
+            <Ionicons name="checkmark-circle" size={16} color="#1D9E75" />
+            <Text style={styles.broadcastConfirmText}>
+              Sent to {lastSent.count} {lastSent.count === 1 ? 'person' : 'people'} just now
+            </Text>
+          </View>
         ) : null}
       </ScrollView>
 
-      {/* Add member modal */}
-      <Modal visible={addModalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setAddModalVisible(false)}>
-        <View style={{ flex: 1, backgroundColor: '#F5F4F0' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#EEE', backgroundColor: 'white' }}>
-            <Pressable onPress={() => setAddModalVisible(false)}>
-              <Text style={{ fontSize: 16, color: '#0F3F2E' }}>Cancel</Text>
+      {/* Floating broadcast button — planner only, only when there's a session */}
+      {canDesignatePlanners && tripSession && activeAttendingCount > 0 ? (
+        <View style={[styles.broadcastFab, { paddingBottom: insets.bottom + 12 }]} pointerEvents="box-none">
+          <Pressable
+            onPress={handleOpenBroadcast}
+            style={[styles.broadcastBtn, { backgroundColor: accentColor }]}
+            accessibilityRole="button"
+            accessibilityLabel={`Text the group (${activeAttendingCount} people)`}
+          >
+            <Ionicons name="megaphone-outline" size={18} color="#fff" />
+            <Text style={styles.broadcastBtnText}>
+              Text the group · {activeAttendingCount}
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {/* Broadcast composer modal */}
+      <Modal
+        visible={broadcastVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setBroadcastVisible(false)}
+      >
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: '#F5F4F0' }}>
+          <View style={styles.modalHeader}>
+            <Pressable onPress={() => setBroadcastVisible(false)}>
+              <Text style={styles.modalCancel}>Cancel</Text>
             </Pressable>
-            <Text style={{ fontSize: 17, fontWeight: '600', color: '#163026' }}>Add member</Text>
+            <Text style={styles.modalTitle}>Text the group</Text>
+            <Pressable
+              onPress={handleSendBroadcast}
+              disabled={!broadcastBody.trim() || broadcastMutation.isPending}
+            >
+              <Text style={[styles.modalAction, (!broadcastBody.trim() || broadcastMutation.isPending) && { color: '#CCC' }]}>
+                {broadcastMutation.isPending ? 'Sending…' : 'Send'}
+              </Text>
+            </Pressable>
+          </View>
+          <View style={{ padding: 20, gap: 12, flex: 1 }}>
+            <Text style={styles.modalHint}>
+              This will text {activeAttendingCount} {activeAttendingCount === 1 ? 'person' : 'people'} on their 1:1 thread with Rally.
+            </Text>
+            <TextInput
+              value={broadcastBody}
+              onChangeText={setBroadcastBody}
+              placeholder="Type your message…"
+              multiline
+              style={styles.broadcastInput}
+              maxLength={1000}
+              autoFocus
+            />
+            <Text style={styles.charCount}>{broadcastBody.length} / 1000</Text>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Confirmation modal — extra friction so a buggy double-tap doesn't fan out twice */}
+      <Modal visible={confirmVisible} transparent animationType="fade" onRequestClose={() => setConfirmVisible(false)}>
+        <View style={styles.confirmBackdrop}>
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmTitle}>Send to {activeAttendingCount} {activeAttendingCount === 1 ? 'person' : 'people'}?</Text>
+            <Text style={styles.confirmBody} numberOfLines={6}>{broadcastBody.trim()}</Text>
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <Button variant="secondary" onPress={() => setConfirmVisible(false)} fullWidth>Cancel</Button>
+              <Button onPress={confirmSendBroadcast} fullWidth>Send</Button>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add member modal (preserved) */}
+      <Modal
+        visible={addModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setAddModalVisible(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: '#F5F4F0' }}>
+          <View style={styles.modalHeader}>
+            <Pressable onPress={() => setAddModalVisible(false)}>
+              <Text style={styles.modalCancel}>Cancel</Text>
+            </Pressable>
+            <Text style={styles.modalTitle}>Add member</Text>
             <Pressable onPress={handleAddMember} disabled={createMember.isPending}>
-              <Text style={{ fontSize: 16, fontWeight: '600', color: createMember.isPending ? '#CCC' : '#0F3F2E' }}>
+              <Text style={[styles.modalAction, createMember.isPending && { color: '#CCC' }]}>
                 {createMember.isPending ? 'Adding…' : 'Add'}
               </Text>
             </Pressable>
@@ -515,51 +625,21 @@ export default function MembersScreen() {
           <View style={{ padding: 20, gap: 16 }}>
             <View style={{ flexDirection: 'row', gap: 12 }}>
               <View style={{ flex: 1, gap: 6 }}>
-                <Text style={{ fontSize: 12, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>First name *</Text>
-                <TextInput
-                  value={addFirstName}
-                  onChangeText={setAddFirstName}
-                  placeholder="First"
-                  placeholderTextColor="#A3A3A3"
-                  style={{ backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#E5E5E5', paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026' }}
-                  autoCapitalize="words"
-                  autoFocus
-                />
+                <Text style={styles.fieldLabel}>First name *</Text>
+                <TextInput value={addFirstName} onChangeText={setAddFirstName} style={styles.fieldInput} autoCapitalize="words" />
               </View>
               <View style={{ flex: 1, gap: 6 }}>
-                <Text style={{ fontSize: 12, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>Last name</Text>
-                <TextInput
-                  value={addLastName}
-                  onChangeText={setAddLastName}
-                  placeholder="Last"
-                  placeholderTextColor="#A3A3A3"
-                  style={{ backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#E5E5E5', paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026' }}
-                  autoCapitalize="words"
-                />
+                <Text style={styles.fieldLabel}>Last name</Text>
+                <TextInput value={addLastName} onChangeText={setAddLastName} style={styles.fieldInput} autoCapitalize="words" />
               </View>
             </View>
             <View style={{ gap: 6 }}>
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>Email *</Text>
-              <TextInput
-                value={addEmail}
-                onChangeText={setAddEmail}
-                placeholder="email@example.com"
-                placeholderTextColor="#A3A3A3"
-                style={{ backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#E5E5E5', paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026' }}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
+              <Text style={styles.fieldLabel}>Email *</Text>
+              <TextInput value={addEmail} onChangeText={setAddEmail} style={styles.fieldInput} keyboardType="email-address" autoCapitalize="none" />
             </View>
             <View style={{ gap: 6 }}>
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>Phone *</Text>
-              <TextInput
-                value={addPhone}
-                onChangeText={setAddPhone}
-                placeholder="+1 555 000 0000"
-                placeholderTextColor="#A3A3A3"
-                style={{ backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#E5E5E5', paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026' }}
-                keyboardType="phone-pad"
-              />
+              <Text style={styles.fieldLabel}>Phone *</Text>
+              <TextInput value={addPhone} onChangeText={setAddPhone} style={styles.fieldInput} keyboardType="phone-pad" />
             </View>
           </View>
         </View>
@@ -571,11 +651,8 @@ export default function MembersScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F4F0' },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 12,
   },
   backBtn: { fontSize: 15, width: 60 },
   headerTitle: { fontSize: 16, fontWeight: '700', color: '#163026' },
@@ -583,13 +660,8 @@ const styles = StyleSheet.create({
 
   // Progress card
   progressCard: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
-    padding: 16,
-    gap: 12,
-    marginBottom: 24,
+    backgroundColor: 'white', borderRadius: 16, borderWidth: 1, borderColor: '#EBEBEB',
+    padding: 16, gap: 12, marginBottom: 24,
   },
   progressRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   progressTitle: { fontSize: 15, fontWeight: '700', color: '#163026' },
@@ -597,128 +669,96 @@ const styles = StyleSheet.create({
   progressTrack: { height: 6, borderRadius: 3, backgroundColor: '#EBEBEB', overflow: 'hidden' },
   progressFill: { height: '100%', borderRadius: 3 },
   linkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#F7F7F5',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#F7F7F5', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8,
   },
   linkText: { flex: 1, fontSize: 12, color: '#888' },
   shareBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    borderRadius: 10,
-    borderWidth: 1,
-    paddingVertical: 10,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    borderRadius: 10, borderWidth: 1, paddingVertical: 10,
   },
   shareBtnText: { fontSize: 13, fontWeight: '600' },
-  textThreadBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    borderRadius: 10,
-    paddingVertical: 12,
-  },
-  textThreadBtnText: { fontSize: 14, fontWeight: '600', color: '#fff' },
 
-  // Section label
+  // Section + list
   sectionLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#AAA',
-    letterSpacing: 0.8,
-    marginBottom: 8,
+    fontSize: 11, fontWeight: '700', color: '#AAA', letterSpacing: 0.8, marginBottom: 8,
   },
-
-  // List card
   listCard: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
-    overflow: 'hidden',
-    marginBottom: 10,
-    paddingHorizontal: 16,
+    backgroundColor: 'white', borderRadius: 16, borderWidth: 1, borderColor: '#EBEBEB',
+    overflow: 'hidden', marginBottom: 18, paddingHorizontal: 16,
   },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    paddingVertical: 14,
-  },
-  rowBorder: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#F0F0F0',
-  },
-  avatarWrap: {
-    alignItems: 'center',
-    flexShrink: 0,
-    width: 36,
-  },
-  crownIcon: {
-    marginBottom: 2,
-  },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#DFE8D2',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarPlanner: {
-    backgroundColor: '#FFF3CD',
-  },
-  avatarText: { fontSize: 15, fontWeight: '700', color: '#0F3F2E' },
-  avatarTextPlanner: { color: '#7C5A0A' },
+  row: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 14 },
+  rowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#F0F0F0' },
+  avatarWrap: { alignItems: 'center', flexShrink: 0, width: 36 },
+  crownIcon: { marginBottom: 2 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   name: { fontSize: 14, fontWeight: '600', color: '#163026' },
-
-  // Planner badge
-  plannerBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: '#E8F4EE',
-    borderRadius: 999,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-  },
-  plannerBadgeText: { fontSize: 10, fontWeight: '700', color: '#235C38' },
-
   contactRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   contactText: { fontSize: 12, color: '#888', flex: 1 },
-  noContact: { fontSize: 12, color: '#C0C0C0', fontStyle: 'italic' },
+  metaText: { fontSize: 11, color: '#AAA', marginTop: 2 },
 
-  // RSVP badges
-  rsvpIn: { backgroundColor: '#EAF3EC', borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2 },
-  rsvpInText: { fontSize: 11, fontWeight: '700', color: '#235C38' },
-  rsvpOut: { backgroundColor: '#F0F0F0', borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2 },
-  rsvpOutText: { fontSize: 11, fontWeight: '700', color: '#888' },
-
-  // Preferences
-  prefsToggle: { fontSize: 12, color: '#235C38', fontWeight: '600', marginTop: 2 },
-  prefsBox: { marginTop: 8, backgroundColor: '#F7FAF8', borderRadius: 10, padding: 10, gap: 8 },
-  prefSection: { gap: 2 },
-  prefLabel: { fontSize: 11, fontWeight: '700', color: '#235C38', textTransform: 'uppercase', letterSpacing: 0.5 },
-  prefItem: { fontSize: 13, color: '#404040', lineHeight: 18 },
-
-  // Hint below member list
-  plannerHint: {
-    fontSize: 12,
-    color: '#BBB',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
+  plannerHint: { fontSize: 12, color: '#BBB', textAlign: 'center', marginBottom: 20 },
 
   // Empty state
   emptyState: { alignItems: 'center', paddingTop: 60, gap: 8 },
-  emptyIcon: { fontSize: 40 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: '#163026' },
   emptySubtitle: { fontSize: 14, color: '#888', textAlign: 'center', lineHeight: 20, paddingHorizontal: 24 },
+
+  // Broadcast FAB
+  broadcastFab: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    paddingHorizontal: 16, paddingTop: 12,
+  },
+  broadcastBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    borderRadius: 999, paddingVertical: 14, paddingHorizontal: 24,
+    shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  broadcastBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+
+  broadcastConfirm: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingVertical: 12, marginTop: 12,
+  },
+  broadcastConfirmText: { fontSize: 13, color: '#1D9E75', fontWeight: '600' },
+
+  // Broadcast modal
+  modalHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12,
+    borderBottomWidth: 1, borderBottomColor: '#EEE', backgroundColor: 'white',
+  },
+  modalCancel: { fontSize: 16, color: '#0F3F2E' },
+  modalTitle: { fontSize: 17, fontWeight: '600', color: '#163026' },
+  modalAction: { fontSize: 16, fontWeight: '600', color: '#0F3F2E' },
+  modalHint: { fontSize: 13, color: '#666' },
+  broadcastInput: {
+    backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#E5E5E5',
+    paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, color: '#163026',
+    minHeight: 160, textAlignVertical: 'top',
+  },
+  charCount: { fontSize: 12, color: '#999', textAlign: 'right' },
+
+  // Confirm modal
+  confirmBackdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center', justifyContent: 'center', padding: 20,
+  },
+  confirmCard: {
+    backgroundColor: 'white', borderRadius: 16, padding: 24, gap: 16,
+    width: '100%', maxWidth: 420,
+  },
+  confirmTitle: { fontSize: 18, fontWeight: '700', color: '#163026' },
+  confirmBody: { fontSize: 15, color: '#404040', lineHeight: 22 },
+
+  // Field labels (modal forms)
+  fieldLabel: {
+    fontSize: 12, fontWeight: '600', color: '#888',
+    textTransform: 'uppercase', letterSpacing: 0.5,
+  },
+  fieldInput: {
+    backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#E5E5E5',
+    paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026',
+  },
 });

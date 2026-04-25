@@ -14,6 +14,7 @@ set -euo pipefail
 PROJECT_REF="qxpbnixvjtwckuedlrfj"
 ENTRY="supabase/functions/sms-inbound/index.ts"
 JOIN_ENTRY="supabase/functions/sms-join-submit/index.ts"
+BROADCAST_ENTRY="supabase/functions/sms-broadcast/index.ts"
 
 # Locate deno: prefer ~/.deno/bin, fall back to PATH.
 DENO=""
@@ -31,6 +32,8 @@ else
   "$DENO" check "$ENTRY"
   echo "==> deno check $JOIN_ENTRY"
   "$DENO" check "$JOIN_ENTRY"
+  echo "==> deno check $BROADCAST_ENTRY"
+  "$DENO" check "$BROADCAST_ENTRY"
 fi
 
 # Ensure NVM is loaded so npx finds a recent Node.
@@ -45,3 +48,6 @@ npx supabase functions deploy sms-inbound --project-ref "$PROJECT_REF" --no-veri
 
 echo "==> deploying sms-join-submit to $PROJECT_REF"
 npx supabase functions deploy sms-join-submit --project-ref "$PROJECT_REF" --no-verify-jwt
+
+echo "==> deploying sms-broadcast to $PROJECT_REF"
+npx supabase functions deploy sms-broadcast --project-ref "$PROJECT_REF"

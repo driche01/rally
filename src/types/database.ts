@@ -444,6 +444,81 @@ export interface AiBlockAlternative {
   reason: string; // one-sentence explanation of why this suits the group
 }
 
+// ─── Trip sessions (1:1 SMS pivot — Phase 4 dashboard reads) ────────────────
+
+export type SmsTripSessionStatus =
+  | 'ACTIVE'
+  | 'PAUSED'
+  | 'SPLIT'
+  | 'CANCELLED'
+  | 'ABANDONED'
+  | 'FIRST_BOOKING_REACHED'
+  | 'RE_ENGAGEMENT_PENDING';
+
+export type SmsPhase =
+  | 'INTRO'
+  | 'COLLECTING_DESTINATIONS'
+  | 'DECIDING_DATES'
+  | 'BUDGET_POLL'
+  | 'BUDGET_DISCUSSION'
+  | 'DECIDING_DESTINATION'
+  | 'COLLECTING_ORIGINS'
+  | 'ESTIMATING_COSTS'
+  | 'COMMIT_POLL'
+  | 'CREATING_COMMITTED_THREAD'
+  | 'AWAITING_PLANNER_DECISION'
+  | 'AWAITING_FLIGHTS'
+  | 'DECIDING_LODGING_TYPE'
+  | 'AWAITING_GROUP_BOOKING'
+  | 'AWAITING_INDIVIDUAL_LODGING'
+  | 'AWAITING_INDIVIDUAL_FLIGHTS'
+  | 'FIRST_BOOKING_REACHED'
+  | 'RECOMMENDING'
+  | 'COMPLETE';
+
+export interface TripSession {
+  id: string;
+  trip_id: string | null;
+  thread_id: string | null;
+  planner_user_id: string | null;
+  phase: SmsPhase;
+  status: SmsTripSessionStatus;
+  destination: string | null;
+  dates: { start: string; end: string; nights?: number; flexible?: boolean } | null;
+  budget_median: number | null;
+  budget_status: string;
+  thread_name: string | null;
+  trip_model: string;
+  last_message_at: string | null;
+  paused: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type TripSessionParticipantStatus =
+  | 'active'
+  | 'opted_out'
+  | 'removed_by_planner'
+  | 'inactive';
+
+export interface TripSessionParticipant {
+  id: string;
+  trip_session_id: string;
+  user_id: string | null;
+  phone: string;
+  display_name: string | null;
+  status: TripSessionParticipantStatus;
+  is_planner: boolean;
+  is_attending: boolean;
+  committed: boolean;
+  flight_status: string | null;
+  origin_city: string | null;
+  origin_airport: string | null;
+  joined_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
 // ─── Join links (1:1 SMS pivot, Phase 1) ────────────────────────────────────
 
 export interface JoinLink {

@@ -441,13 +441,6 @@ export default function PollsScreen() {
 
     Alert.alert('Share with group', 'Choose how to send:', [
       {
-        text: 'Get Rally to run this in my group',
-        onPress: () => {
-          capture(Events.SHARE_LINK_COPIED, { trip_id: id, method: 'sms_session' });
-          router.push(`/(app)/trips/${id}/activate-sms` as Parameters<typeof router.push>[0]);
-        },
-      },
-      {
         text: 'iMessage / SMS',
         onPress: () => {
           const smsUrl = Platform.OS === 'ios' ? `sms:&body=${encoded}` : `sms:?body=${encoded}`;
