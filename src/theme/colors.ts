@@ -44,7 +44,8 @@ export const colors = {
     warm:    '#EFE3D0',  // inactive interactive surfaces (pills, toggles, calendar)
                          //   — ~8% darker than page, clearly differentiated
   },
-  card:     '#FFFAF2',   // elevated card surface — paired with shadow + border
+  card:     '#FFFCF6',   // elevated card surface — near-white with a whisper of warmth
+                         //   (clearly whiter than cream page, doesn't read clinical)
   line:     '#D9CCB6',   // hairline borders — visible-but-quiet on cream surfaces
 
   // ─── Text ─────────────────────────────────────────────────────────────────
