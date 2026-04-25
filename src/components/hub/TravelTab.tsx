@@ -189,12 +189,12 @@ function LegForm({
                 paddingVertical: 7,
                 borderRadius: 999,
                 borderWidth: 1.5,
-                borderColor: sel ? '#D85A30' : '#E5E5E5',
+                borderColor: sel ? '#0F3F2E' : '#D9CCB6',
                 backgroundColor: sel ? '#fff5f2' : '#fff',
               }}
             >
-              <Ionicons name={MODE_CONFIG[m].icon} size={14} color={sel ? '#D85A30' : '#888'} />
-              <Text style={{ fontSize: 13, fontWeight: '500', color: sel ? '#D85A30' : '#555' }}>
+              <Ionicons name={MODE_CONFIG[m].icon} size={14} color={sel ? '#0F3F2E' : '#888'} />
+              <Text style={{ fontSize: 13, fontWeight: '500', color: sel ? '#0F3F2E' : '#555' }}>
                 {MODE_CONFIG[m].label}
               </Text>
             </Pressable>
@@ -213,12 +213,12 @@ function LegForm({
               flex: 1,
               height: 44,
               borderWidth: 1.5,
-              borderColor: '#E5E5E5',
+              borderColor: '#D9CCB6',
               borderRadius: 10,
               paddingHorizontal: 12,
               fontSize: 15,
-              color: '#1A1A1A',
-              backgroundColor: '#FAFAFA',
+              color: '#163026',
+              backgroundColor: '#FBF7EF',
             }}
             placeholder={
               mode === 'flight'
@@ -261,17 +261,17 @@ function LegForm({
             gap: 8,
             height: 44,
             borderWidth: 1.5,
-            borderColor: '#E5E5E5',
+            borderColor: '#D9CCB6',
             borderRadius: 10,
             paddingHorizontal: 12,
-            backgroundColor: '#FAFAFA',
+            backgroundColor: '#FBF7EF',
           }}
           accessibilityRole="button"
           accessibilityLabel="Select departure and arrival dates"
         >
           <Ionicons name="calendar-outline" size={16} color="#888" />
           {departureDate ? (
-            <Text style={{ flex: 1, fontSize: 14, color: '#1A1A1A' }}>
+            <Text style={{ flex: 1, fontSize: 14, color: '#163026' }}>
               {formatLegDate(departureDate)}
               {arrivalDate && arrivalDate !== departureDate ? ` → ${formatLegDate(arrivalDate)}` : ''}
             </Text>
@@ -303,12 +303,12 @@ function LegForm({
             style={{
               height: 44,
               borderWidth: 1.5,
-              borderColor: '#E5E5E5',
+              borderColor: '#D9CCB6',
               borderRadius: 10,
               paddingHorizontal: 12,
               fontSize: 15,
-              color: '#1A1A1A',
-              backgroundColor: '#FAFAFA',
+              color: '#163026',
+              backgroundColor: '#FBF7EF',
             }}
             placeholder="HH:MM"
             placeholderTextColor="#A8A8A8"
@@ -325,12 +325,12 @@ function LegForm({
             style={{
               height: 44,
               borderWidth: 1.5,
-              borderColor: '#E5E5E5',
+              borderColor: '#D9CCB6',
               borderRadius: 10,
               paddingHorizontal: 12,
               fontSize: 15,
-              color: '#1A1A1A',
-              backgroundColor: '#FAFAFA',
+              color: '#163026',
+              backgroundColor: '#FBF7EF',
             }}
             placeholder="HH:MM"
             placeholderTextColor="#A8A8A8"
@@ -367,12 +367,12 @@ function LegForm({
           style={{
             height: 44,
             borderWidth: 1.5,
-            borderColor: '#E5E5E5',
+            borderColor: '#D9CCB6',
             borderRadius: 10,
             paddingHorizontal: 12,
             fontSize: 15,
-            color: '#1A1A1A',
-            backgroundColor: '#FAFAFA',
+            color: '#163026',
+            backgroundColor: '#FBF7EF',
           }}
           placeholder="e.g. ABC123"
           placeholderTextColor="#A8A8A8"
@@ -391,13 +391,13 @@ function LegForm({
           style={{
             minHeight: 72,
             borderWidth: 1.5,
-            borderColor: '#E5E5E5',
+            borderColor: '#D9CCB6',
             borderRadius: 10,
             paddingHorizontal: 12,
             paddingVertical: 10,
             fontSize: 15,
-            color: '#1A1A1A',
-            backgroundColor: '#FAFAFA',
+            color: '#163026',
+            backgroundColor: '#FBF7EF',
             textAlignVertical: 'top',
           }}
           placeholder="e.g. Meet at Terminal 4, baggage claim"
@@ -421,7 +421,7 @@ function LegForm({
         }}
       >
         <View style={{ flex: 1, gap: 2 }}>
-          <Text style={{ fontSize: 14, fontWeight: '600', color: '#1A1A1A' }}>Share with group</Text>
+          <Text style={{ fontSize: 14, fontWeight: '600', color: '#163026' }}>Share with group</Text>
           <Text style={{ fontSize: 12, color: '#888', lineHeight: 16 }}>
             Visible to all group members in their travel section
           </Text>
@@ -429,9 +429,9 @@ function LegForm({
         <Switch
           value={shareWithGroup}
           onValueChange={setShareWithGroup}
-          trackColor={{ false: '#E5E5E5', true: '#C8ECD9' }}
+          trackColor={{ false: '#D9CCB6', true: '#C8ECD9' }}
           thumbColor={shareWithGroup ? '#235C38' : '#fff'}
-          ios_backgroundColor="#E5E5E5"
+          ios_backgroundColor="#D9CCB6"
         />
       </View>
 
@@ -444,7 +444,7 @@ function LegForm({
             height: 50,
             borderRadius: 14,
             borderWidth: 1.5,
-            borderColor: '#E5E5E5',
+            borderColor: '#D9CCB6',
             alignItems: 'center',
             justifyContent: 'center',
           }}
@@ -458,7 +458,7 @@ function LegForm({
             flex: 2,
             height: 50,
             borderRadius: 14,
-            backgroundColor: saving ? '#FFAA9F' : '#D85A30',
+            backgroundColor: saving ? '#FFAA9F' : '#0F3F2E',
             alignItems: 'center',
             justifyContent: 'center',
           }}
@@ -510,13 +510,13 @@ function LegFormSheet({
           <Pressable onPress={() => {}} style={{ backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '90%' }}>
             {/* Drag handle + header */}
             <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
-              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#E5E5E5' }} />
+              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#D9CCB6' }} />
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' }}>
               <Pressable onPress={onClose}>
-                <Text style={{ fontSize: 15, color: '#D85A30' }}>Cancel</Text>
+                <Text style={{ fontSize: 15, color: '#0F3F2E' }}>Cancel</Text>
               </Pressable>
-              <Text style={{ fontSize: 17, fontWeight: '700', color: '#1C1C1C' }}>
+              <Text style={{ fontSize: 17, fontWeight: '700', color: '#163026' }}>
                 {isEditing ? 'Edit leg' : 'Add leg'}
               </Text>
               <View style={{ width: 56 }} />
@@ -632,7 +632,7 @@ function LegCard({
             <Ionicons name={cfg.icon} size={20} color="#555" />
           </View>
           <View style={{ flex: 1, gap: 2 }}>
-            <Text style={{ fontSize: 15, fontWeight: '700', color: '#1A1A1A' }}>{leg.label}</Text>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: '#163026' }}>{leg.label}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Text style={{ fontSize: 12, fontWeight: '500', color: '#888', textTransform: 'uppercase', letterSpacing: 0.4 }}>
                 {cfg.label}
@@ -687,7 +687,7 @@ function LegCard({
                 <Text style={{ fontSize: 11, color: '#A8A8A8', fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.4 }}>
                   Departs
                 </Text>
-                <Text style={{ fontSize: 14, fontWeight: '600', color: '#1A1A1A' }}>
+                <Text style={{ fontSize: 14, fontWeight: '600', color: '#163026' }}>
                   {[leg.departure_date ? formatLegDate(leg.departure_date) : '', leg.departure_time]
                     .filter(Boolean)
                     .join(' ')}
@@ -699,7 +699,7 @@ function LegCard({
                 <Text style={{ fontSize: 11, color: '#A8A8A8', fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.4 }}>
                   Arrives
                 </Text>
-                <Text style={{ fontSize: 14, fontWeight: '600', color: '#1A1A1A' }}>
+                <Text style={{ fontSize: 14, fontWeight: '600', color: '#163026' }}>
                   {[leg.arrival_date ? formatLegDate(leg.arrival_date) : '', leg.arrival_time]
                     .filter(Boolean)
                     .join(' ')}
@@ -815,7 +815,7 @@ function MemberLegCard({
           <Ionicons name={cfg.icon} size={18} color="#555" />
         </View>
         <View style={{ flex: 1, gap: 2 }}>
-          <Text style={{ fontSize: 14, fontWeight: '700', color: '#1A1A1A' }}>{leg.label}</Text>
+          <Text style={{ fontSize: 14, fontWeight: '700', color: '#163026' }}>{leg.label}</Text>
           <Text style={{ fontSize: 12, color: '#888', textTransform: 'uppercase', letterSpacing: 0.4 }}>
             {cfg.label}
           </Text>
@@ -829,7 +829,7 @@ function MemberLegCard({
               <Text style={{ fontSize: 11, color: '#A8A8A8', fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.4 }}>
                 Departs
               </Text>
-              <Text style={{ fontSize: 13, fontWeight: '600', color: '#1A1A1A' }}>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: '#163026' }}>
                 {[leg.departure_date ? formatLegDate(leg.departure_date) : '', leg.departure_time]
                   .filter(Boolean)
                   .join(' ')}
@@ -841,7 +841,7 @@ function MemberLegCard({
               <Text style={{ fontSize: 11, color: '#A8A8A8', fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.4 }}>
                 Arrives
               </Text>
-              <Text style={{ fontSize: 13, fontWeight: '600', color: '#1A1A1A' }}>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: '#163026' }}>
                 {[leg.arrival_date ? formatLegDate(leg.arrival_date) : '', leg.arrival_time]
                   .filter(Boolean)
                   .join(' ')}
@@ -927,7 +927,7 @@ function TravelAiSuggestionCard({ tripId, defaultExpanded = true, onApply }: { t
                 onChangeText={setOrigin}
                 placeholder="e.g. New York, NY"
                 placeholderTextColor="#A3A3A3"
-                style={{ flex: 1, borderWidth: 1.5, borderColor: '#C8D9E8', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#1A1A1A', backgroundColor: 'white' }}
+                style={{ flex: 1, borderWidth: 1.5, borderColor: '#C8D9E8', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#163026', backgroundColor: 'white' }}
                 autoFocus
                 returnKeyType="done"
                 onSubmitEditing={handleSubmitOrigin}
@@ -955,7 +955,7 @@ function TravelAiSuggestionCard({ tripId, defaultExpanded = true, onApply }: { t
             {getSuggestions.isPending ? (
               <ActivityIndicator size="small" color="white" />
             ) : (
-              <Text style={{ fontSize: 14, fontWeight: '700', color: '#FFFFFF' }}>Get suggestions</Text>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#FFFCF6' }}>Get suggestions</Text>
             )}
           </Pressable>
         )}
@@ -1009,17 +1009,17 @@ function TravelAiSuggestionCard({ tripId, defaultExpanded = true, onApply }: { t
               style={{
                 borderRadius: 12,
                 borderWidth: selectedIndex === s.index ? 2 : 1,
-                borderColor: selectedIndex === s.index ? '#1A4060' : '#E5E5E5',
+                borderColor: selectedIndex === s.index ? '#1A4060' : '#D9CCB6',
                 padding: 12,
                 gap: 8,
               }}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <View style={{ width: 30, height: 30, borderRadius: 8, backgroundColor: '#FFF4F2', alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name={MODE_ICON[s.mode] ?? 'navigate-outline'} size={15} color="#D85A30" />
+                  <Ionicons name={MODE_ICON[s.mode] ?? 'navigate-outline'} size={15} color="#0F3F2E" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#1A1A1A' }}>{s.label}</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#163026' }}>{s.label}</Text>
                   <Text style={{ fontSize: 11, color: '#888' }}>
                     {s.estimatedDuration}
                     {s.estimatedCostPerPerson ? ` · ${s.estimatedCostPerPerson}` : ''}
@@ -1032,7 +1032,7 @@ function TravelAiSuggestionCard({ tripId, defaultExpanded = true, onApply }: { t
                 ) : (
                   <Pressable
                     onPress={() => Linking.openURL(s.searchUrl)}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, borderWidth: 1, borderColor: '#E5E5E5' }}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, borderWidth: 1, borderColor: '#D9CCB6' }}
                   >
                     <Text style={{ fontSize: 11, fontWeight: '600', color: '#1A4060' }}>Search</Text>
                     <Ionicons name="open-outline" size={10} color="#1A4060" />
@@ -1056,8 +1056,8 @@ function TravelAiSuggestionCard({ tripId, defaultExpanded = true, onApply }: { t
               </View>
               {s.bookingTip ? (
                 <View style={{ flexDirection: 'row', gap: 5, alignItems: 'flex-start', backgroundColor: '#FFF8F6', borderRadius: 8, padding: 8 }}>
-                  <Ionicons name="bulb-outline" size={12} color="#D85A30" style={{ marginTop: 1 }} />
-                  <Text style={{ fontSize: 11, color: '#D85A30', flex: 1 }}>{s.bookingTip}</Text>
+                  <Ionicons name="bulb-outline" size={12} color="#0F3F2E" style={{ marginTop: 1 }} />
+                  <Text style={{ fontSize: 11, color: '#0F3F2E', flex: 1 }}>{s.bookingTip}</Text>
                 </View>
               ) : null}
             </Pressable>
@@ -1176,7 +1176,7 @@ export function TravelTab({ tripId, isPlanner = true }: { tripId: string; isPlan
           marginBottom: 4,
         }}
       >
-        <Text style={{ fontSize: 20, fontWeight: '700', color: '#1A1A1A' }}>Travel</Text>
+        <Text style={{ fontSize: 20, fontWeight: '700', color: '#163026' }}>Travel</Text>
         {legs.length > 0 ? (
           <Pressable
             onPress={async () => {
@@ -1191,7 +1191,7 @@ export function TravelTab({ tripId, isPlanner = true }: { tripId: string; isPlan
               paddingVertical: 8,
               borderRadius: 999,
               borderWidth: 1,
-              borderColor: '#E5E5E5',
+              borderColor: '#D9CCB6',
             }}
             accessibilityRole="button"
             accessibilityLabel="Share all travel legs"
@@ -1265,7 +1265,7 @@ export function TravelTab({ tripId, isPlanner = true }: { tripId: string; isPlan
             borderRadius: 16,
             borderWidth: 2,
             borderStyle: 'dashed',
-            borderColor: '#E5E5E5',
+            borderColor: '#D9CCB6',
           }}
           accessibilityRole="button"
         >
@@ -1278,7 +1278,7 @@ export function TravelTab({ tripId, isPlanner = true }: { tripId: string; isPlan
       {legs.length === 0 && !isLoading ? (
         <View style={{ alignItems: 'center', paddingVertical: 48, gap: 10 }}>
           <Ionicons name="airplane-outline" size={44} color="#D0D0D0" />
-          <Text style={{ fontSize: 16, fontWeight: '600', color: '#1A1A1A' }}>No travel legs yet</Text>
+          <Text style={{ fontSize: 16, fontWeight: '600', color: '#163026' }}>No travel legs yet</Text>
           <Text style={{ fontSize: 14, color: '#888', textAlign: 'center', lineHeight: 20, paddingHorizontal: 32 }}>
             Add flights, trains, car trips, or any other transport to coordinate how everyone gets there.
           </Text>

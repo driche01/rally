@@ -115,10 +115,10 @@ function BookingSheet({
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <Pressable onPress={() => {}} style={{ backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, gap: 16 }}>
             <View style={{ alignItems: 'center', marginBottom: 4 }}>
-              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#E5E5E5' }} />
+              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#D9CCB6' }} />
             </View>
 
-            <Text style={{ fontSize: 17, fontWeight: '700', color: '#1C1C1C' }}>{local.isEditing ? 'Edit booking' : 'Mark as booked'}</Text>
+            <Text style={{ fontSize: 17, fontWeight: '700', color: '#163026' }}>{local.isEditing ? 'Edit booking' : 'Mark as booked'}</Text>
 
             <View>
               <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Confirmation #</Text>
@@ -127,7 +127,7 @@ function BookingSheet({
                 onChangeText={(v) => set('confirmation', v)}
                 placeholder="e.g. ABC123"
                 placeholderTextColor="#A3A3A3"
-                style={{ borderWidth: 1.5, borderColor: '#E5E5E5', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1C1C1C' }}
+                style={{ borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026' }}
                 autoCapitalize="characters"
               />
             </View>
@@ -140,7 +140,7 @@ function BookingSheet({
                   onChangeText={(v) => set('checkInTime', v)}
                   placeholder="e.g. 3:00 PM"
                   placeholderTextColor="#A3A3A3"
-                  style={{ borderWidth: 1.5, borderColor: '#E5E5E5', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1C1C1C' }}
+                  style={{ borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026' }}
                 />
               </View>
               <View style={{ flex: 1 }}>
@@ -150,14 +150,14 @@ function BookingSheet({
                   onChangeText={(v) => set('checkOutTime', v)}
                   placeholder="e.g. 11:00 AM"
                   placeholderTextColor="#A3A3A3"
-                  style={{ borderWidth: 1.5, borderColor: '#E5E5E5', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1C1C1C' }}
+                  style={{ borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026' }}
                 />
               </View>
             </View>
 
             <View>
               <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Total cost</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#E5E5E5', borderRadius: 12, paddingHorizontal: 14 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14 }}>
                 <Text style={{ fontSize: 15, color: '#737373', marginRight: 4 }}>$</Text>
                 <TextInput
                   value={local.totalCost}
@@ -165,7 +165,7 @@ function BookingSheet({
                   placeholder="0.00"
                   placeholderTextColor="#A3A3A3"
                   keyboardType="decimal-pad"
-                  style={{ flex: 1, paddingVertical: 12, fontSize: 15, color: '#1C1C1C' }}
+                  style={{ flex: 1, paddingVertical: 12, fontSize: 15, color: '#163026' }}
                 />
               </View>
             </View>
@@ -173,14 +173,14 @@ function BookingSheet({
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <Pressable
                 onPress={onClose}
-                style={{ flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#E5E5E5', alignItems: 'center' }}
+                style={{ flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#D9CCB6', alignItems: 'center' }}
               >
                 <Text style={{ fontSize: 15, fontWeight: '600', color: '#525252' }}>Cancel</Text>
               </Pressable>
               <Pressable
                 onPress={() => onSave(local)}
                 disabled={saving}
-                style={{ flex: 2, paddingVertical: 14, borderRadius: 14, backgroundColor: '#D85A30', alignItems: 'center', justifyContent: 'center' }}
+                style={{ flex: 2, paddingVertical: 14, borderRadius: 14, backgroundColor: '#0F3F2E', alignItems: 'center', justifyContent: 'center' }}
               >
                 {saving ? (
                   <ActivityIndicator size="small" color="white" />
@@ -269,9 +269,9 @@ function ManualEntrySheet({
           >
             <Pressable onPress={() => {}}>
               <View style={{ alignItems: 'center', marginBottom: 4 }}>
-                <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#E5E5E5' }} />
+                <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#D9CCB6' }} />
               </View>
-              <Text style={{ fontSize: 17, fontWeight: '700', color: '#1C1C1C', marginBottom: 16 }}>Add property</Text>
+              <Text style={{ fontSize: 17, fontWeight: '700', color: '#163026', marginBottom: 16 }}>Add property</Text>
 
               {/* Platform */}
               <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Platform</Text>
@@ -286,11 +286,11 @@ function ManualEntrySheet({
                         paddingVertical: 7,
                         borderRadius: 20,
                         borderWidth: 1.5,
-                        borderColor: local.platform === p.value ? '#D85A30' : '#E5E5E5',
+                        borderColor: local.platform === p.value ? '#0F3F2E' : '#D9CCB6',
                         backgroundColor: local.platform === p.value ? '#FFF1F0' : 'white',
                       }}
                     >
-                      <Text style={{ fontSize: 13, fontWeight: '600', color: local.platform === p.value ? '#D85A30' : '#737373' }}>{p.label}</Text>
+                      <Text style={{ fontSize: 13, fontWeight: '600', color: local.platform === p.value ? '#0F3F2E' : '#737373' }}>{p.label}</Text>
                     </Pressable>
                   ))}
                 </View>
@@ -303,7 +303,7 @@ function ManualEntrySheet({
                 onChangeText={(v) => set('title', v)}
                 placeholder="e.g. Cozy Cabin in the Woods"
                 placeholderTextColor="#A3A3A3"
-                style={{ borderWidth: 1.5, borderColor: '#E5E5E5', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1C1C1C', marginBottom: 16 }}
+                style={{ borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026', marginBottom: 16 }}
                 autoFocus
               />
 
@@ -314,7 +314,7 @@ function ManualEntrySheet({
                 onChangeText={(v) => set('url', v)}
                 placeholder="https://…"
                 placeholderTextColor="#A3A3A3"
-                style={{ borderWidth: 1.5, borderColor: '#E5E5E5', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1C1C1C', marginBottom: 16 }}
+                style={{ borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026', marginBottom: 16 }}
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="url"
@@ -329,7 +329,7 @@ function ManualEntrySheet({
                     onChangeText={(v) => set('checkIn', v)}
                     placeholder="YYYY-MM-DD"
                     placeholderTextColor="#A3A3A3"
-                    style={{ borderWidth: 1.5, borderColor: '#E5E5E5', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1C1C1C' }}
+                    style={{ borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026' }}
                     maxLength={10}
                   />
                 </View>
@@ -340,7 +340,7 @@ function ManualEntrySheet({
                     onChangeText={(v) => set('checkOut', v)}
                     placeholder="YYYY-MM-DD"
                     placeholderTextColor="#A3A3A3"
-                    style={{ borderWidth: 1.5, borderColor: '#E5E5E5', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1C1C1C' }}
+                    style={{ borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026' }}
                     maxLength={10}
                   />
                 </View>
@@ -348,7 +348,7 @@ function ManualEntrySheet({
 
               {/* Total cost */}
               <Text style={{ fontSize: 12, fontWeight: '600', color: '#737373', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Total cost</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#E5E5E5', borderRadius: 12, paddingHorizontal: 14, marginBottom: 16 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, marginBottom: 16 }}>
                 <Text style={{ fontSize: 15, color: '#737373', marginRight: 4 }}>$</Text>
                 <TextInput
                   value={local.totalCost}
@@ -356,7 +356,7 @@ function ManualEntrySheet({
                   placeholder="0.00"
                   placeholderTextColor="#A3A3A3"
                   keyboardType="decimal-pad"
-                  style={{ flex: 1, paddingVertical: 12, fontSize: 15, color: '#1C1C1C' }}
+                  style={{ flex: 1, paddingVertical: 12, fontSize: 15, color: '#163026' }}
                 />
               </View>
 
@@ -369,20 +369,20 @@ function ManualEntrySheet({
                 placeholderTextColor="#A3A3A3"
                 multiline
                 numberOfLines={2}
-                style={{ borderWidth: 1.5, borderColor: '#E5E5E5', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1C1C1C', minHeight: 72, textAlignVertical: 'top', marginBottom: 16 }}
+                style={{ borderWidth: 1.5, borderColor: '#D9CCB6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#163026', minHeight: 72, textAlignVertical: 'top', marginBottom: 16 }}
               />
 
               <View style={{ flexDirection: 'row', gap: 10 }}>
                 <Pressable
                   onPress={onClose}
-                  style={{ flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#E5E5E5', alignItems: 'center' }}
+                  style={{ flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: '#D9CCB6', alignItems: 'center' }}
                 >
                   <Text style={{ fontSize: 15, fontWeight: '600', color: '#525252' }}>Cancel</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => canSave && onSave(local)}
                   disabled={!canSave || saving}
-                  style={{ flex: 2, paddingVertical: 14, borderRadius: 14, backgroundColor: canSave ? '#D85A30' : '#FCA99F', alignItems: 'center', justifyContent: 'center' }}
+                  style={{ flex: 2, paddingVertical: 14, borderRadius: 14, backgroundColor: canSave ? '#0F3F2E' : '#FCA99F', alignItems: 'center', justifyContent: 'center' }}
                 >
                   {saving ? (
                     <ActivityIndicator size="small" color="white" />
@@ -503,7 +503,7 @@ function PropertyCard({
     <Pressable
       onPress={onBook}
       onLongPress={handleLongPress}
-      className="mb-3 overflow-hidden rounded-2xl bg-white"
+      className="mb-3 overflow-hidden rounded-2xl bg-card"
       style={{
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
@@ -514,7 +514,7 @@ function PropertyCard({
     >
       {/* Booked banner */}
       {isBooked ? (
-        <View className="flex-row items-center justify-between bg-coral-500 px-4 py-2">
+        <View className="flex-row items-center justify-between bg-green px-4 py-2">
           <Text className="text-xs font-semibold text-white">✓ Booked</Text>
           <Pressable
             onPress={async () => {
@@ -534,11 +534,11 @@ function PropertyCard({
         {/* Header row */}
         <View className="flex-row items-start justify-between gap-2">
           <View className="flex-1 gap-1">
-            <Text className="text-sm font-semibold text-neutral-800" numberOfLines={2}>
+            <Text className="text-sm font-semibold text-ink" numberOfLines={2}>
               {option.title}
             </Text>
             {option.notes ? (
-              <Text className="text-xs text-neutral-400" numberOfLines={1}>{option.notes}</Text>
+              <Text className="text-xs text-muted" numberOfLines={1}>{option.notes}</Text>
             ) : null}
           </View>
           <View className="flex-row items-center gap-2">
@@ -548,12 +548,12 @@ function PropertyCard({
             </View>
             {/* Status */}
             {option.status === 'voted' ? (
-              <View className="rounded-xl bg-blue-50 px-2 py-0.5">
-                <Text className="text-xs font-medium text-blue-600">Voted</Text>
+              <View className="rounded-xl bg-gold/40 px-2 py-0.5">
+                <Text className="text-xs font-medium text-ink">Voted</Text>
               </View>
             ) : option.status === 'booked' ? (
-              <View className="rounded-xl bg-coral-50 px-2 py-0.5">
-                <Text className="text-xs font-medium text-coral-600">Booked</Text>
+              <View className="rounded-xl bg-green-soft px-2 py-0.5">
+                <Text className="text-xs font-medium text-green-dark">Booked</Text>
               </View>
             ) : null}
           </View>
@@ -564,13 +564,13 @@ function PropertyCard({
           {dateRange ? (
             <View className="flex-row items-center gap-1">
               <Ionicons name="calendar-outline" size={12} color="#A3A3A3" />
-              <Text className="text-xs text-neutral-400">{dateRange}</Text>
+              <Text className="text-xs text-muted">{dateRange}</Text>
             </View>
           ) : null}
           {option.total_cost_cents != null ? (
             <View className="flex-row items-center gap-1">
               <Ionicons name="cash-outline" size={12} color="#A3A3A3" />
-              <Text className="text-xs font-medium text-neutral-600">
+              <Text className="text-xs font-medium text-muted">
                 {formatCents(option.total_cost_cents)}
               </Text>
             </View>
@@ -578,7 +578,7 @@ function PropertyCard({
           {option.voteCount > 0 ? (
             <View className="flex-row items-center gap-1">
               <Ionicons name="thumbs-up-outline" size={12} color="#A3A3A3" />
-              <Text className="text-xs text-neutral-400">{option.voteCount} votes</Text>
+              <Text className="text-xs text-muted">{option.voteCount} votes</Text>
             </View>
           ) : null}
         </View>
@@ -588,19 +588,19 @@ function PropertyCard({
           {option.url ? (
             <Pressable
               onPress={() => Linking.openURL(option.url!)}
-              className="flex-row items-center gap-1 rounded-xl border border-neutral-200 px-3 py-1.5"
+              className="flex-row items-center gap-1 rounded-xl border border-line px-3 py-1.5"
             >
               <Ionicons name="open-outline" size={12} color="#737373" />
-              <Text className="text-xs font-medium text-neutral-600">View listing</Text>
+              <Text className="text-xs font-medium text-muted">View listing</Text>
             </Pressable>
           ) : null}
           {!isBooked ? (
             <Pressable
               onPress={onBook}
-              className="flex-row items-center gap-1 rounded-xl bg-coral-50 px-3 py-1.5"
+              className="flex-row items-center gap-1 rounded-xl bg-green-soft px-3 py-1.5"
             >
-              <Ionicons name="checkmark-circle-outline" size={12} color="#D85A30" />
-              <Text className="text-xs font-medium text-coral-600">Mark as booked</Text>
+              <Ionicons name="checkmark-circle-outline" size={12} color="#0F3F2E" />
+              <Text className="text-xs font-medium text-green-dark">Mark as booked</Text>
             </Pressable>
           ) : null}
         </View>
@@ -657,7 +657,7 @@ function LodgingAiSuggestionCard({
           {getSuggestions.isPending ? (
             <ActivityIndicator size="small" color="white" />
           ) : (
-            <Text style={{ fontSize: 14, fontWeight: '700', color: '#FFFFFF' }}>Get suggestions</Text>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#FFFCF6' }}>Get suggestions</Text>
           )}
         </Pressable>
       </View>
@@ -666,7 +666,7 @@ function LodgingAiSuggestionCard({
 
   return (
     <View
-      className="mb-4 overflow-hidden rounded-2xl bg-white"
+      className="mb-4 overflow-hidden rounded-2xl bg-card"
       style={{ borderWidth: 1, borderColor: '#D8E4EE', shadowColor: '#1A4060', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 }}
     >
       <Pressable
@@ -698,14 +698,14 @@ function LodgingAiSuggestionCard({
               style={{
                 borderRadius: 12,
                 borderWidth: selectedIndex === s.index ? 2 : 1,
-                borderColor: selectedIndex === s.index ? '#1A4060' : '#E5E5E5',
+                borderColor: selectedIndex === s.index ? '#1A4060' : '#D9CCB6',
                 padding: 12,
                 gap: 8,
               }}
             >
               <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#1A1A1A' }}>{s.label}</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#163026' }}>{s.label}</Text>
                   <Text style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{s.propertyType} · {s.idealFor}</Text>
                 </View>
                 {selectedIndex === s.index ? (
@@ -954,7 +954,7 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
   }
 
   return (
-    <View className="flex-1 bg-neutral-50">
+    <View className="flex-1 bg-cream">
       <ScrollView
         contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 24 }}
         keyboardDismissMode="on-drag"
@@ -962,10 +962,10 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
       >
         {/* Header */}
         <View className="flex-row items-center justify-between pt-4 pb-3">
-          <Text className="text-base font-bold text-neutral-800">Lodging</Text>
+          <Text className="text-base font-bold text-ink">Lodging</Text>
           {atLimit ? (
-            <View className="rounded-xl bg-neutral-100 px-3 py-1">
-              <Text className="text-xs font-medium text-neutral-500">Limit reached (5/5)</Text>
+            <View className="rounded-xl bg-cream-warm px-3 py-1">
+              <Text className="text-xs font-medium text-muted">Limit reached (5/5)</Text>
             </View>
           ) : null}
         </View>
@@ -1027,7 +1027,7 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
 
         {/* ── Section A: Search panel ── */}
         <View
-          className="mb-4 overflow-hidden rounded-2xl bg-white"
+          className="mb-4 overflow-hidden rounded-2xl bg-card"
           style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 2 }}
         >
           <Pressable
@@ -1036,7 +1036,7 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
           >
             <View className="flex-row items-center gap-2">
               <Ionicons name="search-outline" size={16} color="#737373" />
-              <Text className="text-sm font-semibold text-neutral-700">Search for lodging</Text>
+              <Text className="text-sm font-semibold text-ink">Search for lodging</Text>
             </View>
             <Ionicons
               name={searchExpanded ? 'chevron-up' : 'chevron-down'}
@@ -1049,7 +1049,7 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
             <View className="gap-3 px-4 pb-4">
               {/* Destination */}
               <View>
-                <Text className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-neutral-500">Destination</Text>
+                <Text className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted">Destination</Text>
                 <PlacesAutocompleteInput
                   value={destination}
                   onChangeText={(text) => {
@@ -1068,24 +1068,24 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
               {/* Dates */}
               <View className="flex-row gap-3">
                 <View className="flex-1">
-                  <Text className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-neutral-500">Check-in</Text>
+                  <Text className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted">Check-in</Text>
                   <TextInput
                     value={checkIn}
                     onChangeText={setCheckIn}
                     placeholder="YYYY-MM-DD"
                     placeholderTextColor="#A3A3A3"
-                    className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-800"
+                    className="rounded-xl border border-line bg-cream px-4 py-3 text-sm text-ink"
                     maxLength={10}
                   />
                 </View>
                 <View className="flex-1">
-                  <Text className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-neutral-500">Check-out</Text>
+                  <Text className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted">Check-out</Text>
                   <TextInput
                     value={checkOut}
                     onChangeText={setCheckOut}
                     placeholder="YYYY-MM-DD"
                     placeholderTextColor="#A3A3A3"
-                    className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-800"
+                    className="rounded-xl border border-line bg-cream px-4 py-3 text-sm text-ink"
                     maxLength={10}
                   />
                 </View>
@@ -1093,18 +1093,18 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
 
               {/* Guests */}
               <View>
-                <Text className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-neutral-500">Guests</Text>
+                <Text className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted">Guests</Text>
                 <View className="flex-row items-center gap-3">
                   <Pressable
                     onPress={() => setGuests((g) => Math.max(1, g - 1))}
-                    className="h-9 w-9 items-center justify-center rounded-xl border border-neutral-200"
+                    className="h-9 w-9 items-center justify-center rounded-xl border border-line"
                   >
                     <Ionicons name="remove" size={16} color="#737373" />
                   </Pressable>
-                  <Text className="min-w-[24px] text-center text-base font-semibold text-neutral-800">{guests}</Text>
+                  <Text className="min-w-[24px] text-center text-base font-semibold text-ink">{guests}</Text>
                   <Pressable
                     onPress={() => setGuests((g) => g + 1)}
-                    className="h-9 w-9 items-center justify-center rounded-xl border border-neutral-200"
+                    className="h-9 w-9 items-center justify-center rounded-xl border border-line"
                   >
                     <Ionicons name="add" size={16} color="#737373" />
                   </Pressable>
@@ -1113,7 +1113,7 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
 
               {/* Min bedrooms */}
               <View>
-                <Text className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-neutral-500">Min bedrooms</Text>
+                <Text className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted">Min bedrooms</Text>
                 <View className="flex-row gap-2">
                   {MIN_BEDROOMS_OPTIONS.map((n) => (
                     <Pressable
@@ -1122,12 +1122,12 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
                       className={[
                         'h-9 min-w-[36px] items-center justify-center rounded-xl border px-2',
                         minBedrooms === n
-                          ? 'border-coral-500 bg-coral-50'
-                          : 'border-neutral-200 bg-white',
+                          ? 'border-green bg-green-soft'
+                          : 'border-line bg-card',
                       ].join(' ')}
                     >
                       <Text
-                        className={`text-sm font-semibold ${minBedrooms === n ? 'text-coral-600' : 'text-neutral-600'}`}
+                        className={`text-sm font-semibold ${minBedrooms === n ? 'text-green-dark' : 'text-muted'}`}
                       >
                         {n === 5 ? '5+' : String(n)}
                       </Text>
@@ -1160,7 +1160,7 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
         {/* ── Section B: Add a property ── */}
         {!atLimit ? (
           <View
-            className="mb-4 overflow-hidden rounded-2xl bg-white"
+            className="mb-4 overflow-hidden rounded-2xl bg-card"
             style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 2 }}
           >
             <Pressable
@@ -1169,7 +1169,7 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
             >
               <View className="flex-row items-center gap-2">
                 <Ionicons name="add-circle-outline" size={16} color="#737373" />
-                <Text className="text-sm font-semibold text-neutral-700">Add lodging</Text>
+                <Text className="text-sm font-semibold text-ink">Add lodging</Text>
               </View>
               <Ionicons
                 name={addSectionExpanded ? 'chevron-up' : 'chevron-down'}
@@ -1187,7 +1187,7 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
                 onChangeText={(v) => { setPasteUrl(v); setUrlError(''); setUrlParsed(null); }}
                 placeholder="Paste listing URL…"
                 placeholderTextColor="#A3A3A3"
-                className="flex-1 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-800"
+                className="flex-1 rounded-xl border border-line bg-cream px-4 py-3 text-sm text-ink"
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="url"
@@ -1195,9 +1195,9 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
               <Pressable
                 onPress={handleAddFromUrl}
                 disabled={!pasteUrl.trim()}
-                className={`rounded-xl px-4 py-3 ${pasteUrl.trim() ? 'bg-coral-500' : 'bg-neutral-200'}`}
+                className={`rounded-xl px-4 py-3 ${pasteUrl.trim() ? 'bg-green' : 'bg-line'}`}
               >
-                <Text className={`text-sm font-semibold ${pasteUrl.trim() ? 'text-white' : 'text-neutral-400'}`}>Add</Text>
+                <Text className={`text-sm font-semibold ${pasteUrl.trim() ? 'text-white' : 'text-muted'}`}>Add</Text>
               </Pressable>
             </View>
 
@@ -1207,19 +1207,19 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
 
             {/* Mini form after URL parsed */}
             {urlParsed && !urlError ? (
-              <View className="mb-3 gap-2 rounded-xl bg-neutral-50 p-3">
+              <View className="mb-3 gap-2 rounded-xl bg-cream p-3">
                 <View className="flex-row items-center gap-2">
                   <View style={{ backgroundColor: PLATFORM_COLORS[urlParsed.platform].bg, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 }}>
                     <Text style={{ fontSize: 11, fontWeight: '600', color: PLATFORM_COLORS[urlParsed.platform].text }}>{PLATFORM_COLORS[urlParsed.platform].label}</Text>
                   </View>
-                  <Text className="text-xs text-neutral-400" numberOfLines={1}>{urlParsed.cleanUrl}</Text>
+                  <Text className="text-xs text-muted" numberOfLines={1}>{urlParsed.cleanUrl}</Text>
                 </View>
                 <TextInput
                   value={urlTitle}
                   onChangeText={setUrlTitle}
                   placeholder="Property name"
                   placeholderTextColor="#A3A3A3"
-                  className="rounded-xl border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-800"
+                  className="rounded-xl border border-line bg-card px-3 py-2.5 text-sm text-ink"
                   autoFocus
                 />
                 <TextInput
@@ -1227,12 +1227,12 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
                   onChangeText={setUrlNotes}
                   placeholder="Notes (optional)"
                   placeholderTextColor="#A3A3A3"
-                  className="rounded-xl border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-800"
+                  className="rounded-xl border border-line bg-card px-3 py-2.5 text-sm text-ink"
                 />
                 <Pressable
                   onPress={handleConfirmUrlAdd}
                   disabled={createOption.isPending}
-                  className="items-center rounded-xl bg-coral-500 py-2.5"
+                  className="items-center rounded-xl bg-green py-2.5"
                 >
                   {createOption.isPending ? (
                     <ActivityIndicator size="small" color="white" />
@@ -1255,7 +1255,7 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
                 borderRadius: 12,
                 borderWidth: 2,
                 borderStyle: 'dashed',
-                borderColor: '#E5E5E5',
+                borderColor: '#D9CCB6',
                 marginTop: 8,
               }}
             >

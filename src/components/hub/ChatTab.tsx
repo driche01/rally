@@ -78,18 +78,18 @@ function BlockAttachmentPreview({
   const icon = BLOCK_TYPE_ICONS[block.type];
   return (
     <View
-      className="flex-row items-center gap-2 rounded-xl border border-coral-500 bg-coral-50 px-3 py-2"
+      className="flex-row items-center gap-2 rounded-xl border border-green bg-green-soft px-3 py-2"
     >
-      <Ionicons name={icon} size={14} color="#D85A30" />
+      <Ionicons name={icon} size={14} color="#0F3F2E" />
       <View className="flex-1">
-        <Text className="text-xs font-semibold text-coral-700" numberOfLines={1}>
+        <Text className="text-xs font-semibold text-green-dark" numberOfLines={1}>
           {block.title}
         </Text>
-        <Text className="text-xs text-coral-500">{formatDayLabel(block.day_date)}</Text>
+        <Text className="text-xs text-green">{formatDayLabel(block.day_date)}</Text>
       </View>
       {onRemove ? (
         <Pressable onPress={onRemove} className="p-0.5">
-          <Ionicons name="close" size={14} color="#D85A30" />
+          <Ionicons name="close" size={14} color="#0F3F2E" />
         </Pressable>
       ) : null}
     </View>
@@ -191,9 +191,9 @@ function BlockPickerSheet({
           style={{ backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '70%' }}
         >
           <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 8 }}>
-            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#E5E5E5' }} />
+            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#D9CCB6' }} />
           </View>
-          <Text style={{ fontSize: 16, fontWeight: '700', color: '#1C1C1C', paddingHorizontal: 20, paddingBottom: 12 }}>
+          <Text style={{ fontSize: 16, fontWeight: '700', color: '#163026', paddingHorizontal: 20, paddingBottom: 12 }}>
             Attach a block
           </Text>
 
@@ -228,13 +228,13 @@ function BlockPickerSheet({
                           paddingHorizontal: 12,
                           borderRadius: 14,
                           marginBottom: 6,
-                          backgroundColor: '#FAFAFA',
+                          backgroundColor: '#FBF7EF',
                           borderWidth: 1,
                           borderColor: '#F0F0F0',
                         }}
                       >
-                        <Ionicons name={icon} size={16} color="#D85A30" />
-                        <Text style={{ fontSize: 14, fontWeight: '500', color: '#1C1C1C' }} numberOfLines={1}>
+                        <Ionicons name={icon} size={16} color="#0F3F2E" />
+                        <Text style={{ fontSize: 14, fontWeight: '500', color: '#163026' }} numberOfLines={1}>
                           {block.title}
                         </Text>
                       </Pressable>
@@ -277,7 +277,7 @@ function MessageItem({
       <View className={`max-w-[85%] ${isOwn ? 'self-end' : 'self-start'}`}>
         {/* Sender label */}
         {!isOwn ? (
-          <Text className="mb-1 ml-1 text-xs font-semibold text-neutral-500">
+          <Text className="mb-1 ml-1 text-xs font-semibold text-muted">
             {message.senderProfile?.name ?? 'You'}
           </Text>
         ) : null}
@@ -292,7 +292,7 @@ function MessageItem({
         {/* Bubble */}
         <View
           className={`rounded-2xl px-4 py-3 ${
-            isOwn ? 'rounded-tr-md bg-coral-500' : 'rounded-tl-md bg-white'
+            isOwn ? 'rounded-tr-md bg-green' : 'rounded-tl-md bg-card'
           }`}
           style={
             isOwn
@@ -300,7 +300,7 @@ function MessageItem({
               : { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 1 }
           }
         >
-          <Text className={`text-sm leading-5 ${isOwn ? 'text-white' : 'text-neutral-800'}`}>
+          <Text className={`text-sm leading-5 ${isOwn ? 'text-white' : 'text-ink'}`}>
             {message.content}
           </Text>
         </View>
@@ -316,10 +316,10 @@ function MessageItem({
                   <Pressable
                     key={emoji}
                     onPress={() => onToggleReaction(emoji)}
-                    className={`flex-row items-center gap-1 rounded-full px-2 py-0.5 ${reacted ? 'bg-coral-100' : 'bg-neutral-100'}`}
+                    className={`flex-row items-center gap-1 rounded-full px-2 py-0.5 ${reacted ? 'bg-green-soft' : 'bg-cream-warm'}`}
                   >
                     <Text style={{ fontSize: 12 }}>{emoji}</Text>
-                    <Text className={`text-xs font-medium ${reacted ? 'text-coral-600' : 'text-neutral-500'}`}>
+                    <Text className={`text-xs font-medium ${reacted ? 'text-green-dark' : 'text-muted'}`}>
                       {count}
                     </Text>
                   </Pressable>
@@ -334,7 +334,7 @@ function MessageItem({
           </Pressable>
 
           {/* Timestamp */}
-          <Text className="text-xs text-neutral-400">{time}</Text>
+          <Text className="text-xs text-muted">{time}</Text>
 
           {/* Read count */}
           {message.read_count > 0 ? (
@@ -345,7 +345,7 @@ function MessageItem({
 
           {/* Pinned indicator */}
           {message.is_pinned ? (
-            <Ionicons name="pin" size={12} color="#D85A30" />
+            <Ionicons name="pin" size={12} color="#0F3F2E" />
           ) : null}
         </View>
       </View>
@@ -364,13 +364,13 @@ function PinnedBar({ messages }: { messages: TripMessageWithReactions[] }) {
   const preview = pinned.slice(0, 3);
 
   return (
-    <View className="border-b border-neutral-100 bg-neutral-50 px-4 py-2">
+    <View className="border-b border-line bg-cream px-4 py-2">
       <Pressable
         onPress={() => setExpanded((p) => !p)}
         className="flex-row items-center gap-2"
       >
-        <Ionicons name="pin" size={13} color="#D85A30" />
-        <Text className="flex-1 text-xs font-semibold text-neutral-600">
+        <Ionicons name="pin" size={13} color="#0F3F2E" />
+        <Text className="flex-1 text-xs font-semibold text-muted">
           {pinned.length} pinned {pinned.length === 1 ? 'message' : 'messages'}
         </Text>
         <Ionicons
@@ -383,11 +383,11 @@ function PinnedBar({ messages }: { messages: TripMessageWithReactions[] }) {
       {expanded ? (
         <View className="mt-2 gap-1.5">
           {preview.map((m) => (
-            <View key={m.id} className="rounded-xl bg-white px-3 py-2">
-              <Text className="text-xs text-neutral-600" numberOfLines={2}>
+            <View key={m.id} className="rounded-xl bg-card px-3 py-2">
+              <Text className="text-xs text-muted" numberOfLines={2}>
                 {m.content}
               </Text>
-              <Text className="mt-0.5 text-xs text-neutral-400">
+              <Text className="mt-0.5 text-xs text-muted">
                 {formatRelativeTime(m.created_at)}
               </Text>
             </View>
@@ -534,7 +534,7 @@ export function ChatTab({ tripId }: { tripId: string }) {
   );
 
   return (
-    <View className="flex-1 bg-neutral-50">
+    <View className="flex-1 bg-cream">
       {/* Pinned messages bar */}
       <PinnedBar messages={messages} />
 
@@ -546,11 +546,11 @@ export function ChatTab({ tripId }: { tripId: string }) {
         {/* Message list */}
         {messages.length === 0 ? (
           <View className="flex-1 items-center justify-center gap-3 px-8">
-            <View className="h-14 w-14 items-center justify-center rounded-2xl bg-neutral-100">
+            <View className="h-14 w-14 items-center justify-center rounded-2xl bg-cream-warm">
               <Ionicons name="chatbubbles-outline" size={28} color="#A3A3A3" />
             </View>
-            <Text className="text-base font-semibold text-neutral-700">No messages yet</Text>
-            <Text className="text-center text-sm text-neutral-400">
+            <Text className="text-base font-semibold text-ink">No messages yet</Text>
+            <Text className="text-center text-sm text-muted">
               Send your group an update.
             </Text>
           </View>
@@ -581,7 +581,7 @@ export function ChatTab({ tripId }: { tripId: string }) {
 
         {/* Compose area */}
         <View
-          className="border-t border-neutral-100 bg-white px-4"
+          className="border-t border-line bg-card px-4"
           style={{ paddingBottom: insets.bottom > 0 ? insets.bottom : 12, paddingTop: 8 }}
         >
           {/* Attached block preview */}
@@ -598,7 +598,7 @@ export function ChatTab({ tripId }: { tripId: string }) {
             {/* Block attachment button */}
             <Pressable
               onPress={() => setBlockPickerVisible(true)}
-              className="mb-1 h-9 w-9 items-center justify-center rounded-xl bg-neutral-100 active:bg-neutral-200"
+              className="mb-1 h-9 w-9 items-center justify-center rounded-xl bg-cream-warm active:bg-line"
             >
               <Ionicons name="calendar-outline" size={18} color="#737373" />
             </Pressable>
@@ -611,7 +611,7 @@ export function ChatTab({ tripId }: { tripId: string }) {
               placeholderTextColor="#A3A3A3"
               multiline
               maxLength={1000}
-              className="flex-1 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-sm text-neutral-800"
+              className="flex-1 rounded-2xl border border-line bg-cream px-4 py-2.5 text-sm text-ink"
               style={{ maxHeight: 120 }}
               returnKeyType="default"
             />
@@ -620,7 +620,7 @@ export function ChatTab({ tripId }: { tripId: string }) {
             <Pressable
               onPress={handleSend}
               disabled={!canSend || sendMessage.isPending}
-              className={`mb-0.5 h-9 w-9 items-center justify-center rounded-xl ${canSend ? 'bg-coral-500' : 'bg-neutral-200'}`}
+              className={`mb-0.5 h-9 w-9 items-center justify-center rounded-xl ${canSend ? 'bg-green' : 'bg-line'}`}
             >
               {sendMessage.isPending ? (
                 <ActivityIndicator size="small" color="white" />
