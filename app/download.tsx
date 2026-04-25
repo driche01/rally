@@ -24,9 +24,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { joinBetaList } from '@/lib/api/beta';
 import { capture, Events } from '@/lib/analytics';
 
-const CORAL = '#D85A30';
-const CHARCOAL = '#1C1C1C';
-const BG = '#FAFAFA';
+// 2026-04-24 brand palette — green primary, cream surfaces, ink text.
+// Coral is intentionally absent on this page; it's a sparingly-used accent.
+const GREEN = '#0F3F2E';
+const GREEN_DARK = '#174F3C';
+const GREEN_SOFT = '#DFE8D2';
+const CREAM = '#FBF7EF';
+const CARD = '#FFFAF2';
+const LINE = '#E7DDCF';
+const INK = '#163026';
+const MUTED = '#5F685F';
+// System Georgia (iOS/macOS/web) → serif fallback on Android.
+const HEADLINE_FONT = Platform.OS === 'android' ? 'serif' : 'Georgia';
 
 export default function DownloadPage() {
   const { source, trip } = useLocalSearchParams<{ source?: string; trip?: string }>();
@@ -70,7 +79,7 @@ export default function DownloadPage() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: BG }}
+      style={{ flex: 1, backgroundColor: CREAM }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView
@@ -88,11 +97,12 @@ export default function DownloadPage() {
         {/* Brand mark */}
         <Text
           style={{
-            fontSize: 40,
-            fontWeight: '800',
-            color: CORAL,
+            fontFamily: HEADLINE_FONT,
+            fontSize: 44,
+            fontWeight: '700',
+            color: GREEN,
             letterSpacing: -1,
-            marginBottom: 24,
+            marginBottom: 28,
           }}
         >
           rally
@@ -102,17 +112,18 @@ export default function DownloadPage() {
           <>
             <Text
               style={{
-                fontSize: 36,
-                fontWeight: '800',
-                color: CHARCOAL,
-                letterSpacing: -0.5,
-                lineHeight: 40,
-                marginBottom: 12,
+                fontFamily: HEADLINE_FONT,
+                fontSize: 44,
+                fontWeight: '700',
+                color: INK,
+                letterSpacing: -0.8,
+                lineHeight: 48,
+                marginBottom: 14,
               }}
             >
               Group trips, made easy.
             </Text>
-            <Text style={{ fontSize: 17, color: '#525252', lineHeight: 24, marginBottom: 32 }}>
+            <Text style={{ fontSize: 18, color: MUTED, lineHeight: 26, marginBottom: 32 }}>
               Rally's in closed beta. Drop your email and we'll get you in as soon as we open up.
             </Text>
 
@@ -126,24 +137,24 @@ export default function DownloadPage() {
                     if (error) setError('');
                   }}
                   placeholder="you@example.com"
-                  placeholderTextColor="#A3A3A3"
+                  placeholderTextColor="#9DA8A0"
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoComplete="email"
                   style={{
-                    backgroundColor: '#FFFFFF',
+                    backgroundColor: CARD,
                     borderWidth: 1,
-                    borderColor: error ? '#DC2626' : '#E5E5E5',
+                    borderColor: error ? '#C13515' : LINE,
                     borderRadius: 12,
                     paddingHorizontal: 16,
                     paddingVertical: 14,
                     fontSize: 16,
-                    color: CHARCOAL,
+                    color: INK,
                   }}
                   onSubmitEditing={handleSubmit}
                 />
                 {error ? (
-                  <Text style={{ color: '#DC2626', fontSize: 13, marginTop: 6 }}>{error}</Text>
+                  <Text style={{ color: '#C13515', fontSize: 13, marginTop: 6 }}>{error}</Text>
                 ) : null}
               </View>
 
@@ -151,7 +162,7 @@ export default function DownloadPage() {
                 onPress={handleSubmit}
                 disabled={loading}
                 style={{
-                  backgroundColor: loading ? '#C65228' : CORAL,
+                  backgroundColor: loading ? GREEN_DARK : GREEN,
                   borderRadius: 12,
                   paddingVertical: 16,
                   alignItems: 'center',
@@ -186,7 +197,7 @@ export default function DownloadPage() {
             <Text
               style={{
                 fontSize: 12,
-                color: '#A3A3A3',
+                color: MUTED,
                 marginTop: 40,
                 textAlign: 'center',
               }}
@@ -208,21 +219,22 @@ function SuccessCard({ email }: { email: string }) {
           width: 72,
           height: 72,
           borderRadius: 36,
-          backgroundColor: '#DCFCE7',
+          backgroundColor: GREEN_SOFT,
           alignItems: 'center',
           justifyContent: 'center',
           marginBottom: 24,
         }}
       >
-        <Ionicons name="checkmark" size={40} color="#16A34A" />
+        <Ionicons name="checkmark" size={40} color={GREEN} />
       </View>
       <Text
         style={{
-          fontSize: 28,
-          fontWeight: '800',
-          color: CHARCOAL,
+          fontFamily: HEADLINE_FONT,
+          fontSize: 36,
+          fontWeight: '700',
+          color: INK,
           letterSpacing: -0.5,
-          marginBottom: 8,
+          marginBottom: 10,
           textAlign: 'center',
         }}
       >
@@ -230,20 +242,20 @@ function SuccessCard({ email }: { email: string }) {
       </Text>
       <Text
         style={{
-          fontSize: 16,
-          color: '#525252',
+          fontSize: 17,
+          color: MUTED,
           textAlign: 'center',
-          lineHeight: 22,
-          maxWidth: 360,
+          lineHeight: 24,
+          maxWidth: 380,
         }}
       >
         We'll send an email to{' '}
-        <Text style={{ fontWeight: '600', color: CHARCOAL }}>{email}</Text> as soon as Rally opens up.
+        <Text style={{ fontWeight: '600', color: INK }}>{email}</Text> as soon as Rally opens up.
       </Text>
       <Text
         style={{
           fontSize: 14,
-          color: '#737373',
+          color: MUTED,
           textAlign: 'center',
           marginTop: 32,
           maxWidth: 360,
@@ -272,18 +284,18 @@ function Bullet({
           width: 40,
           height: 40,
           borderRadius: 20,
-          backgroundColor: '#FEF3EC',
+          backgroundColor: GREEN_SOFT,
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
-        <Ionicons name={icon} size={20} color={CORAL} />
+        <Ionicons name={icon} size={20} color={GREEN} />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 16, fontWeight: '700', color: CHARCOAL, marginBottom: 4 }}>
+        <Text style={{ fontSize: 16, fontWeight: '700', color: INK, marginBottom: 4 }}>
           {title}
         </Text>
-        <Text style={{ fontSize: 15, color: '#525252', lineHeight: 21 }}>{body}</Text>
+        <Text style={{ fontSize: 15, color: MUTED, lineHeight: 22 }}>{body}</Text>
       </View>
     </View>
   );

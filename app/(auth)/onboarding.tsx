@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
@@ -11,7 +11,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 // ── Onboarding screen ─────────────────────────────────────────────────────────
-// Partiful-inspired dark intro. Shown to unauthenticated users before login.
+// Editorial cream surface. Shown to unauthenticated users before login.
+// 2026-04-24 brand palette: cream bg, green primary, ink text, Georgia headlines.
 
 export default function OnboardingScreen() {
   const router = useRouter();
@@ -58,11 +59,13 @@ export default function OnboardingScreen() {
     transform: [{ translateY: actionsTranslate.value }],
   }));
 
+  const HEADLINE_FONT = Platform.OS === 'android' ? 'serif' : 'Georgia';
+
   return (
     <View
       style={{
         flex: 1,
-        backgroundColor: '#0F0E0D',
+        backgroundColor: '#FBF7EF',
         paddingTop: insets.top + 24,
         paddingBottom: insets.bottom + 32,
         paddingHorizontal: 32,
@@ -72,10 +75,16 @@ export default function OnboardingScreen() {
       <Animated.View style={logoStyle}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <View
-            style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#E05A28' }}
+            style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#0F3F2E' }}
           />
           <Text
-            style={{ fontSize: 18, fontWeight: '700', color: '#E05A28', letterSpacing: 1 }}
+            style={{
+              fontFamily: HEADLINE_FONT,
+              fontSize: 20,
+              fontWeight: '700',
+              color: '#0F3F2E',
+              letterSpacing: 1,
+            }}
           >
             RALLY
           </Text>
@@ -86,11 +95,12 @@ export default function OnboardingScreen() {
       <Animated.View style={[{ flex: 1, justifyContent: 'center' }, heroStyle]}>
         <Text
           style={{
-            fontSize: 52,
-            fontWeight: '800',
-            color: '#FFFFFF',
-            lineHeight: 58,
-            letterSpacing: -1,
+            fontFamily: HEADLINE_FONT,
+            fontSize: 60,
+            fontWeight: '700',
+            color: '#163026',
+            lineHeight: 64,
+            letterSpacing: -1.5,
           }}
         >
           Get your{'\n'}group{'\n'}together.
@@ -101,9 +111,9 @@ export default function OnboardingScreen() {
       <Animated.View style={[{ marginBottom: 40 }, subStyle]}>
         <Text
           style={{
-            fontSize: 17,
-            color: 'rgba(255,255,255,0.55)',
-            lineHeight: 26,
+            fontSize: 18,
+            color: '#5F685F',
+            lineHeight: 28,
           }}
         >
           Plan great trips with your group —{'\n'}
@@ -117,11 +127,11 @@ export default function OnboardingScreen() {
         <Pressable
           onPress={() => router.push('/(auth)/login')}
           style={({ pressed }) => ({
-            backgroundColor: '#E05A28',
-            borderRadius: 16,
+            backgroundColor: pressed ? '#174F3C' : '#0F3F2E',
+            borderRadius: 18,
             paddingVertical: 18,
             alignItems: 'center',
-            opacity: pressed ? 0.85 : 1,
+            opacity: pressed ? 0.95 : 1,
           })}
           accessibilityRole="button"
         >
@@ -133,16 +143,16 @@ export default function OnboardingScreen() {
         <Pressable
           onPress={() => router.push('/(auth)/signup')}
           style={({ pressed }) => ({
-            borderRadius: 16,
+            borderRadius: 18,
             paddingVertical: 18,
             alignItems: 'center',
             opacity: pressed ? 0.6 : 1,
           })}
           accessibilityRole="button"
         >
-          <Text style={{ fontSize: 15, color: 'rgba(255,255,255,0.5)' }}>
+          <Text style={{ fontSize: 15, color: '#5F685F' }}>
             New here?{' '}
-            <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>Sign up</Text>
+            <Text style={{ color: '#0F3F2E', fontWeight: '600' }}>Sign up</Text>
           </Text>
         </Pressable>
       </Animated.View>

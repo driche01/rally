@@ -77,7 +77,7 @@ export default function SignupScreen() {
 
   return (
     <KeyboardAvoidingView
-      className="flex-1 bg-neutral-50"
+      className="flex-1 bg-cream"
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView
@@ -85,8 +85,13 @@ export default function SignupScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View className="mb-10">
-          <Text className="text-4xl font-bold text-coral-500">rally</Text>
-          <Text className="mt-1 text-base text-neutral-500">
+          <Text
+            style={{ fontFamily: Platform.OS === 'android' ? 'serif' : 'Georgia' }}
+            className="text-5xl font-bold text-green"
+          >
+            rally
+          </Text>
+          <Text className="mt-2 text-base text-muted">
             Join your group. Big trips ahead.
           </Text>
         </View>
@@ -96,23 +101,23 @@ export default function SignupScreen() {
           <Pressable
             onPress={handleGoogleSignIn}
             disabled={googleLoading}
-            className="flex-row items-center justify-center gap-3 rounded-xl border border-neutral-200 bg-white py-3.5"
+            className="flex-row items-center justify-center gap-3 rounded-md border border-line bg-card py-3.5"
           >
             {googleLoading ? (
-              <Text className="text-sm font-medium text-neutral-600">Signing in…</Text>
+              <Text className="text-sm font-medium text-muted">Signing in…</Text>
             ) : (
               <>
                 <Ionicons name="logo-google" size={18} color="#4285F4" />
-                <Text className="text-sm font-medium text-neutral-700">Continue with Google</Text>
+                <Text className="text-sm font-medium text-ink">Continue with Google</Text>
               </>
             )}
           </Pressable>
 
           {/* Divider */}
           <View className="flex-row items-center gap-3">
-            <View className="h-px flex-1 bg-neutral-200" />
-            <Text className="text-xs text-neutral-400">or sign up with email</Text>
-            <View className="h-px flex-1 bg-neutral-200" />
+            <View className="h-px flex-1 bg-line" />
+            <Text className="text-xs text-muted">or sign up with email</Text>
+            <View className="h-px flex-1 bg-line" />
           </View>
 
           <View className="flex-row gap-3">
@@ -175,9 +180,9 @@ export default function SignupScreen() {
         </View>
 
         <View className="mt-8 flex-row justify-center gap-1">
-          <Text className="text-neutral-500">Already have an account?</Text>
+          <Text className="text-muted">Already have an account?</Text>
           <Link href="/(auth)/login" asChild>
-            <Text className="font-medium text-coral-500">Log in</Text>
+            <Text className="font-medium text-green">Log in</Text>
           </Link>
         </View>
       </ScrollView>

@@ -17,18 +17,23 @@ interface ButtonProps extends PressableProps {
   fullWidth?: boolean;
 }
 
+// 2026-04-24 brand palette:
+//   primary    → deep green
+//   secondary  → warm card surface with a hairline border
+//   ghost      → text-only green
+//   destructive→ semantic error
 const variantClasses: Record<Variant, { container: string; text: string }> = {
   primary: {
-    container: 'bg-coral-500 active:bg-coral-600',
+    container: 'bg-green active:bg-green-dark',
     text: 'text-white font-semibold',
   },
   secondary: {
-    container: 'bg-white border border-neutral-200 active:bg-neutral-50',
-    text: 'text-neutral-800 font-medium',
+    container: 'bg-card border border-line active:bg-cream-warm',
+    text: 'text-ink font-medium',
   },
   ghost: {
-    container: 'bg-transparent active:bg-neutral-100',
-    text: 'text-coral-500 font-medium',
+    container: 'bg-transparent active:bg-green-soft',
+    text: 'text-green font-medium',
   },
   destructive: {
     container: 'bg-red-500 active:bg-red-600',
@@ -37,9 +42,16 @@ const variantClasses: Record<Variant, { container: string; text: string }> = {
 };
 
 const sizeClasses: Record<Size, { container: string; text: string }> = {
-  sm: { container: 'px-4 py-2 rounded-xl min-h-[36px]', text: 'text-sm' },
-  md: { container: 'px-6 py-3 rounded-2xl min-h-[48px]', text: 'text-base' },
-  lg: { container: 'px-8 py-4 rounded-2xl min-h-[56px]', text: 'text-lg' },
+  sm: { container: 'px-4 py-2 rounded-md min-h-[36px]', text: 'text-sm' },
+  md: { container: 'px-6 py-3 rounded-md min-h-[48px]', text: 'text-base' },
+  lg: { container: 'px-8 py-4 rounded-lg min-h-[56px]', text: 'text-lg' },
+};
+
+const SPINNER_COLOR: Record<Variant, string> = {
+  primary:     '#FFFFFF',
+  secondary:   '#0F3F2E', // green
+  ghost:       '#0F3F2E',
+  destructive: '#FFFFFF',
 };
 
 export function Button({
@@ -75,10 +87,7 @@ export function Button({
       {...props}
     >
       {loading ? (
-        <ActivityIndicator
-          size="small"
-          color={variant === 'primary' || variant === 'destructive' ? '#fff' : '#D85A30'}
-        />
+        <ActivityIndicator size="small" color={SPINNER_COLOR[variant]} />
       ) : (
         <Text className={[v.text, s.text].join(' ')}>{children}</Text>
       )}
