@@ -1,41 +1,31 @@
 /**
- * Core inbound message processing logic, extracted from sms-inbound/index.ts
- * for testability. The HTTP handler in index.ts is a thin wrapper that parses
- * the request, validates the Twilio signature, and calls this function.
+ * Core inbound message processing — Phase 5.6 of the 1:1 SMS pivot.
  *
- * Phase 2 of the 1:1 pivot: every inbound is treated as 1:1. The legacy
- * comma-parsed `To:` group routing is gone, along with the app_pending_<tripId>
- * activation flow. Sender phone → active trip session via
- * findActiveSessionForPhone(); a sender with no active session falls into
- * handleNewPlannerInbound() which can mint a fresh session + join link in one
- * round-trip when the body shows planning intent.
+ * Rally no longer holds open conversations with individual phones. Inbound
+ * SMS is reduced to four narrowly-scoped paths:
+ *   1. Idempotency check + phone normalization
+ *   2. Claim-OTP echo silencer (drop 6-digit echoes from claim flow)
+ *   3. Join-link YES/NO confirmation (Phase 1 — promote pending submissions)
+ *   4. APP keyword reply (install link)
+ *   5. STOP / REJOIN (carrier compliance — opt-out / re-opt-in)
+ *
+ * Anything else gets a soft redirect to the survey/join link funnel. The
+ * phase machine, conversation parser, planner-keyword commands, and
+ * new-planner kickoff are all bypassed.
  */
 
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { normalizePhone } from './phone.ts';
-import { findOrCreateUser, ensureRespondent } from './phone-user-linker.ts';
-import type { SmsUser } from './phone-user-linker.ts';
-import {
-  findActiveSessionForPhone,
-  createPlannerSessionWithJoinLink,
-  touchSession,
-} from './trip-session.ts';
-import type { TripSession, TripSessionParticipant } from './trip-session.ts';
-import { routeMessage } from './message-router.ts';
-import type { RoutedMessage } from './message-router.ts';
+import { findOrCreateUser } from './phone-user-linker.ts';
 import { track } from './telemetry.ts';
 import {
-  plannerWelcomeOneToOne,
   appKeywordReply,
   isAppKeyword,
   joinKickoffSms,
-  plannerKickoffWithLink,
-  noActiveSessionFallback,
 } from './templates.ts';
 import { matchJoinConfirmIntent } from './join-intent.ts';
 import { sendDm } from './dm-sender.ts';
 
-// Read lazily so tests / alternate deployments can set this dynamically.
 function getAppDownloadUrl(): string | null {
   try {
     return Deno.env.get('APP_DOWNLOAD_URL') ?? null;
@@ -89,9 +79,6 @@ export async function processInboundMessage(
   const user = await findOrCreateUser(admin, senderPhone);
 
   // ─── Claim-OTP echo short-circuit ───────────────────────────────────────
-  // A 6-digit code from a phone with a live phone_claim_tokens row is the OTP
-  // being echoed back instead of typed into the app. Drop silently — don't
-  // let destination parsers eat it.
   if (/^\d{6}$/.test(trimmedBody)) {
     const { data: hasClaim } = await admin.rpc('has_active_claim_token', {
       p_phone: senderPhone,
@@ -101,10 +88,7 @@ export async function processInboundMessage(
     }
   }
 
-  // ─── Join-link confirmation short-circuit (Phase 1 of 1:1 pivot) ───────
-  // YES/NO from a phone with a pending join_link_submission promotes them
-  // to active participant. Falls through to normal routing if no pending
-  // submission exists (the RPC returns no_pending and we ignore it).
+  // ─── Join-link YES/NO confirmation ──────────────────────────────────────
   const intent = matchJoinConfirmIntent(trimmedBody);
   if (intent) {
     const { data: confirmResult } = await admin.rpc('confirm_join_submission', {
@@ -174,11 +158,10 @@ export async function processInboundMessage(
       }).catch(() => {});
       return { response: declineReply, sessionId: null, phase: null };
     }
-    // no_pending / expired / etc. — fall through.
+    // No pending submission — fall through to keyword/redirect handling.
   }
 
-  // ─── APP keyword short-circuit ──────────────────────────────────────────
-  // Always available regardless of session state.
+  // ─── APP keyword ────────────────────────────────────────────────────────
   if (isAppKeyword(trimmedBody)) {
     const kwResponse = appKeywordReply({ appDownloadUrl: getAppDownloadUrl() });
     if (kwResponse) {
@@ -204,358 +187,101 @@ export async function processInboundMessage(
     }
   }
 
-  // ─── Handle non-text MMS ────────────────────────────────────────────────
-  let body = msg.Body.trim();
-  const hasMedia = parseInt(msg.NumMedia) > 0;
-  const bookingPatterns = [
-    'google.com/flights', 'airbnb.com', 'vrbo.com',
-    'delta.com', 'united.com', 'southwest.com', 'jetblue.com',
-    'booking.com', 'expedia.com',
-  ];
-  if (hasMedia && !body) {
-    const mediaUrl = msg.MediaUrl0 ?? '';
-    const isBooking = bookingPatterns.some((p) => mediaUrl.includes(p));
-    if (isBooking) {
-      body = 'YES';
-    } else {
-      const contentType = msg.MediaContentType0 ?? '';
-      body = contentType.startsWith('audio/') ? '[voice memo]' : '[image]';
-    }
-  }
-
-  // ─── Find existing active session for this phone ────────────────────────
-  let session: TripSession | null = null;
-  let participant: TripSessionParticipant | null = null;
-  let priorLastMessageAt: string | null = null;
-  let kickoffResponse: string | null = null;
-
-  const found = await findActiveSessionForPhone(admin, senderPhone);
-  if (found) {
-    session = found.session;
-    participant = found.participant;
-    priorLastMessageAt = session.last_message_at ?? null;
-    await touchSession(admin, session.id);
-  } else {
-    // ─── New planner inbound ──────────────────────────────────────────────
-    const result = await handleNewPlannerInbound(admin, user, body, msg.FriendlyName ?? null);
-    session = result.session;
-    participant = result.participant;
-    kickoffResponse = result.response;
-    if (session) {
-      priorLastMessageAt = session.last_message_at ?? null;
-    }
-  }
-
-  // ─── Store inbound message ──────────────────────────────────────────────
-  await admin.from('thread_messages').insert({
-    thread_id: oneToOneThreadId,
-    trip_session_id: session?.id ?? null,
-    direction: 'inbound',
-    sender_phone: senderPhone,
-    sender_role: participant?.is_planner ? 'planner' : 'participant',
-    body,
-    message_sid: msg.MessageSid,
-    media_url: msg.MediaUrl0 ?? null,
-  });
-
-  // ─── Route the message (or use the kickoff response) ────────────────────
-  let response: string | null = null;
-  if (kickoffResponse) {
-    response = kickoffResponse;
-  } else if (session) {
-    const routed: RoutedMessage = {
-      type: 'phase',
-      body,
-      fromUser: user,
-      session,
-      participant,
-    };
-    response = await routeMessage(admin, routed);
-  }
-
-  // ─── Welcome-back recap ─────────────────────────────────────────────────
-  // If the session was idle >7 days and we haven't already sent a recap for
-  // this gap, prepend a short recap. Only fires when we're actually replying.
-  if (response && session && priorLastMessageAt) {
-    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-    const idleMs = Date.now() - new Date(priorLastMessageAt).getTime();
-    const dormantPhases = ['COMPLETE', 'CANCELLED', 'ABANDONED'];
-    const recapEligible =
-      idleMs >= SEVEN_DAYS_MS &&
-      !dormantPhases.includes(session.phase) &&
-      session.status !== 'RE_ENGAGEMENT_PENDING';
-    if (recapEligible) {
-      const wbSentAt = (session as { welcome_back_sent_at?: string | null }).welcome_back_sent_at;
-      const alreadySent = wbSentAt && new Date(wbSentAt).getTime() > new Date(priorLastMessageAt).getTime();
-      if (!alreadySent) {
-        const recap = buildWelcomeBackRecap(session);
-        response = `${recap}\n\n${response}`;
-        await admin.from('trip_sessions')
-          .update({ welcome_back_sent_at: new Date().toISOString() })
-          .eq('id', session.id);
-      }
-    }
-  }
-
-  // ─── Store outbound message ─────────────────────────────────────────────
-  if (response) {
+  // ─── STOP / REJOIN (carrier compliance, session-less) ───────────────────
+  const upper = trimmedBody.toUpperCase();
+  if (upper === 'STOP' || upper === 'UNSUBSCRIBE' || upper === 'STOP ALL') {
     await admin.from('thread_messages').insert({
       thread_id: oneToOneThreadId,
-      trip_session_id: session?.id ?? null,
+      trip_session_id: null,
+      direction: 'inbound',
+      sender_phone: senderPhone,
+      sender_role: 'participant',
+      body: trimmedBody,
+      message_sid: msg.MessageSid,
+    });
+    await admin.from('users').update({ opted_out: true }).eq('id', user.id);
+    await admin
+      .from('trip_session_participants')
+      .update({ status: 'opted_out' })
+      .eq('user_id', user.id)
+      .eq('status', 'active');
+    const stopReply = "You're opted out. Reply REJOIN to start receiving texts again.";
+    await admin.from('thread_messages').insert({
+      thread_id: oneToOneThreadId,
+      trip_session_id: null,
       direction: 'outbound',
       sender_phone: null,
       sender_role: 'rally',
-      body: response,
+      body: stopReply,
       message_sid: null,
     });
-  }
-
-  // ─── Return current phase ───────────────────────────────────────────────
-  let currentPhase: string | null = null;
-  if (session?.id) {
-    const { data: freshSession } = await admin
-      .from('trip_sessions')
-      .select('phase')
-      .eq('id', session.id)
-      .maybeSingle();
-    currentPhase = freshSession?.phase ?? session.phase;
-  }
-
-  return {
-    response,
-    sessionId: session?.id ?? null,
-    phase: currentPhase,
-  };
-}
-
-// ─── New-planner handling ───────────────────────────────────────────────────
-
-interface NewPlannerOutcome {
-  session: TripSession | null;
-  participant: TripSessionParticipant | null;
-  /** The response Rally should send back. Null if no reply (idempotent welcome already sent). */
-  response: string | null;
-}
-
-/**
- * Handle a sender who has no active session. Three cases:
- *   1. Body shows planning intent → mint a session + join link, reply with URL.
- *   2. Body is just a greeting and the user is brand-new → send the welcome
- *      (idempotent — skipped if we've ever replied to this 1:1 thread).
- *   3. Otherwise → soft fallback: "no trip with you yet, reply with a destination".
- */
-async function handleNewPlannerInbound(
-  admin: SupabaseClient,
-  user: SmsUser,
-  body: string,
-  threadName: string | null,
-): Promise<NewPlannerOutcome> {
-  const oneToOneThreadId = `1to1_${user.phone}`;
-
-  // ─── Case 1: planning intent → auto-create session + join link ──────────
-  const intentHints = detectPlanningIntent(body);
-  if (intentHints) {
-    const { session, participant, joinUrl } = await createPlannerSessionWithJoinLink(
-      admin,
-      user,
-      {
-        destination: intentHints.destination,
-        dates: intentHints.dates,
-        budget: intentHints.budget,
-        threadName,
-      },
-    );
-
-    if (intentHints.plannerName) {
-      await admin.from('users').update({ display_name: intentHints.plannerName }).eq('id', user.id);
-      await admin.from('trip_session_participants')
-        .update({ display_name: intentHints.plannerName })
-        .eq('trip_session_id', session.id)
-        .eq('user_id', user.id);
-    }
-
-    if (session.trip_id) {
-      await ensureRespondent(admin, session.trip_id, user);
-    }
-
-    track('sms_planner_session_created_from_text', {
-      distinct_id: session.id,
-      sessionId: session.id,
-      plannerUserId: user.id,
-      hasIntent: true,
-      hasDestination: !!intentHints.destination,
-      hasDates: !!intentHints.dates,
-      hasBudget: !!intentHints.budget,
-      trip_model: '1to1',
+    track('sms_opt_out', {
+      distinct_id: senderPhone,
+      userId: user.id,
+      via: 'stop_keyword_global',
     }).catch(() => {});
-
-    const reply = plannerKickoffWithLink({ url: joinUrl, destination: intentHints.destination });
-    return { session, participant, response: reply };
+    return { response: stopReply, sessionId: null, phase: null };
+  }
+  if (upper === 'REJOIN' || upper === 'START' || upper === 'UNSTOP') {
+    await admin.from('thread_messages').insert({
+      thread_id: oneToOneThreadId,
+      trip_session_id: null,
+      direction: 'inbound',
+      sender_phone: senderPhone,
+      sender_role: 'participant',
+      body: trimmedBody,
+      message_sid: msg.MessageSid,
+    });
+    await admin.from('users').update({ opted_out: false }).eq('id', user.id);
+    await admin
+      .from('trip_session_participants')
+      .update({ status: 'active' })
+      .eq('user_id', user.id)
+      .eq('status', 'opted_out');
+    const rejoinReply = "Welcome back. You'll start receiving Rally texts again.";
+    await admin.from('thread_messages').insert({
+      thread_id: oneToOneThreadId,
+      trip_session_id: null,
+      direction: 'outbound',
+      sender_phone: null,
+      sender_role: 'rally',
+      body: rejoinReply,
+      message_sid: null,
+    });
+    return { response: rejoinReply, sessionId: null, phase: null };
   }
 
-  // ─── Case 2: brand-new user, greeting → welcome (idempotent) ────────────
-  if (!user.returning) {
-    const { data: priorOutbound } = await admin
-      .from('thread_messages')
-      .select('id')
-      .eq('thread_id', oneToOneThreadId)
-      .eq('direction', 'outbound')
-      .limit(1)
-      .maybeSingle();
-    if (!priorOutbound) {
-      return {
-        session: null,
-        participant: null,
-        response: plannerWelcomeOneToOne({
-          channel: 'sms',
-          appDownloadUrl: getAppDownloadUrl(),
-        }),
-      };
-    }
-  }
-
-  // ─── Case 3: soft fallback ──────────────────────────────────────────────
-  return {
-    session: null,
-    participant: null,
-    response: noActiveSessionFallback(),
-  };
-}
-
-// ─── Planning-intent detection ──────────────────────────────────────────────
-
-interface IntentHints {
-  plannerName: string | null;
-  destination: string | null;
-  dates: { start: string; end: string; nights: number } | null;
-  budget: number | null;
-}
-
-const PLANNING_VERBS = /\b(plan|planning|organize|coordinate|set\s*up|sort)\b/i;
-const TRIP_NOUNS = /\b(trip|getaway|vacation|holiday|weekend|adventure)\b/i;
-const DESTINATION_AFTER_TO = /\bto\s+([A-Z][\p{L}\-' ]{1,40}?)(?=\s+(?:in|on|for|with|next|this|by|the|\d)|[.,!?]|$)/u;
-const DESTINATION_BEFORE_TRIP = /\b(?:a|the|our|my)?\s*([A-Z][\p{L}\-']{2,40})\s+(?:trip|getaway|vacation|holiday|weekend|adventure)\b/u;
-
-/**
- * Light-touch intent detector. Returns hints if the body looks like a planner
- * kicking off a trip; null otherwise. Designed to err toward "no intent" so
- * "hey" doesn't accidentally spawn a trip session.
- *
- * Triggers when ANY of these holds:
- *   - "Name — destination[, dates, $budget]" (legacy planner-onboarding format)
- *   - Contains a planning verb AND a trip noun ("plan a trip", "let's organize a getaway")
- *   - Contains "trip to <Capitalized Place>" (e.g. "thinking about a trip to Tulum")
- */
-function detectPlanningIntent(body: string): IntentHints | null {
-  const trimmed = body.trim();
-  if (trimmed.length < 4) return null;
-
-  // Format A: "Name — destination[, dates, $budget]"
-  const nameMatch = trimmed.match(/^([\p{L}][\p{L}'\-]{0,30})\s*[—–\-]\s*(.+)/u);
-  if (nameMatch) {
-    const plannerName = nameMatch[1].trim();
-    const remainder = nameMatch[2].trim();
-    const skipPatterns = /^(let'?s|adding|hey|help|plan|get|figure|want|think|going|i'?m|we)/i;
-    const parts = remainder.split(',').map((p) => p.trim());
-    const destRaw = parts[0];
-    const destWords = destRaw.split(/\s+/).length;
-    let destination: string | null = null;
-    if (destWords <= 4 && destWords >= 1 && !skipPatterns.test(destRaw)) {
-      destination = destRaw;
-    }
-    let dates: IntentHints['dates'] = null;
-    let budget: number | null = null;
-    for (const part of parts.slice(1)) {
-      const dateMatch = part.match(/(\w+)\s+(\d{1,2})\s*[-–to]+\s*(\d{1,2})/i);
-      if (dateMatch) {
-        const months: Record<string, number> = {
-          jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2, apr: 3, april: 3,
-          may: 4, jun: 5, june: 5, jul: 6, july: 6, aug: 7, august: 7, sep: 8, september: 8,
-          oct: 9, october: 9, nov: 10, november: 10, dec: 11, december: 11,
-        };
-        const month = months[dateMatch[1].toLowerCase()];
-        if (month !== undefined) {
-          const year = new Date().getFullYear();
-          const start = new Date(year, month, parseInt(dateMatch[2]));
-          const end = new Date(year, month, parseInt(dateMatch[3]));
-          if (start < new Date()) { start.setFullYear(year + 1); end.setFullYear(year + 1); }
-          const nights = Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
-          dates = {
-            start: start.toISOString().split('T')[0],
-            end: end.toISOString().split('T')[0],
-            nights,
-          };
-        }
-      }
-      const budgetMatch = part.match(/\$\s*([\d,]+)/);
-      if (budgetMatch) {
-        const amount = parseFloat(budgetMatch[1].replace(',', ''));
-        if (!isNaN(amount) && amount > 0) budget = amount;
-      }
-    }
-    if (destination || dates || budget) {
-      return { plannerName, destination, dates, budget };
-    }
-    // Name-only like "Sarah — hi" doesn't count as intent.
-  }
-
-  // Format B: planning verb + trip noun. Try "to <Place>" first, then
-  // "<Place> trip" (destination preceding the trip noun, e.g. "Plan a
-  // Yosemite trip with my friends").
-  if (PLANNING_VERBS.test(trimmed) && TRIP_NOUNS.test(trimmed)) {
-    let destination: string | null = null;
-    const afterTo = trimmed.match(DESTINATION_AFTER_TO);
-    if (afterTo) {
-      destination = afterTo[1].trim().replace(/[.,!?]+$/, '');
-    } else {
-      const beforeTrip = trimmed.match(DESTINATION_BEFORE_TRIP);
-      if (beforeTrip) {
-        const candidate = beforeTrip[1].trim();
-        // Reject if the captured word is a noise filler ("our", "my", etc.
-        // still get caught by the regex when capitalized at sentence start).
-        if (!/^(our|my|the|a|an)$/i.test(candidate)) {
-          destination = candidate;
-        }
-      }
-    }
-    return { plannerName: null, destination, dates: null, budget: null };
-  }
-
-  // Format C: bare "trip to <Place>"
-  const tripToMatch = trimmed.match(/\btrip\s+to\s+([A-Z][\p{L}\-' ]{1,40})/u);
-  if (tripToMatch) {
-    return {
-      plannerName: null,
-      destination: tripToMatch[1].trim().replace(/[.,!?]+$/, ''),
-      dates: null,
-      budget: null,
-    };
-  }
-
-  return null;
-}
-
-// ─── Welcome-back recap helper ──────────────────────────────────────────────
-
-function buildWelcomeBackRecap(session: {
-  destination: string | null;
-  dates: { start: string; end: string } | null;
-  budget_median: number | null;
-  phase: string;
-}): string {
-  const parts: string[] = [];
-  if (session.destination) parts.push(session.destination);
-  if (session.dates?.start && session.dates?.end) {
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const start = new Date(session.dates.start + 'T12:00:00');
-    const end = new Date(session.dates.end + 'T12:00:00');
-    parts.push(`${months[start.getMonth()]} ${start.getDate()}\u2013${end.getDate()}`);
-  }
-  if (session.budget_median) parts.push(`~$${session.budget_median}/person`);
-  const ctx = parts.join(', ');
-  const phase = session.phase.replace(/_/g, ' ').toLowerCase();
-  if (ctx) {
-    return `Welcome back! Last we were at: ${ctx} (phase: ${phase}). Picking up where you left off \u2014`;
-  }
-  return `Welcome back! Picking up where you left off (phase: ${phase}) \u2014`;
+  // ─── Default: soft redirect ─────────────────────────────────────────────
+  // Rally doesn't run conversational SMS anymore. Anything that wasn't
+  // handled above (planning intent, name extraction, free-form replies,
+  // legacy keyword commands) gets a friendly nudge back to the link funnel.
+  await admin.from('thread_messages').insert({
+    thread_id: oneToOneThreadId,
+    trip_session_id: null,
+    direction: 'inbound',
+    sender_phone: senderPhone,
+    sender_role: 'participant',
+    body: trimmedBody,
+    message_sid: msg.MessageSid,
+  });
+  const redirectReply =
+    "I'm Rally — I help groups plan trips. " +
+    "If a friend invited you, tap their link to join. " +
+    "To start a trip, sign up at rallysurveys.netlify.app and share your link with friends. " +
+    "Reply STOP to opt out.";
+  await admin.from('thread_messages').insert({
+    thread_id: oneToOneThreadId,
+    trip_session_id: null,
+    direction: 'outbound',
+    sender_phone: null,
+    sender_role: 'rally',
+    body: redirectReply,
+    message_sid: null,
+  });
+  track('sms_redirect_sent', {
+    distinct_id: senderPhone,
+    userId: user.id,
+    bodyLength: trimmedBody.length,
+  }).catch(() => {});
+  return { response: redirectReply, sessionId: null, phase: null };
 }
