@@ -27,7 +27,10 @@ import { handleReEngagementYes } from './post-trip-reengager.ts';
 import { advancePhase, checkAutoAdvance } from './phase-flow.ts';
 import { classifyMessage } from './message-classifier.ts';
 import { track } from './telemetry.ts';
-import { broadcast, shortHash } from './dm-sender.ts';
+import { broadcast, sendDm, shortHash } from './dm-sender.ts';
+import { normalizePhone } from './phone.ts';
+import { getOrCreateJoinLinkForSession } from './trip-session.ts';
+import { joinConfirmationSms } from './templates.ts';
 
 /**
  * Fan out an announcement to all active+attending participants other than
@@ -61,6 +64,7 @@ const KEYWORDS: Record<string, { plannerOnly: boolean }> = {
   RESET: { plannerOnly: true },
   PAUSE: { plannerOnly: true },
   RESUME: { plannerOnly: true },
+  DIGEST: { plannerOnly: true },
 };
 
 // Keywords that take arguments (checked via prefix)
@@ -71,6 +75,8 @@ const PREFIX_KEYWORDS: Record<string, { plannerOnly: boolean }> = {
   SPLIT: { plannerOnly: false },
   PROPOSE: { plannerOnly: false },
   FLIGHTS: { plannerOnly: true },
+  BROADCAST: { plannerOnly: true },
+  INVITE: { plannerOnly: true },
 };
 
 export interface RoutedMessage {
@@ -246,6 +252,12 @@ async function handleKeyword(
       return handleProposeCancel(admin, session, fromUser.id);
     case 'PLANNER':
       return handlePlannerTransfer(admin, session, fromUser, args);
+    case 'BROADCAST':
+      return handleBroadcastKeyword(admin, session, fromUser, args);
+    case 'INVITE':
+      return handleInviteKeyword(admin, session, fromUser, args);
+    case 'DIGEST':
+      return handleDigestKeyword(admin, session);
     default:
       return `Got it \u2014 ${keyword} ${args}.`;
   }
@@ -286,6 +298,198 @@ async function handlePlannerTransfer(
   const msg = `${target.display_name} is now the trip planner.`;
   await announceDecision(admin, session.id, msg, user.id);
   return msg;
+}
+
+// ─── Phase 5 keyword handlers ───────────────────────────────────────────────
+
+/**
+ * BROADCAST <message> — planner-only fan-out via SMS. Mirrors the in-app
+ * Group Dashboard's broadcast composer; same Phase 3 broadcast() helper.
+ */
+async function handleBroadcastKeyword(
+  admin: SupabaseClient,
+  session: TripSession,
+  user: SmsUser,
+  args: string,
+): Promise<string> {
+  const body = args.trim();
+  if (!body) {
+    return 'Usage: BROADCAST [message]\nExample: BROADCAST Heads up — flights are getting expensive.';
+  }
+  if (body.length > 1000) {
+    return "That's too long for a broadcast — keep it under 1000 characters.";
+  }
+
+  const seedHash = await shortHash(body);
+  const result = await broadcast(admin, session.id, body, {
+    excludeUserId: user.id,
+    idempotencyKey: `sms_broadcast:${session.id}:${seedHash}`,
+  });
+
+  track('sms_broadcast_keyword_sent', {
+    distinct_id: session.id,
+    sessionId: session.id,
+    plannerUserId: user.id,
+    sent: result.sent,
+    failed: result.failed.length,
+    trip_model: '1to1',
+  }).catch(() => {});
+
+  if (result.sent === 0 && result.failed.length === 0) {
+    return "No active participants to broadcast to yet.";
+  }
+  return `Sent to ${result.sent} ${result.sent === 1 ? 'person' : 'people'}.`;
+}
+
+/**
+ * INVITE <name> <phone> — planner-only direct add. Routes through the
+ * Phase 1 join_link_submission consent flow so the invitee still has to
+ * reply YES (carrier compliance: no opt-in-by-proxy).
+ */
+async function handleInviteKeyword(
+  admin: SupabaseClient,
+  session: TripSession,
+  user: SmsUser,
+  args: string,
+): Promise<string> {
+  const trimmed = args.trim();
+  if (!trimmed) {
+    return 'Usage: INVITE [name] [phone]\nExample: INVITE Sarah +15551234567';
+  }
+
+  // Extract a phone number anywhere in the args (E.164 or 10-digit US).
+  const phoneMatch = trimmed.match(/(\+?\d[\d\s().\-]{8,17}\d)/);
+  if (!phoneMatch) {
+    return "I couldn't find a phone number. Try: INVITE Sarah +15551234567";
+  }
+  const rawPhone = phoneMatch[0];
+  const normalized = normalizePhone(rawPhone);
+  if (!normalized) {
+    return "That phone number didn't look right. Try: INVITE Sarah +15551234567";
+  }
+
+  // Strip the phone from the args to get the name.
+  const name = trimmed
+    .replace(rawPhone, '')
+    .replace(/[,\s]+$/, '')
+    .replace(/^[,\s]+/, '')
+    .trim() || normalized;
+
+  // Already a participant? Short-circuit.
+  const { data: existing } = await admin
+    .from('trip_session_participants')
+    .select('id, display_name, status')
+    .eq('trip_session_id', session.id)
+    .eq('phone', normalized)
+    .maybeSingle();
+  if (existing && existing.status === 'active') {
+    return `${existing.display_name ?? name} is already in.`;
+  }
+
+  // Get or mint a join_link, then create a pending submission and send
+  // the confirmation SMS so the invitee opts in via YES.
+  const link = await getOrCreateJoinLinkForSession(admin, session.id, user.id);
+  const { data: linkRow } = await admin.from('join_links').select('id').eq('code', link.code).single();
+  if (!linkRow) {
+    return "Couldn't generate an invite link. Try again in a moment.";
+  }
+
+  const { data: sub, error: subErr } = await admin
+    .from('join_link_submissions')
+    .insert({
+      join_link_id: linkRow.id,
+      phone: normalized,
+      display_name: name,
+      status: 'pending',
+      confirmation_sent_at: new Date().toISOString(),
+    })
+    .select('id')
+    .single();
+  if (subErr) {
+    console.error('[invite] failed to insert submission:', subErr);
+    return "Couldn't send the invite. Try again in a moment.";
+  }
+
+  // Pull planner display name for the confirmation SMS.
+  const { data: plannerRow } = await admin
+    .from('users').select('display_name').eq('id', user.id).maybeSingle();
+  const plannerName = plannerRow?.display_name ?? null;
+
+  const smsBody = joinConfirmationSms({
+    recipientName: name,
+    plannerName,
+    destination: session.destination,
+    dates: session.dates as { start?: string; end?: string } | null,
+  });
+
+  const sendResult = await sendDm(admin, normalized, smsBody, {
+    tripSessionId: session.id,
+    idempotencyKey: `invite_confirm:${sub.id}`,
+  });
+  if (sendResult.error) {
+    return `Submission saved but couldn't text ${name} — try again, or share the link: ${link.url}`;
+  }
+
+  track('sms_invite_keyword_sent', {
+    distinct_id: session.id,
+    sessionId: session.id,
+    plannerUserId: user.id,
+    trip_model: '1to1',
+  }).catch(() => {});
+
+  return `Texted ${name} at ${normalized}. They'll reply YES to join.`;
+}
+
+/**
+ * DIGEST — on-demand recap to the requesting planner. Delivered as the
+ * TwiML reply (so it lands in the planner's 1:1 thread immediately).
+ */
+async function handleDigestKeyword(
+  admin: SupabaseClient,
+  session: TripSession,
+): Promise<string> {
+  const participants = await getParticipants(admin, session.id);
+  const active = participants.filter((p) => p.status === 'active');
+  const named = active.filter((p) => p.display_name);
+  const committed = active.filter((p) => p.committed);
+  const flightsBooked = active.filter((p) => p.flight_status === 'confirmed');
+
+  const lines: string[] = [];
+
+  // Headline: destination, dates, budget
+  const headline: string[] = [];
+  if (session.destination) headline.push(session.destination);
+  if (session.dates) {
+    const d = session.dates as { start?: string; end?: string };
+    if (d.start && d.end) {
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const s = new Date(d.start + 'T12:00:00');
+      const e = new Date(d.end + 'T12:00:00');
+      headline.push(`${months[s.getMonth()]} ${s.getDate()}\u2013${e.getDate()}`);
+    }
+  }
+  if (session.budget_median) headline.push(`~$${session.budget_median}/person`);
+  if (headline.length) lines.push(headline.join(' \u00b7 '));
+
+  // Phase
+  lines.push(`Phase: ${session.phase.replace(/_/g, ' ').toLowerCase()}`);
+
+  // Participation summary
+  lines.push(`${active.length} in${named.length < active.length ? ` (${named.length} named)` : ''}`);
+  if (committed.length > 0) lines.push(`${committed.length} committed`);
+  if (flightsBooked.length > 0) lines.push(`${flightsBooked.length} flights booked`);
+
+  // Recent broadcast count
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { count: bcCount } = await admin
+    .from('thread_messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('trip_session_id', session.id)
+    .eq('sender_role', 'planner_broadcast')
+    .gte('created_at', since);
+  if (bcCount && bcCount > 0) lines.push(`${bcCount} broadcast${bcCount === 1 ? '' : 's'} this week`);
+
+  return lines.join('\n');
 }
 
 async function handleStop(
@@ -330,9 +534,10 @@ async function handleRejoin(
 function handleHelp(session: TripSession): string {
   const phase = session.phase;
   return (
-    `Current phase: ${phase}. ` +
-    'Commands: STATUS, FOCUS, HELP, STOP, REJOIN, BOOKED, PAID STATUS. ' +
-    'Planner commands: RESET, PAUSE, RESUME, DEADLINE, DESTINATION, FLIGHTS, PLANNER.'
+    `Current phase: ${phase}.\n\n` +
+    'Anyone: STATUS, FOCUS, HELP, STOP, REJOIN, BOOKED, PAID STATUS.\n' +
+    'Planner: BROADCAST <msg>, INVITE <name> <phone>, DIGEST, PAUSE, RESUME, RESET, NEXT, ' +
+    'PLANNER <name>, DEADLINE, DESTINATION, FLIGHTS.'
   );
 }
 
