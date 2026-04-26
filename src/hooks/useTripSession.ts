@@ -7,11 +7,13 @@ import {
   getSessionParticipants,
   broadcastToSession,
   removeSessionParticipant,
+  getSessionActivity,
 } from '@/lib/api/dashboard';
 
 export const tripSessionKeys = {
   forTrip: (tripId: string) => ['trip_session', tripId] as const,
   participants: (sessionId: string) => ['trip_session_participants', sessionId] as const,
+  activity: (sessionId: string) => ['trip_session_activity', sessionId] as const,
 };
 
 /** Returns the most-recently-active trip_session for the given trip. */
@@ -43,8 +45,21 @@ export function useBroadcastToSession(sessionId: string | undefined) {
       return broadcastToSession(sessionId, body);
     },
     onSuccess: () => {
-      if (sessionId) qc.invalidateQueries({ queryKey: tripSessionKeys.participants(sessionId) });
+      if (sessionId) {
+        qc.invalidateQueries({ queryKey: tripSessionKeys.participants(sessionId) });
+        qc.invalidateQueries({ queryKey: tripSessionKeys.activity(sessionId) });
+      }
     },
+  });
+}
+
+/** Activity feed: phase transitions + broadcasts + joins, merged + sorted. */
+export function useSessionActivity(sessionId: string | undefined) {
+  return useQuery({
+    queryKey: tripSessionKeys.activity(sessionId ?? ''),
+    queryFn: () => getSessionActivity(sessionId!),
+    enabled: Boolean(sessionId),
+    refetchOnWindowFocus: true,
   });
 }
 

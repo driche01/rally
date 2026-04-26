@@ -91,3 +91,91 @@ export async function removeSessionParticipant(
   if (error) return { ok: false, reason: error.message };
   return data as { ok: boolean; reason?: string };
 }
+
+// ─── Activity timeline (Phase 4.5) ──────────────────────────────────────────
+
+export type ActivityItem =
+  | {
+      kind: 'broadcast';
+      timestamp: string;
+      body: string;
+    }
+  | {
+      kind: 'phase';
+      timestamp: string;
+      from_phase: string | null;
+      to_phase: string | null;
+      triggered_by_user_id: string | null;
+    }
+  | {
+      kind: 'join';
+      timestamp: string;
+      participant_id: string;
+      display_name: string | null;
+      phone: string;
+    };
+
+const ACTIVITY_LIMIT = 20;
+
+/**
+ * Fetch the merged activity feed for a session: phase transitions +
+ * planner broadcasts + participant joins, sorted newest first.
+ */
+export async function getSessionActivity(sessionId: string): Promise<ActivityItem[]> {
+  if (!sessionId) return [];
+  const [eventsRes, broadcastsRes, participantsRes] = await Promise.all([
+    supabase
+      .from('trip_session_events')
+      .select('event_type, from_phase, to_phase, triggered_by_user_id, created_at')
+      .eq('trip_session_id', sessionId)
+      .eq('event_type', 'phase_transition')
+      .order('created_at', { ascending: false })
+      .limit(ACTIVITY_LIMIT),
+    supabase
+      .from('thread_messages')
+      .select('body, created_at')
+      .eq('trip_session_id', sessionId)
+      .eq('sender_role', 'planner_broadcast')
+      .order('created_at', { ascending: false })
+      .limit(ACTIVITY_LIMIT),
+    supabase
+      .from('trip_session_participants')
+      .select('id, display_name, phone, joined_at, status')
+      .eq('trip_session_id', sessionId)
+      .order('joined_at', { ascending: false })
+      .limit(ACTIVITY_LIMIT),
+  ]);
+
+  const items: ActivityItem[] = [];
+
+  for (const ev of eventsRes.data ?? []) {
+    items.push({
+      kind: 'phase',
+      timestamp: (ev as any).created_at,
+      from_phase: (ev as any).from_phase ?? null,
+      to_phase: (ev as any).to_phase ?? null,
+      triggered_by_user_id: (ev as any).triggered_by_user_id ?? null,
+    });
+  }
+  for (const b of broadcastsRes.data ?? []) {
+    items.push({
+      kind: 'broadcast',
+      timestamp: (b as any).created_at,
+      body: (b as any).body ?? '',
+    });
+  }
+  for (const p of participantsRes.data ?? []) {
+    if ((p as any).status === 'active') {
+      items.push({
+        kind: 'join',
+        timestamp: (p as any).joined_at,
+        participant_id: (p as any).id,
+        display_name: (p as any).display_name ?? null,
+        phone: (p as any).phone,
+      });
+    }
+  }
+
+  items.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  return items.slice(0, ACTIVITY_LIMIT);
+}

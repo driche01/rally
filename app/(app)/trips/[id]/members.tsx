@@ -44,7 +44,9 @@ import {
   useSessionParticipants,
   useBroadcastToSession,
   useRemoveSessionParticipant,
+  useSessionActivity,
 } from '@/hooks/useTripSession';
+import type { ActivityItem } from '@/lib/api/dashboard';
 import { useTrip } from '@/hooks/useTrips';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useProfile } from '@/hooks/useProfile';
@@ -130,6 +132,26 @@ function relativeTime(iso: string | null | undefined): string | null {
   return `${d}d ago`;
 }
 
+function humanPhase(phase: string | null): string {
+  if (!phase) return '';
+  return phase.replace(/_/g, ' ').toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function formatActivity(item: ActivityItem): string {
+  if (item.kind === 'broadcast') {
+    const trimmed = item.body.length > 110 ? item.body.slice(0, 110) + '…' : item.body;
+    return `Planner texted the group: "${trimmed}"`;
+  }
+  if (item.kind === 'phase') {
+    const to = humanPhase(item.to_phase);
+    return to ? `Trip moved to ${to}` : 'Phase advanced';
+  }
+  // join
+  const who = item.display_name ?? item.phone;
+  return `${who} joined`;
+}
+
 // ─── Screen ────────────────────────────────────────────────────────────────────
 
 export default function GroupDashboardScreen() {
@@ -142,6 +164,7 @@ export default function GroupDashboardScreen() {
   const { data: respondents = [] } = useRespondents(id);
   const { data: tripSession } = useTripSession(id);
   const { data: participants = [] } = useSessionParticipants(tripSession?.id);
+  const { data: activity = [] } = useSessionActivity(tripSession?.id);
   const { canDesignatePlanners } = usePermissions(id);
   const setPlanner = useSetRespondentPlanner(id);
   const deleteRespondent = useDeleteRespondent(id);
@@ -500,6 +523,37 @@ export default function GroupDashboardScreen() {
           </>
         ) : null}
 
+        {/* Activity timeline (Phase 4.5) */}
+        {tripSession && activity.length > 0 ? (
+          <>
+            <Text style={styles.sectionLabel}>ACTIVITY</Text>
+            <View style={styles.listCard}>
+              {activity.map((item, i) => (
+                <View
+                  key={`${item.kind}-${item.timestamp}-${i}`}
+                  style={[styles.activityRow, i < activity.length - 1 && styles.rowBorder]}
+                >
+                  <View style={styles.activityIcon}>
+                    <Ionicons
+                      name={
+                        item.kind === 'broadcast' ? 'megaphone-outline'
+                          : item.kind === 'phase' ? 'arrow-forward-circle-outline'
+                          : 'person-add-outline'
+                      }
+                      size={16}
+                      color="#888"
+                    />
+                  </View>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={styles.activityText}>{formatActivity(item)}</Text>
+                    <Text style={styles.activityTime}>{relativeTime(item.timestamp) ?? ''}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </>
+        ) : null}
+
         {/* Empty state */}
         {!tripSession && respondents.length === 0 ? (
           <View style={styles.emptyState}>
@@ -690,6 +744,17 @@ const styles = StyleSheet.create({
   metaText: { fontSize: 11, color: '#AAA', marginTop: 2 },
 
   plannerHint: { fontSize: 12, color: '#BBB', textAlign: 'center', marginBottom: 20 },
+
+  // Activity timeline
+  activityRow: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 12,
+  },
+  activityIcon: {
+    width: 28, height: 28, borderRadius: 14, backgroundColor: '#F3F1EC',
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  activityText: { fontSize: 13, color: '#404040', lineHeight: 18 },
+  activityTime: { fontSize: 11, color: '#AAA' },
 
   // Empty state
   emptyState: { alignItems: 'center', paddingTop: 60, gap: 8 },
