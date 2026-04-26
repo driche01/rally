@@ -128,7 +128,7 @@ export default function NewPollScreen() {
   const [destAllowMulti, setDestAllowMulti] = useState(false);
 
   // ── Dates state ──
-  const [datesTitle, setDatesTitle] = useState('When can ya make it?');
+  const [datesTitle, setDatesTitle] = useState('When can you make it?');
   const [dateRanges, setDateRanges] = useState<DateRange[]>([]);
   const [durationTitle, setDurationTitle] = useState("How long's the trip?");
   const [selectedDurations, setSelectedDurations] = useState<string[]>([]);
@@ -433,7 +433,7 @@ export default function NewPollScreen() {
       }
       Alert.alert(
         'Ready to send it?',
-        'Once the crew responds, polls can no longer be edited — only closed or cloned.',
+        'Once your group responds, polls can no longer be edited — only closed or cloned.',
         [
           { text: 'Not yet', style: 'cancel' },
           { text: 'Send it!', onPress: () => doSave('live') },
@@ -674,7 +674,7 @@ export default function NewPollScreen() {
         >
           <View className="mx-6 rounded-2xl bg-card p-6">
             <Text className="mb-2 text-lg font-bold text-ink">
-              Not quite done, mate
+              Almost there
             </Text>
             <Text className="mb-4 text-sm text-muted">
               These sections still need filling in:

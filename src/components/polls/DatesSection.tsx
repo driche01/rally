@@ -318,7 +318,7 @@ export function DatesSection({
         label="Availability question"
         value={datesTitle}
         onChangeText={onDatesTitleChange}
-        placeholder="When can ya make it?"
+        placeholder="When can you make it?"
       />
       <CalendarPicker ranges={dateRanges} onRangesChange={onDateRangesChange} accentColor={accentColor} />
     </>

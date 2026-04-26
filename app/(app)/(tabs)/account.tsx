@@ -4,15 +4,55 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSignOut } from '@/hooks/useAuth';
+import { useMyProfile } from '@/hooks/useProfile';
 import { useAuthStore } from '@/stores/authStore';
+import { supabase } from '@/lib/supabase';
 
 export default function AccountScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { user } = useAuthStore();
   const signOut = useSignOut();
+  const { data: profile } = useMyProfile();
+
+  // Phase 6: detect users with phone history (SMS or survey) that hasn't yet
+  // been claimed by their auth account, and surface a "Link your phone" CTA.
+  // Only renders when the RPC returns true. Silent for users without a phone.
+  const [claimable, setClaimable] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const phone = (profile as { phone?: string | null })?.phone;
+    if (!phone) { setClaimable(false); return; }
+    (async () => {
+      const { data } = await supabase.rpc('check_claim_available', { p_phone: phone });
+      if (!cancelled) setClaimable(data === true);
+    })();
+    return () => { cancelled = true; };
+  }, [(profile as { phone?: string | null })?.phone]);
+
+  async function handleClaimPhone() {
+    const phone = (profile as { phone?: string | null })?.phone;
+    if (!phone) return;
+    try {
+      await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/claim-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? ''}`,
+        },
+        body: JSON.stringify({ phone }),
+      });
+    } catch { /* claim screen has Resend */ }
+    router.push({
+      pathname: '/(auth)/claim-phone' as Parameters<typeof router.push>[0] extends string ? string : never,
+      params: { phone },
+    } as unknown as Parameters<typeof router.push>[0]);
+  }
 
   const name = user?.user_metadata?.name as string | undefined;
   const email = user?.email;
@@ -82,6 +122,24 @@ export default function AccountScreen() {
             elevation: 2,
           }}
         >
+          {claimable ? (
+            <Pressable
+              onPress={handleClaimPhone}
+              className="flex-row items-center gap-3 border-b border-line px-5 py-4"
+              accessibilityRole="button"
+              accessibilityLabel="Link your phone history"
+            >
+              <Ionicons name="phone-portrait-outline" size={20} color="#1D9E75" />
+              <View className="flex-1">
+                <Text className="text-base font-medium text-ink">Link your phone history</Text>
+                <Text className="text-sm text-muted">
+                  We found trips your phone is part of — tap to link them to this account.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+            </Pressable>
+          ) : null}
+
           <Pressable
             onPress={handleSignOut}
             className="flex-row items-center gap-3 px-5 py-4"

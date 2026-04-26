@@ -25,7 +25,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Button, Input } from '@/components/ui';
+import { Avatar, Button, Input } from '@/components/ui';
 import { normalizePhone } from '@/lib/phone';
 import {
   getJoinLinkPreview,
@@ -243,8 +243,17 @@ export default function JoinScreen() {
             paddingBottom: 32 + insets.bottom,
           }}
         >
-          <Text className="text-sm font-medium text-coral">Trip invite</Text>
-          <Text className="mt-1 text-3xl font-bold text-ink">
+          {/* Planner identity — leading the page so the recipient sees who
+              invited them before anything else. Phase 8b trust signal. */}
+          <View className="flex-row items-center gap-3">
+            <Avatar name={plannerLabel} size="md" />
+            <View style={{ flex: 1 }}>
+              <Text className="text-sm font-medium text-coral">Trip invite</Text>
+              <Text className="text-base font-semibold text-ink">{plannerLabel}</Text>
+            </View>
+          </View>
+
+          <Text className="mt-5 text-3xl font-bold text-ink">
             {plannerLabel} added you to a trip
           </Text>
 
@@ -265,11 +274,28 @@ export default function JoinScreen() {
             </View>
           ) : null}
 
+          {/* Social proof — show names if ≤3, count otherwise. */}
           {preview.joined_names.length > 0 ? (
-            <Text className="mt-4 text-sm text-muted">
-              Already in: {preview.joined_names.join(', ')}
-            </Text>
+            <View className="mt-5 flex-row items-center gap-2">
+              <Ionicons name="people-outline" size={16} color="#666" />
+              <Text className="text-sm text-muted">
+                {preview.joined_names.length <= 3
+                  ? `${preview.joined_names.join(', ')} ${preview.joined_names.length === 1 ? 'is' : 'are'} already in`
+                  : `${preview.member_count} friends already joined`}
+              </Text>
+            </View>
           ) : null}
+
+          {/* "What is Rally?" reassurance — small print under the social proof. */}
+          <View className="mt-6 rounded-xl bg-cream-warm p-4" style={{ backgroundColor: '#F4ECDF' }}>
+            <Text className="text-xs font-semibold text-ink" style={{ letterSpacing: 0.4 }}>
+              WHAT IS RALLY?
+            </Text>
+            <Text className="mt-1 text-sm text-ink" style={{ lineHeight: 19 }}>
+              Rally helps your friend group plan trips together. We'll text you when there's
+              a decision to weigh in on. No spam, no daily texts.
+            </Text>
+          </View>
 
           <View className="mt-8 gap-4">
             <Input

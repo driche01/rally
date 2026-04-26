@@ -139,3 +139,14 @@ export function getShareUrl(shareToken: string): string {
   const base = process.env.EXPO_PUBLIC_APP_URL ?? 'https://rallyapp.io';
   return `${base}/respond/${shareToken}`;
 }
+
+/**
+ * Public read-only trip status URL (Phase 8a). Anyone with the link sees
+ * destination + dates + headcount + planner without needing the app or
+ * filling out a form. Distinct from getShareUrl which routes to the
+ * pollable survey form.
+ */
+export function getStatusUrl(shareToken: string): string {
+  const base = process.env.EXPO_PUBLIC_APP_URL ?? 'https://rallyapp.io';
+  return `${base}/status/${shareToken}`;
+}
