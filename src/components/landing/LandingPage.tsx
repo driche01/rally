@@ -91,9 +91,11 @@ export default function LandingPage({ isSignedIn = false, tripId, source }: Land
   const goApp = () => router.push('/(app)/(tabs)' as Parameters<typeof router.push>[0]);
   const tryOpenInApp = () => {
     if (Platform.OS === 'web' && effectiveTripId) {
-      // Try the deep link. If app is installed it opens; otherwise the
-      // user stays on this page with the inline email form.
-      window.location.href = `rally://trip/${effectiveTripId}`;
+      // Try the deep link into the auth'd trip detail. If the app is
+      // installed it opens; otherwise the user stays on this page with
+      // the inline email form. Routes through the normal Expo Router
+      // path so unauth'd users land at /login (the app handles that).
+      window.location.href = `rally:///(app)/trips/${effectiveTripId}`;
     } else if (isSignedIn) {
       goApp();
     }

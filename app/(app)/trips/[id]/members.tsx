@@ -132,20 +132,10 @@ function relativeTime(iso: string | null | undefined): string | null {
   return `${d}d ago`;
 }
 
-function humanPhase(phase: string | null): string {
-  if (!phase) return '';
-  return phase.replace(/_/g, ' ').toLowerCase()
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
 function formatActivity(item: ActivityItem): string {
   if (item.kind === 'broadcast') {
     const trimmed = item.body.length > 110 ? item.body.slice(0, 110) + '…' : item.body;
     return `Planner texted the group: "${trimmed}"`;
-  }
-  if (item.kind === 'phase') {
-    const to = humanPhase(item.to_phase);
-    return to ? `Trip moved to ${to}` : 'Phase advanced';
   }
   // join
   const who = item.display_name ?? item.phone;
@@ -535,11 +525,7 @@ export default function GroupDashboardScreen() {
                 >
                   <View style={styles.activityIcon}>
                     <Ionicons
-                      name={
-                        item.kind === 'broadcast' ? 'megaphone-outline'
-                          : item.kind === 'phase' ? 'arrow-forward-circle-outline'
-                          : 'person-add-outline'
-                      }
+                      name={item.kind === 'broadcast' ? 'megaphone-outline' : 'person-add-outline'}
                       size={16}
                       color="#888"
                     />

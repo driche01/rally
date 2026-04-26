@@ -101,13 +101,6 @@ export type ActivityItem =
       body: string;
     }
   | {
-      kind: 'phase';
-      timestamp: string;
-      from_phase: string | null;
-      to_phase: string | null;
-      triggered_by_user_id: string | null;
-    }
-  | {
       kind: 'join';
       timestamp: string;
       participant_id: string;
@@ -118,19 +111,14 @@ export type ActivityItem =
 const ACTIVITY_LIMIT = 20;
 
 /**
- * Fetch the merged activity feed for a session: phase transitions +
- * planner broadcasts + participant joins, sorted newest first.
+ * Fetch the merged activity feed for a session: planner broadcasts +
+ * participant joins, sorted newest first. Phase transitions used to
+ * populate this too, but the SMS phase machine was retired in the
+ * Phase 5.6 kill-switch — no new transition events are written.
  */
 export async function getSessionActivity(sessionId: string): Promise<ActivityItem[]> {
   if (!sessionId) return [];
-  const [eventsRes, broadcastsRes, participantsRes] = await Promise.all([
-    supabase
-      .from('trip_session_events')
-      .select('event_type, from_phase, to_phase, triggered_by_user_id, created_at')
-      .eq('trip_session_id', sessionId)
-      .eq('event_type', 'phase_transition')
-      .order('created_at', { ascending: false })
-      .limit(ACTIVITY_LIMIT),
+  const [broadcastsRes, participantsRes] = await Promise.all([
     supabase
       .from('thread_messages')
       .select('body, created_at')
@@ -148,15 +136,6 @@ export async function getSessionActivity(sessionId: string): Promise<ActivityIte
 
   const items: ActivityItem[] = [];
 
-  for (const ev of eventsRes.data ?? []) {
-    items.push({
-      kind: 'phase',
-      timestamp: (ev as any).created_at,
-      from_phase: (ev as any).from_phase ?? null,
-      to_phase: (ev as any).to_phase ?? null,
-      triggered_by_user_id: (ev as any).triggered_by_user_id ?? null,
-    });
-  }
   for (const b of broadcastsRes.data ?? []) {
     items.push({
       kind: 'broadcast',
