@@ -32,7 +32,7 @@ import {
 import { Swipeable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Avatar, Button } from '@/components/ui';
+import { Avatar } from '@/components/ui';
 import {
   useRespondents,
   useSetRespondentPlanner,
@@ -161,7 +161,6 @@ export default function GroupDashboardScreen() {
   // Broadcast composer
   const [broadcastVisible, setBroadcastVisible] = useState(false);
   const [broadcastBody, setBroadcastBody] = useState('');
-  const [confirmVisible, setConfirmVisible] = useState(false);
   const [lastSent, setLastSent] = useState<{ count: number; ts: number } | null>(null);
 
   function handleAddMember() {
@@ -249,14 +248,21 @@ export default function GroupDashboardScreen() {
   function handleOpenBroadcast() {
     setBroadcastVisible(true);
   }
-  function handleSendBroadcast() {
+  async function handleSendBroadcast() {
     const body = broadcastBody.trim();
     if (!body) return;
-    setConfirmVisible(true);
+    // Native Alert (not a nested Modal — iOS won't present a Modal over a
+    // Modal). Alerts overlay on a separate presentation layer.
+    Alert.alert(
+      `Send to ${activeAttendingCount} ${activeAttendingCount === 1 ? 'person' : 'people'}?`,
+      body.length > 240 ? body.slice(0, 240) + '…' : body,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Send', onPress: () => doSendBroadcast(body) },
+      ],
+    );
   }
-  async function confirmSendBroadcast() {
-    const body = broadcastBody.trim();
-    setConfirmVisible(false);
+  async function doSendBroadcast(body: string) {
     const result = await broadcastMutation.mutateAsync(body);
     if (!result.ok) {
       Alert.alert(
@@ -589,20 +595,6 @@ export default function GroupDashboardScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Confirmation modal — extra friction so a buggy double-tap doesn't fan out twice */}
-      <Modal visible={confirmVisible} transparent animationType="fade" onRequestClose={() => setConfirmVisible(false)}>
-        <View style={styles.confirmBackdrop}>
-          <View style={styles.confirmCard}>
-            <Text style={styles.confirmTitle}>Send to {activeAttendingCount} {activeAttendingCount === 1 ? 'person' : 'people'}?</Text>
-            <Text style={styles.confirmBody} numberOfLines={6}>{broadcastBody.trim()}</Text>
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <Button variant="secondary" onPress={() => setConfirmVisible(false)} fullWidth>Cancel</Button>
-              <Button onPress={confirmSendBroadcast} fullWidth>Send</Button>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
       {/* Add member modal (preserved) */}
       <Modal
         visible={addModalVisible}
@@ -739,18 +731,6 @@ const styles = StyleSheet.create({
     minHeight: 160, textAlignVertical: 'top',
   },
   charCount: { fontSize: 12, color: '#999', textAlign: 'right' },
-
-  // Confirm modal
-  confirmBackdrop: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
-    alignItems: 'center', justifyContent: 'center', padding: 20,
-  },
-  confirmCard: {
-    backgroundColor: 'white', borderRadius: 16, padding: 24, gap: 16,
-    width: '100%', maxWidth: 420,
-  },
-  confirmTitle: { fontSize: 18, fontWeight: '700', color: '#163026' },
-  confirmBody: { fontSize: 15, color: '#404040', lineHeight: 22 },
 
   // Field labels (modal forms)
   fieldLabel: {
