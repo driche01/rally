@@ -62,6 +62,11 @@ export interface Poll {
   type: PollType;
   title: string;
   allow_multi_select: boolean;
+  /** When true, respondents can add new poll_options via the
+   *  submit_poll_write_in RPC. Used today by destination polls created
+   *  with 0 chips (group fills it in) and by duration polls (group can
+   *  add custom night-counts on top of the planner's chips). */
+  allow_write_ins: boolean;
   status: PollStatus;
   decided_option_id: string | null;
   position: number;
@@ -528,47 +533,6 @@ export interface TripSessionParticipant {
   updated_at: string;
   /** Most-recent inbound SMS or survey activity. Null until first touch. */
   last_activity_at: string | null;
-}
-
-// ─── Join links (1:1 SMS pivot, Phase 1) ────────────────────────────────────
-
-export interface JoinLink {
-  id: string;
-  trip_session_id: string;
-  code: string;
-  created_by_user_id: string | null;
-  expires_at: string;
-  max_uses: number;
-  use_count: number;
-  revoked_at: string | null;
-  created_at: string;
-}
-
-export type JoinLinkSubmissionStatus = 'pending' | 'confirmed' | 'declined' | 'expired';
-
-export interface JoinLinkSubmission {
-  id: string;
-  join_link_id: string;
-  phone: string;
-  display_name: string;
-  email: string | null;
-  status: JoinLinkSubmissionStatus;
-  confirmation_sent_at: string | null;
-  confirmed_at: string | null;
-  declined_at: string | null;
-  expires_at: string;
-  ip_hash: string | null;
-  created_at: string;
-}
-
-export interface JoinLinkPreview {
-  ok: boolean;
-  reason?: string;
-  planner_name: string | null;
-  destination: string | null;
-  dates: { start?: string; end?: string } | null;
-  joined_names: string[];
-  member_count: number;
 }
 
 // ─── Budget tier constants ─────────────────────────────────────────────────────

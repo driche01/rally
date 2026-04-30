@@ -39,57 +39,6 @@ export function isAppKeyword(body: string): boolean {
   return /^\s*(app|get\s+(the\s+)?app|download(\s+(rally|app))?|rally\s+app)\s*\??\s*$/i.test(body);
 }
 
-// ─── Join-link templates ────────────────────────────────────────────────────
-
-function formatDateRange(dates: { start?: string; end?: string } | null | undefined): string {
-  if (!dates?.start || !dates?.end) return '';
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const s = new Date(dates.start + 'T12:00:00');
-  const e = new Date(dates.end + 'T12:00:00');
-  if (isNaN(s.getTime()) || isNaN(e.getTime())) return '';
-  return `${months[s.getMonth()]} ${s.getDate()}\u2013${e.getDate()}`;
-}
-
-/**
- * The SMS sent to a phone after they fill out the /join/[code] form.
- * The recipient must reply YES (or NO/STOP) to be promoted from a
- * pending submission to an active trip session participant.
- *
- * Trust framing: lead with planner name + relationship cue ("added you")
- * so the recipient understands this is a friend invite, not a cold blast.
- */
-export function joinConfirmationSms(opts: {
-  recipientName: string;
-  plannerName: string | null;
-  destination?: string | null;
-  dates?: { start?: string; end?: string } | null;
-}): string {
-  const planner = opts.plannerName ?? 'A friend';
-  const dest = opts.destination ? ` to ${opts.destination}` : '';
-  const range = formatDateRange(opts.dates);
-  const datesPart = range ? ` (${range})` : '';
-  return (
-    `Hey ${opts.recipientName} \u2014 ${planner} added you to a trip${dest}${datesPart}. ` +
-    `I'm Rally, I help plan it over text. ` +
-    `Reply YES to join, or STOP to opt out.`
-  );
-}
-
-/**
- * Sent immediately after a participant replies YES to join confirmation.
- * Marks the start of their 1:1 thread with Rally for this trip.
- */
-export function joinKickoffSms(opts: {
-  plannerName: string | null;
-  destination?: string | null;
-}): string {
-  const planner = opts.plannerName ?? 'Your friend';
-  const dest = opts.destination ? ` to ${opts.destination}` : '';
-  return (
-    `You're in. ${planner} is planning a trip${dest}. ` +
-    `I'll text you here as decisions come up \u2014 reply HELP anytime to see what I can do.`
-  );
-}
 
 // ─── Planner-managed roster templates ─────────────────────────────────────
 // Used when the planner adds or removes a member from the trip-edit screen

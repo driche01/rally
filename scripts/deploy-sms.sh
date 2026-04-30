@@ -13,7 +13,6 @@ set -euo pipefail
 
 PROJECT_REF="qxpbnixvjtwckuedlrfj"
 ENTRY="supabase/functions/sms-inbound/index.ts"
-JOIN_ENTRY="supabase/functions/sms-join-submit/index.ts"
 BROADCAST_ENTRY="supabase/functions/sms-broadcast/index.ts"
 MEMBER_ADD_ENTRY="supabase/functions/member-add/index.ts"
 MEMBER_REMOVE_ENTRY="supabase/functions/member-remove/index.ts"
@@ -32,8 +31,6 @@ if [ -z "$DENO" ]; then
 else
   echo "==> deno check $ENTRY"
   "$DENO" check "$ENTRY"
-  echo "==> deno check $JOIN_ENTRY"
-  "$DENO" check "$JOIN_ENTRY"
   echo "==> deno check $BROADCAST_ENTRY"
   "$DENO" check "$BROADCAST_ENTRY"
   echo "==> deno check $MEMBER_ADD_ENTRY"
@@ -51,9 +48,6 @@ fi
 
 echo "==> deploying sms-inbound to $PROJECT_REF"
 npx supabase functions deploy sms-inbound --project-ref "$PROJECT_REF" --no-verify-jwt
-
-echo "==> deploying sms-join-submit to $PROJECT_REF"
-npx supabase functions deploy sms-join-submit --project-ref "$PROJECT_REF" --no-verify-jwt
 
 echo "==> deploying sms-broadcast to $PROJECT_REF"
 npx supabase functions deploy sms-broadcast --project-ref "$PROJECT_REF"

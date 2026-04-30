@@ -262,6 +262,154 @@ function PollResponseCard({
   );
 }
 
+// ─── Write-in poll card ────────────────────────────────────────────────────
+//
+// Used by polls with `allow_write_ins=true`. Renders the existing options
+// like PollResponseCard, plus a text input that lets the respondent add
+// a new option. Pending write-ins are kept in local state until submit —
+// the actual poll_option row is created server-side via the
+// submit_poll_write_in RPC, which de-dupes case-insensitively and returns
+// the option_id to vote on. Other respondents see the new option after
+// the periodic polls refetch.
+
+function WriteInPollCard({
+  poll,
+  selectedOptions,
+  pendingWriteIns,
+  onSelect,
+  onAddWriteIn,
+  onRemoveWriteIn,
+  placeholder,
+}: {
+  poll: PollWithOptions;
+  selectedOptions: string[];
+  pendingWriteIns: string[];
+  onSelect: (optionId: string) => void;
+  onAddWriteIn: (label: string) => void;
+  onRemoveWriteIn: (label: string) => void;
+  placeholder: string;
+}) {
+  const [input, setInput] = useState('');
+
+  function handleAdd() {
+    const v = input.trim();
+    if (!v) return;
+    // Local case-insensitive dedupe against existing options + pending so
+    // a respondent typing the same thing twice doesn't create duplicates.
+    // Server-side dedupe still runs — this is just UX polish.
+    const lower = v.toLowerCase();
+    const existing = poll.poll_options.find((o) => o.label.toLowerCase() === lower);
+    if (existing) {
+      if (!selectedOptions.includes(existing.id)) onSelect(existing.id);
+      setInput('');
+      return;
+    }
+    if (pendingWriteIns.some((p) => p.toLowerCase() === lower)) {
+      setInput('');
+      return;
+    }
+    onAddWriteIn(v);
+    setInput('');
+  }
+
+  return (
+    <View className="mb-5">
+      <Text className="mb-3 text-lg font-semibold text-ink">{surveyPollTitle(poll)}</Text>
+      <Text className="mb-2 text-xs text-muted">
+        {poll.allow_multi_select ? 'Select all that apply, or add your own.' : 'Pick one, or add your own.'}
+      </Text>
+      <View className="gap-2">
+        {poll.poll_options.map((opt) => {
+          const selected = selectedOptions.includes(opt.id);
+          return (
+            <Pressable
+              key={opt.id}
+              onPress={() => onSelect(opt.id)}
+              className={[
+                'flex-row items-center rounded-2xl border px-4 py-3.5 min-h-[52px]',
+                selected ? 'border-green bg-green-soft' : 'border-line bg-card',
+              ].join(' ')}
+              accessibilityRole={poll.allow_multi_select ? 'checkbox' : 'radio'}
+              accessibilityState={{ checked: selected, selected }}
+              accessibilityLabel={opt.label}
+            >
+              <View
+                className={[
+                  'mr-3 items-center justify-center h-5 w-5 border-2',
+                  poll.allow_multi_select ? 'rounded-md' : 'rounded-full',
+                  selected ? 'border-green bg-green' : 'border-line bg-card',
+                ].join(' ')}
+              >
+                {selected ? (
+                  poll.allow_multi_select ? (
+                    <Ionicons name="checkmark" size={12} color="white" />
+                  ) : (
+                    <View className="h-2 w-2 rounded-full bg-card" />
+                  )
+                ) : null}
+              </View>
+              <Text className={['flex-1 text-base', selected ? 'font-medium text-ink' : 'text-ink'].join(' ')}>
+                {opt.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+
+        {pendingWriteIns.map((label) => (
+          <View
+            key={`pending-${label}`}
+            className="flex-row items-center rounded-2xl border border-green bg-green-soft px-4 py-3.5 min-h-[52px]"
+          >
+            <View className="mr-3 h-5 w-5 items-center justify-center rounded-md border-2 border-green bg-green">
+              <Ionicons name="checkmark" size={12} color="white" />
+            </View>
+            <Text className="flex-1 text-base font-medium text-ink">{label}</Text>
+            <Text className="mr-3 text-[11px] font-semibold uppercase text-green">You</Text>
+            <Pressable
+              onPress={() => onRemoveWriteIn(label)}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel={`Remove ${label}`}
+            >
+              <Ionicons name="close-circle" size={20} color="#0F3F2E" />
+            </Pressable>
+          </View>
+        ))}
+      </View>
+
+      <View className="mt-3 flex-row items-center gap-2">
+        <View className="flex-1 rounded-2xl border border-line bg-card px-3.5 py-2.5">
+          <TextInput
+            value={input}
+            onChangeText={setInput}
+            placeholder={placeholder}
+            placeholderTextColor="#A0A0A0"
+            maxLength={40}
+            onSubmitEditing={handleAdd}
+            returnKeyType="done"
+            style={{ fontSize: 15, color: '#1F1F1F', padding: 0 }}
+            accessibilityLabel="Add an option"
+          />
+        </View>
+        <Pressable
+          onPress={handleAdd}
+          disabled={input.trim().length === 0}
+          className={[
+            'rounded-full px-4 py-2.5',
+            input.trim().length === 0 ? 'bg-line' : 'bg-green',
+          ].join(' ')}
+          accessibilityRole="button"
+          accessibilityLabel="Add option"
+        >
+          <Text className={['text-sm font-semibold', input.trim().length === 0 ? 'text-muted' : 'text-white'].join(' ')}>
+            Add
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 // ─── Duration poll card — chips when planner provided options, free-form
 // numeric input when they didn't. Identified by canonical title. ─────────
 
@@ -1034,6 +1182,11 @@ export default function RespondScreen() {
   // numericResponses: { [pollId]: nights } — free-form numeric polls
   // (currently the duration poll when planner provided no preset chips).
   const [numericResponses, setNumericResponses] = useState<Record<string, number | null>>({});
+  // writeIns: { [pollId]: pendingLabel[] } — labels the respondent typed
+  // into a write-in poll's input. Materialized on submit via the
+  // submit_poll_write_in RPC (which de-dupes case-insensitively against
+  // existing options server-side).
+  const [writeIns, setWriteIns] = useState<Record<string, string[]>>({});
   // live vote counts fetched after submission: { [pollId]: { [optionId]: count } }
   const [resultCounts, setResultCounts] = useState<Record<string, Record<string, number>>>({});
   const [respondentId, setRespondentId] = useState<string | null>(null);
@@ -1041,6 +1194,30 @@ export default function RespondScreen() {
   const [dayRsvps, setDayRsvps] = useState<Record<string, DayRsvpStatus>>({});
   const [rsvpSaving, setRsvpSaving] = useState<string | null>(null);
   const nameInputRef = useRef<TextInput>(null);
+
+  // ─── Refetch polls while on the polls step ────────────────────────────────
+  // Other respondents may add write-in options after this respondent
+  // landed. A periodic refetch surfaces those new options live so the
+  // UI matches the user's stated requirement: "they should be able to
+  // see what other group members have written in." Cheap query, public
+  // share token endpoint — 5s feels live without hammering the server.
+  useEffect(() => {
+    if (step !== 'polls' || !trip?.share_token) return;
+    let cancelled = false;
+    const id = setInterval(async () => {
+      try {
+        const fresh = await getTripByShareToken(trip.share_token!);
+        if (cancelled) return;
+        setTrip((prev) => (prev ? { ...prev, polls: fresh.polls } : prev));
+      } catch {
+        /* non-fatal — next tick will retry */
+      }
+    }, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [step, trip?.share_token]);
 
   // ─── Load trip ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1242,9 +1419,30 @@ export default function RespondScreen() {
       setRespondentId(respondent.id);
       const polls = trip.polls ?? [];
       for (const poll of polls) {
-        const optionIds = responses[poll.id] ?? [];
+        let optionIds = responses[poll.id] ?? [];
         const numeric = numericResponses[poll.id] ?? null;
-        // Free-form numeric (duration poll without preset options) takes
+
+        // Materialize any pending write-ins for this poll. The RPC
+        // de-dupes case-insensitively against existing options, so the
+        // same label typed by two respondents lands on a single option.
+        const pendingLabels = writeIns[poll.id] ?? [];
+        for (const label of pendingLabels) {
+          const { data, error } = await supabase.rpc('submit_poll_write_in', {
+            p_poll_id: poll.id,
+            p_label: label,
+            p_session_token: respondent.session_token,
+          });
+          if (error) {
+            console.warn('[respond] submit_poll_write_in failed:', error.message);
+            continue;
+          }
+          const result = data as { ok: boolean; option_id?: string; reason?: string } | null;
+          if (result?.ok && result.option_id && !optionIds.includes(result.option_id)) {
+            optionIds = [...optionIds, result.option_id];
+          }
+        }
+
+        // Free-form numeric (legacy duration poll w/ no chips) takes
         // priority — option IDs and numeric values are mutually exclusive
         // per poll per respondent.
         await submitPollResponses(poll.id, respondent.id, optionIds, numeric);
@@ -1690,12 +1888,14 @@ export default function RespondScreen() {
 
   // ─── Polls step ────────────────────────────────────────────────────────────
   // A poll counts as answered when the respondent has either picked at
-  // least one option OR submitted a positive numeric value (free-form
-  // duration poll).
+  // least one option, submitted a positive numeric value (legacy
+  // free-form duration), or queued a write-in label that will be
+  // materialized at submit time.
   const answeredCount = polls.filter((p) => {
     const optionPicks = (responses[p.id] ?? []).length > 0;
     const numericPick = (numericResponses[p.id] ?? 0) > 0;
-    return optionPicks || numericPick;
+    const writeInPick = (writeIns[p.id] ?? []).length > 0;
+    return optionPicks || numericPick || writeInPick;
   }).length;
   const allAnswered = polls.length > 0 && answeredCount === polls.length;
 
@@ -1754,8 +1954,41 @@ export default function RespondScreen() {
           </View>
         ) : (
           polls.map((poll) => {
+            // Write-in polls take priority — they handle their own chip
+            // rendering AND the "add an option" input. Used today by
+            // blank-destination polls and duration polls.
+            if (poll.allow_write_ins) {
+              return (
+                <WriteInPollCard
+                  key={poll.id}
+                  poll={poll}
+                  selectedOptions={responses[poll.id] ?? []}
+                  pendingWriteIns={writeIns[poll.id] ?? []}
+                  onSelect={(optionId) => handleSelect(poll.id, optionId, poll.allow_multi_select)}
+                  onAddWriteIn={(label) =>
+                    setWriteIns((prev) => ({
+                      ...prev,
+                      [poll.id]: [...(prev[poll.id] ?? []), label],
+                    }))
+                  }
+                  onRemoveWriteIn={(label) =>
+                    setWriteIns((prev) => ({
+                      ...prev,
+                      [poll.id]: (prev[poll.id] ?? []).filter((l) => l !== label),
+                    }))
+                  }
+                  placeholder={
+                    poll.type === 'destination'
+                      ? 'Add a destination…'
+                      : isDurationPoll(poll)
+                        ? 'Add a duration (e.g. 4 nights)…'
+                        : 'Add an option…'
+                  }
+                />
+              );
+            }
             // Duration poll → chips when planner provided options, free-form
-            // numeric input when they didn't.
+            // numeric input when they didn't (legacy: pre-write-in polls).
             if (isDurationPoll(poll)) {
               return (
                 <DurationPollCard

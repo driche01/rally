@@ -331,12 +331,24 @@ export default function NewTripScreen() {
       option_labels: string[];
       allow_multi_select?: boolean;
       allow_empty_options?: boolean;
+      allow_write_ins?: boolean;
     }> = [];
     if (cleanDestinations.length >= 2) {
       pollOptions.push({
         type: 'destination',
         title: 'Where do you want to go?',
         option_labels: cleanDestinations.map((d) => d.name),
+      });
+    } else if (cleanDestinations.length === 0) {
+      // Planner left destination blank → group fills it in. The poll is
+      // created with zero options + write-ins enabled, so respondents
+      // can add destinations via submit_poll_write_in.
+      pollOptions.push({
+        type: 'destination',
+        title: 'Where do you want to go?',
+        option_labels: [],
+        allow_empty_options: true,
+        allow_write_ins: true,
       });
     }
     if (cleanDateRanges.length >= 1 && !decidedDateRange) {
@@ -357,19 +369,24 @@ export default function NewTripScreen() {
         option_labels: expandRangesToDayLabels(cleanDateRanges),
       });
     }
-    // Duration is always asked. If the planner provided 0 options, the
-    // poll is created with no preset options and respondents enter a
-    // free-form number of nights. 1 option → decided (writes to
-    // trips.trip_duration). 2+ → live multi-select chip poll.
+    // Duration is always asked.
+    //   • 0 chips → seed the 5 standard defaults + enable write-ins so
+    //     the group can pick from defaults or type their own.
+    //   • 1 chip  → decided (writes trips.trip_duration). Write-ins
+    //     don't apply since the poll is locked at creation.
+    //   • 2+ chips → live multi-select poll with those options + write-ins.
     const cleanDurations = durations
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
+    const durationLabels =
+      cleanDurations.length === 0 ? [...DURATION_OPTIONS] : cleanDurations;
+    const durationDecided = cleanDurations.length === 1;
     pollOptions.push({
       type: 'custom',
       title: DURATION_POLL_TITLE,
-      option_labels: cleanDurations,
+      option_labels: durationLabels,
       allow_multi_select: true,
-      allow_empty_options: cleanDurations.length === 0,
+      allow_write_ins: !durationDecided,
     });
     if (cleanBudgets.length >= 2) {
       pollOptions.push({

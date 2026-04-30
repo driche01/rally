@@ -67,11 +67,19 @@ export interface CreateTripInput {
     allow_multi_select?: boolean;
     /**
      * When true, the poll is still created even if option_labels is empty.
-     * Used for the duration poll's free-form mode — respondents enter a
-     * numeric value (poll_responses.numeric_value) instead of picking from
-     * preset options. Only meaningful for custom polls.
+     * Used for blank-destination write-in polls and (legacy) the duration
+     * poll's free-form numeric mode. Only meaningful when paired with
+     * either allow_write_ins (option_id responses) or for custom polls
+     * that take numeric_value responses.
      */
     allow_empty_options?: boolean;
+    /**
+     * When true, the poll is created with `polls.allow_write_ins=true`
+     * — respondents can add new options via the submit_poll_write_in
+     * RPC. Used today by destination polls (when planner picks 0 chips)
+     * and duration polls (always — defaults + write-in).
+     */
+    allow_write_ins?: boolean;
   }>;
 }
 
@@ -129,67 +137,45 @@ export async function createTrip(input: CreateTripInput): Promise<Trip> {
 
 /**
  * Promote each contact to an active participant on the trip's session.
- * - Looks up the trip's most-recent active session.
- * - For each contact, find-or-creates a `users` row by normalized phone.
- * - Inserts trip_session_participants with is_attending=true, is_planner=false.
- * Best-effort throughout — surface errors via console.warn but don't throw.
+ *
+ * Routes through the `app_add_trip_contacts` SECURITY DEFINER RPC
+ * (migration 078) so the inserts bypass the RLS write gate on
+ * trip_session_participants — direct authenticated-client inserts on
+ * that table are denied (only a SELECT policy exists). The RPC
+ * enforces planner authorization server-side and upserts on
+ * (trip_session_id, phone) so re-adding is idempotent.
+ *
+ * Best-effort: malformed phones are filtered client-side before the
+ * RPC call; a failed RPC logs and returns without throwing.
  */
 async function addContactsAsParticipants(
   tripId: string,
   contacts: { name: string; phone: string; email?: string | null }[],
 ): Promise<void> {
-  const { data: session } = await supabase
-    .from('trip_sessions')
-    .select('id')
-    .eq('trip_id', tripId)
-    .in('status', ['ACTIVE', 'PAUSED', 'RE_ENGAGEMENT_PENDING'])
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (!session) {
-    console.warn('[trips] addContacts: no active session — skipping');
-    return;
-  }
+  if (contacts.length === 0) return;
 
+  const payload: { name: string; phone: string; email: string | null }[] = [];
   for (const c of contacts) {
     const phone = normalizeUSPhone(c.phone);
     if (!phone) {
       console.warn(`[trips] addContacts: rejected phone for ${c.name}: ${c.phone}`);
       continue;
     }
-    // find-or-create users row
-    let { data: existing } = await supabase
-      .from('users')
-      .select('id')
-      .eq('phone', phone)
-      .maybeSingle();
-    let userId = existing?.id ?? null;
-    if (!userId) {
-      const { data: created, error: userErr } = await supabase
-        .from('users')
-        .insert({ phone, display_name: c.name, rally_account: false, opted_out: false })
-        .select('id').single();
-      if (userErr) {
-        console.warn(`[trips] users insert failed for ${phone}: ${userErr.message}`);
-        continue;
-      }
-      userId = created.id;
-    }
+    payload.push({ name: c.name, phone, email: c.email ?? null });
+  }
+  if (payload.length === 0) return;
 
-    const { error: partErr } = await supabase
-      .from('trip_session_participants')
-      .upsert({
-        trip_session_id: session.id,
-        user_id: userId,
-        phone,
-        display_name: c.name,
-        status: 'active',
-        is_attending: true,
-        is_planner: false,
-      }, { onConflict: 'trip_session_id,phone' });
-    if (partErr) {
-      console.warn(`[trips] participant upsert failed for ${phone}: ${partErr.message}`);
-    }
+  const { data, error } = await supabase.rpc('app_add_trip_contacts', {
+    p_trip_id: tripId,
+    p_contacts: payload,
+  });
+  if (error) {
+    console.warn('[trips] app_add_trip_contacts failed:', error.message);
+    return;
+  }
+  const result = data as { ok: boolean; reason?: string; added?: number; skipped?: number } | null;
+  if (!result?.ok) {
+    console.warn('[trips] app_add_trip_contacts not ok:', result?.reason ?? 'unknown');
   }
 }
 
@@ -207,6 +193,7 @@ async function createLivePollsFromOptions(
     option_labels: string[];
     allow_multi_select?: boolean;
     allow_empty_options?: boolean;
+    allow_write_ins?: boolean;
   }>,
 ): Promise<void> {
   const { data: existing } = await supabase
@@ -224,19 +211,20 @@ async function createLivePollsFromOptions(
 
     // Skip empty entries. For canonical types (destination/dates/budget),
     // 1-option polls are handled by syncTripFieldsToPolls writing to the
-    // trip primitive — so we still gate at <2. For custom polls there's
-    // no backing primitive, so 1 option means "decided custom poll".
-    // Custom polls with `allow_empty_options` (the duration poll's
+    // trip primitive — so we still gate at <2 unless `allow_empty_options`
+    // is set (e.g. blank-destination write-in polls). For custom polls
+    // there's no backing primitive, so 1 option means "decided custom
+    // poll". Custom polls with `allow_empty_options` (legacy duration
     // free-form mode) are created even with 0 options so respondents can
     // submit a numeric_value response.
     if (entry.type === 'custom') {
       if (entry.option_labels.length < 1 && !entry.allow_empty_options) continue;
     } else {
-      if (entry.option_labels.length < 2) continue;
+      if (entry.option_labels.length < 2 && !entry.allow_empty_options) continue;
     }
 
-    const isDecided = entry.option_labels.length === 1;
-    const isFreeForm = entry.option_labels.length === 0;
+    const isDecided = entry.option_labels.length === 1 && !entry.allow_write_ins;
+    const isFreeForm = entry.option_labels.length === 0 && !entry.allow_write_ins;
 
     // Default multi-select rule by poll type:
     //   destination + dates → multi-select (pick every option that works)
@@ -253,6 +241,7 @@ async function createLivePollsFromOptions(
         title: entry.title,
         status: isDecided ? 'decided' : 'live',
         allow_multi_select: !isDecided && (entry.allow_multi_select ?? defaultMultiSelect),
+        allow_write_ins: entry.allow_write_ins === true,
         position: position++,
       })
       .select()
@@ -262,9 +251,12 @@ async function createLivePollsFromOptions(
       continue;
     }
 
-    if (isFreeForm) {
-      // Free-form poll has no preset options — respondents submit
-      // numeric_value responses. Nothing to insert into poll_options.
+    if (isFreeForm || entry.option_labels.length === 0) {
+      // No preset options to insert. Two cases land here:
+      //   • Legacy free-form numeric (duration poll w/ no chips, no
+      //     write-ins) — respondents submit numeric_value responses.
+      //   • Write-in polls with zero seed options (blank destination) —
+      //     respondents add options via submit_poll_write_in.
       continue;
     }
 
