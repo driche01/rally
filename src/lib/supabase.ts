@@ -21,6 +21,12 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: Platform.OS === 'web',
+    // PKCE is required for OAuth providers that gate auth-code-flow on a
+    // code_challenge (Google in particular). With the default 'implicit'
+    // flow, signInWithOAuth wouldn't store a code_verifier, and the
+    // exchangeCodeForSession call would 400 with "both auth code and
+    // code verifier should be non-empty".
+    flowType: 'pkce',
   },
 });
 

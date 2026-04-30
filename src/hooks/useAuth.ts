@@ -142,9 +142,15 @@ export function useGoogleSignIn() {
     const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
     if (result.type !== 'success') return null; // user cancelled
 
-    const { data: sessionData, error: sessionError } = await supabase.auth.exchangeCodeForSession(
-      result.url,
-    );
+    // exchangeCodeForSession wants just the auth code string, not the full URL.
+    // The redirect lands on rally://auth/callback?code=...&state=... — pull
+    // the `code` query param out and hand it over.
+    const url = new URL(result.url);
+    const code = url.searchParams.get('code');
+    if (!code) throw new Error('OAuth response missing auth code');
+
+    const { data: sessionData, error: sessionError } =
+      await supabase.auth.exchangeCodeForSession(code);
     if (sessionError) throw sessionError;
 
     // Upsert profile for first-time Google sign-ins (ignored if profile already exists)
