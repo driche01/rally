@@ -17,6 +17,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -356,6 +357,7 @@ export function MultiDatePicker({
       onRequestClose={onClose}
     >
       <View style={[styles.container, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}>
+        <View style={styles.inner}>
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} hitSlop={8}>
             <Text style={styles.cancelBtn}>Cancel</Text>
@@ -436,13 +438,28 @@ export function MultiDatePicker({
             </Text>
           </TouchableOpacity>
         </View>
+        </View>
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFCF6' },
+  // On native (iOS pageSheet) the modal already sits inside a centered
+  // sheet so we let it stretch. On web Modal renders full-bleed, so
+  // center the content and cap its width at a reasonable phone-ish size
+  // — otherwise the calendar grid stretches across the whole desktop
+  // viewport, which is what your earlier screenshot caught.
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFCF6',
+    ...Platform.select({ web: { alignItems: 'center' } }),
+  },
+  inner: {
+    flex: 1,
+    width: '100%',
+    ...Platform.select({ web: { maxWidth: 520 } }),
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
