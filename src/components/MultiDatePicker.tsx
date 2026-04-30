@@ -14,7 +14,7 @@
  * grouping into ranges is the caller's responsibility (helper exposed
  * below).
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type SetStateAction } from 'react';
 import {
   Modal,
   Platform,
@@ -44,6 +44,13 @@ interface Props {
   minDate?: string;
   /** Cap the latest selectable day. ISO 'YYYY-MM-DD'. */
   maxDate?: string;
+  /** Inline mode: render the calendar in place without a Modal wrapper,
+   *  Cancel/Confirm UI, or open-button affordance. The picker becomes a
+   *  controlled component — `value` is the source of truth and every
+   *  selection change fires `onConfirm` immediately. Used on web where
+   *  full-screen modals aren't appropriate; native flows still use the
+   *  default modal mode. */
+  inline?: boolean;
 }
 
 export interface DateGroup {
@@ -237,22 +244,39 @@ export function MultiDatePicker({
   allowPastDates = false,
   minDate: minDateProp,
   maxDate,
+  inline = false,
 }: Props) {
   const insets = useSafeAreaInsets();
-  const [days, setDays] = useState<string[]>(value);
+  const [internalDays, setInternalDays] = useState<string[]>(value);
   const [mode, setMode] = useState<SelectMode>('day');
   // Day-mode is range-pair input. After the planner taps day A,
   // pendingAnchor holds A and the next tap completes A→B as a range.
   // null means "no pending anchor — the next tap starts a new range."
   const [pendingAnchor, setPendingAnchor] = useState<string | null>(null);
 
+  // Inline mode: parent owns the selection state, so reads use the
+  // incoming `value` and writes go straight to `onConfirm`. Modal mode
+  // keeps the staged-then-confirmed flow that's appropriate on iOS.
+  const days = inline ? value : internalDays;
+  const setDays = (next: SetStateAction<string[]>) => {
+    if (inline) {
+      const computed = typeof next === 'function'
+        ? (next as (prev: string[]) => string[])(value)
+        : next;
+      onConfirm(computed);
+    } else {
+      setInternalDays(next);
+    }
+  };
+
   useEffect(() => {
+    if (inline) return;
     if (visible) {
-      setDays(value);
+      setInternalDays(value);
       setMode('day');
       setPendingAnchor(null);
     }
-  }, [visible, value]);
+  }, [inline, visible, value]);
 
   const groups = useMemo(() => groupConsecutiveDays(days), [days]);
 
@@ -348,6 +372,64 @@ export function MultiDatePicker({
   const summary = days.length === 0
     ? MODE_HINTS[mode]
     : `${days.length} day${days.length === 1 ? '' : 's'} · ${groups.length} range${groups.length === 1 ? '' : 's'}`;
+
+  if (inline) {
+    return (
+      <View style={styles.inlineContainer}>
+        <View style={styles.modeRow}>
+          {(['day', 'weekend', 'week', 'month'] as SelectMode[]).map((m) => {
+            const sel = mode === m;
+            return (
+              <Pressable
+                key={m}
+                onPress={() => setMode(m)}
+                style={[styles.modePill, sel && styles.modePillSelected]}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: sel }}
+                accessibilityLabel={MODE_LABELS[m]}
+              >
+                <Text style={[styles.modePillText, sel && styles.modePillTextSelected]}>
+                  {MODE_LABELS[m]}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <View style={styles.inlineSummary}>
+          <Text style={styles.summaryText}>{summary}</Text>
+          {days.length > 0 ? (
+            <TouchableOpacity onPress={handleClear} hitSlop={6}>
+              <Text style={styles.inlineClearBtn}>Clear</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
+        <Calendar
+          markingType="period"
+          markedDates={marked}
+          onDayPress={handleDayPress}
+          minDate={effectiveMin}
+          maxDate={maxDate}
+          theme={{
+            calendarBackground: '#FFFCF6',
+            textSectionTitleColor: '#5F685F',
+            selectedDayBackgroundColor: '#0F3F2E',
+            selectedDayTextColor: '#FFFFFF',
+            todayTextColor: '#0F3F2E',
+            dayTextColor: '#163026',
+            textDisabledColor: '#9DA8A0',
+            arrowColor: '#0F3F2E',
+            monthTextColor: '#163026',
+            textDayFontWeight: '500',
+            textMonthFontWeight: '600',
+            textDayHeaderFontWeight: '500',
+          }}
+          style={styles.calendar}
+        />
+      </View>
+    );
+  }
 
   return (
     <Modal
@@ -459,6 +541,29 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     ...Platform.select({ web: { maxWidth: 520 } }),
+  },
+
+  // Inline mode (web): no fullscreen background, no flex:1, no
+  // safe-area padding — sits inline inside the parent poll card.
+  inlineContainer: {
+    gap: 10,
+  },
+  inlineSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#0F3F2E',
+    backgroundColor: '#DFE8D2',
+    gap: 12,
+  },
+  inlineClearBtn: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0F3F2E',
   },
   header: {
     flexDirection: 'row',

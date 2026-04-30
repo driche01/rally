@@ -597,20 +597,38 @@ function DatesPollCard({
         Window: {windowLabel}. Tap to mark every day you're free.
       </Text>
 
-      <Pressable
-        onPress={() => setPickerVisible(true)}
-        className="flex-row items-center gap-2.5 rounded-2xl border border-line bg-card px-4 py-3.5"
-        accessibilityRole="button"
-        accessibilityLabel="Pick days you're free"
-      >
-        <Ionicons name="calendar-outline" size={18} color="#0F3F2E" />
-        <Text className="flex-1 text-sm font-medium text-ink">
-          {selectedIsos.length === 0
-            ? "Pick days you're free"
-            : `${selectedIsos.length} day${selectedIsos.length === 1 ? '' : 's'} selected`}
-        </Text>
-        <Text className="text-[12px] text-muted">{selectedIsos.length === 0 ? 'Open' : 'Edit'}</Text>
-      </Pressable>
+      {Platform.OS === 'web' ? (
+        // Web: render the calendar inline as part of the poll. No
+        // open-button affordance, no fullscreen modal — the picker
+        // becomes a normal block in the response card.
+        <MultiDatePicker
+          inline
+          visible
+          value={selectedIsos}
+          onConfirm={handleConfirmDays}
+          onClose={() => {}}
+          title="Pick days you're free"
+          confirmLabel="Confirm availability"
+          minDate={minIso}
+          maxDate={maxIso}
+          allowPastDates
+        />
+      ) : (
+        <Pressable
+          onPress={() => setPickerVisible(true)}
+          className="flex-row items-center gap-2.5 rounded-2xl border border-line bg-card px-4 py-3.5"
+          accessibilityRole="button"
+          accessibilityLabel="Pick days you're free"
+        >
+          <Ionicons name="calendar-outline" size={18} color="#0F3F2E" />
+          <Text className="flex-1 text-sm font-medium text-ink">
+            {selectedIsos.length === 0
+              ? "Pick days you're free"
+              : `${selectedIsos.length} day${selectedIsos.length === 1 ? '' : 's'} selected`}
+          </Text>
+          <Text className="text-[12px] text-muted">{selectedIsos.length === 0 ? 'Open' : 'Edit'}</Text>
+        </Pressable>
+      )}
 
       {/* Selection summary (chips of picked days) */}
       {selectedIsos.length > 0 ? (
@@ -636,17 +654,19 @@ function DatesPollCard({
         </View>
       ) : null}
 
-      <MultiDatePicker
-        visible={pickerVisible}
-        value={selectedIsos}
-        onConfirm={handleConfirmDays}
-        onClose={() => setPickerVisible(false)}
-        title="Pick days you're free"
-        confirmLabel="Confirm availability"
-        minDate={minIso}
-        maxDate={maxIso}
-        allowPastDates
-      />
+      {Platform.OS !== 'web' ? (
+        <MultiDatePicker
+          visible={pickerVisible}
+          value={selectedIsos}
+          onConfirm={handleConfirmDays}
+          onClose={() => setPickerVisible(false)}
+          title="Pick days you're free"
+          confirmLabel="Confirm availability"
+          minDate={minIso}
+          maxDate={maxIso}
+          allowPastDates
+        />
+      ) : null}
     </View>
   );
 }
