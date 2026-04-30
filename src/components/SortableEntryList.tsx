@@ -11,10 +11,9 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 
-export type CardKey = 'polls' | 'members' | 'itinerary' | 'lodging' | 'travel' | 'expenses';
+export type CardKey = 'members' | 'itinerary' | 'lodging' | 'travel' | 'expenses';
 
 export const ALL_CARD_KEYS: CardKey[] = [
-  'polls',
   'members',
   'itinerary',
   'lodging',

@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
-import { Platform, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
@@ -9,6 +9,7 @@ import Animated, {
   withDelay,
   Easing,
 } from 'react-native-reanimated';
+import { T, headlineFont } from '@/theme';
 
 // ── Onboarding screen ─────────────────────────────────────────────────────────
 // Editorial cream surface. Shown to unauthenticated users before login.
@@ -59,30 +60,27 @@ export default function OnboardingScreen() {
     transform: [{ translateY: actionsTranslate.value }],
   }));
 
-  const HEADLINE_FONT = Platform.OS === 'android' ? 'serif' : 'Georgia';
-
   return (
     <View
       style={{
         flex: 1,
-        backgroundColor: '#FBF7EF',
+        backgroundColor: T.cream,
         paddingTop: insets.top + 24,
         paddingBottom: insets.bottom + 32,
         paddingHorizontal: 32,
       }}
     >
-      {/* Logo mark */}
+      {/* Logo mark — small "● RALLY" used as the universal brand mark across auth screens. */}
       <Animated.View style={logoStyle}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <View
-            style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#0F3F2E' }}
+            style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: T.green }}
           />
           <Text
             style={{
-              fontFamily: HEADLINE_FONT,
+              ...headlineFont.bold,
               fontSize: 20,
-              fontWeight: '700',
-              color: '#0F3F2E',
+              color: T.green,
               letterSpacing: 1,
             }}
           >
@@ -91,43 +89,34 @@ export default function OnboardingScreen() {
         </View>
       </Animated.View>
 
-      {/* Hero headline */}
+      {/* Hero headline — let the text wrap naturally so we don't pin to a specific device width. */}
       <Animated.View style={[{ flex: 1, justifyContent: 'center' }, heroStyle]}>
         <Text
           style={{
-            fontFamily: HEADLINE_FONT,
+            ...headlineFont.bold,
             fontSize: 60,
-            fontWeight: '700',
-            color: '#163026',
+            color: T.ink,
             lineHeight: 64,
             letterSpacing: -1.5,
           }}
         >
-          Get your{'\n'}group{'\n'}together.
+          Get your group together.
         </Text>
       </Animated.View>
 
       {/* Subtext */}
       <Animated.View style={[{ marginBottom: 40 }, subStyle]}>
-        <Text
-          style={{
-            fontSize: 18,
-            color: '#5F685F',
-            lineHeight: 28,
-          }}
-        >
-          Plan great trips with your group —{'\n'}
-          destination, dates, and budget{'\n'}
-          locked in with one link.
+        <Text style={{ fontSize: 18, color: T.muted, lineHeight: 28 }}>
+          Plan great trips with your group — destination, dates, and budget locked in with one link.
         </Text>
       </Animated.View>
 
-      {/* Action buttons */}
+      {/* Action buttons — primary routes new users to signup; returning users tap the secondary "Log in". */}
       <Animated.View style={[{ gap: 12 }, actionsStyle]}>
         <Pressable
-          onPress={() => router.push('/(auth)/login')}
+          onPress={() => router.push('/(auth)/signup')}
           style={({ pressed }) => ({
-            backgroundColor: pressed ? '#174F3C' : '#0F3F2E',
+            backgroundColor: pressed ? T.greenDark : T.green,
             borderRadius: 18,
             paddingVertical: 18,
             alignItems: 'center',
@@ -135,13 +124,13 @@ export default function OnboardingScreen() {
           })}
           accessibilityRole="button"
         >
-          <Text style={{ fontSize: 17, fontWeight: '700', color: '#FFFFFF' }}>
-            Let's go
+          <Text style={{ fontSize: 17, fontWeight: '700', color: T.white }}>
+            Get started
           </Text>
         </Pressable>
 
         <Pressable
-          onPress={() => router.push('/(auth)/signup')}
+          onPress={() => router.push('/(auth)/login')}
           style={({ pressed }) => ({
             borderRadius: 18,
             paddingVertical: 18,
@@ -150,9 +139,9 @@ export default function OnboardingScreen() {
           })}
           accessibilityRole="button"
         >
-          <Text style={{ fontSize: 15, color: '#5F685F' }}>
-            New here?{' '}
-            <Text style={{ color: '#0F3F2E', fontWeight: '600' }}>Sign up</Text>
+          <Text style={{ fontSize: 15, color: T.muted }}>
+            Already have an account?{' '}
+            <Text style={{ color: T.green, fontWeight: '600' }}>Log in</Text>
           </Text>
         </Pressable>
       </Animated.View>

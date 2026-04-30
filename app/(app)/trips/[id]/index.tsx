@@ -9,14 +9,15 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { SortableEntryList, type CardKey } from '@/components/SortableEntryList';
-import { PlannerCoachCard } from '@/components/trips/PlannerCoachCard';
+import { TripDashboardCards } from '@/components/trips/TripDashboardCards';
+import { FirstTripOnboardingModal } from '@/components/trips/FirstTripOnboardingModal';
+import { useTripSession } from '@/hooks/useTripSession';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePolls, pollKeys } from '@/hooks/usePolls';
 import { useRespondents, respondentKeys } from '@/hooks/useRespondents';
@@ -70,19 +71,19 @@ const HERO_CONFIG: Record<TripStage, {
   titleColor: string;
   subtitleColor: string;
   pillBg: string;
-  ctaLabel: string;
   ctaBg: string;
 }> = {
   // 2026-04-24 brand palette: dark moody backgrounds preserved, but BLUE
   // (#0A1828, #1563B0) and bright greens (#1A9E5A) shifted into our deep-green
-  // primary family. Coral CTA (#E05A28) on `deciding` kept as a small accent
-  // on a dark surface (allowed sparing use).
-  deciding:     { bg: '#1A1715', badge: 'FIGURING IT OUT', badgeColor: 'rgba(255,255,255,0.45)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'Invite your group', ctaBg: '#0F3F2E' },
-  confirmed:    { bg: '#0C2218', badge: 'CONFIRMED',        badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.65)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'Manage your group', ctaBg: '#0F3F2E' },
-  planning:     { bg: '#0F2620', badge: 'PLANNING',        badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.65)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'See the plan', ctaBg: '#0F3F2E' },
-  experiencing: { bg: '#042E26', badge: 'TRIP IS ON!',     badgeColor: 'rgba(255,255,255,0.7)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.75)', pillBg: 'rgba(255,255,255,0.15)', ctaLabel: "See today's plan", ctaBg: 'rgba(255,255,255,0.2)' },
-  reconciling:  { bg: '#1A1715', badge: 'SORTING IT OUT',  badgeColor: 'rgba(255,255,255,0.45)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'Settle up', ctaBg: '#555552' },
-  done:         { bg: '#1A1715', badge: 'WHAT A TRIP!',    badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaLabel: 'Relive it', ctaBg: 'rgba(255,255,255,0.15)' },
+  // primary family. ctaLabel was dropped when the per-stage CTA was
+  // collapsed into a single "Poll link" pill — but each stage still
+  // tints the pill via ctaBg.
+  deciding:     { bg: '#1A1715', badge: 'FIGURING IT OUT', badgeColor: 'rgba(255,255,255,0.45)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaBg: '#0F3F2E' },
+  confirmed:    { bg: '#0C2218', badge: 'CONFIRMED',        badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.65)', pillBg: 'rgba(255,255,255,0.1)', ctaBg: '#0F3F2E' },
+  planning:     { bg: '#0F2620', badge: 'PLANNING',        badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.65)', pillBg: 'rgba(255,255,255,0.1)', ctaBg: '#0F3F2E' },
+  experiencing: { bg: '#042E26', badge: 'TRIP IS ON!',     badgeColor: 'rgba(255,255,255,0.7)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.75)', pillBg: 'rgba(255,255,255,0.15)', ctaBg: 'rgba(255,255,255,0.2)' },
+  reconciling:  { bg: '#1A1715', badge: 'SORTING IT OUT',  badgeColor: 'rgba(255,255,255,0.45)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaBg: '#555552' },
+  done:         { bg: '#1A1715', badge: 'WHAT A TRIP!',    badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaBg: 'rgba(255,255,255,0.15)' },
 };
 
 // ─── Group Members Card ───────────────────────────────────────────────────────
@@ -136,6 +137,7 @@ export default function TripDashboard() {
 
 
   const { data: trip } = useTrip(id);
+  const { data: tripSession } = useTripSession(id);
   const { data: polls = [] } = usePolls(id);
   const { data: respondents = [] } = useRespondents(id);
   const { canEditTrip, canReorderCards } = usePermissions(id);
@@ -163,7 +165,6 @@ export default function TripDashboard() {
   }, [id]);
 
   const decidedPolls = useMemo(() => polls.filter((p) => p.status === 'decided'), [polls]);
-  const livePolls = useMemo(() => polls.filter((p) => p.status === 'live'), [polls]);
 
 const stage = trip ? getTripStage(trip) : 'deciding';
   const hero = HERO_CONFIG[stage];
@@ -203,36 +204,6 @@ const stage = trip ? getTripStage(trip) : 'deciding';
   const budgetDisplay   = trip?.budget_per_person ?? decidedBudgetLabel ?? null;
   const durationDisplay = trip?.trip_duration ?? decidedDurationLabel ?? null;
 
-  // Poll badge
-  const pollBadge = livePolls.length > 0 ? `${livePolls.length} live` : polls.length > 0 ? `${polls.length} polls` : null;
-
-  const handleShare = () => {
-    if (!trip) return;
-    const url = getShareUrl(trip.share_token);
-
-    // Build an exciting trip summary message
-    const lines: string[] = [];
-    lines.push(`🎉 ${trip.name} is on! Who's in?`);
-    if (destination) lines.push(`📍 ${destination}`);
-    if (dateDisplay) lines.push(`📅 ${dateDisplay}`);
-    const details: string[] = [];
-    if (trip.group_size_precise) details.push(`${trip.group_size_precise} people`);
-    if (budgetDisplay) details.push(`${budgetDisplay} pp`);
-    if (details.length > 0) lines.push(`👥 ${details.join(' · ')}`);
-    lines.push('');
-    lines.push(`Confirm you're in and tell us your preferences:`);
-    lines.push(url);
-    const msg = lines.join('\n');
-
-    const encoded = encodeURIComponent(msg);
-    Alert.alert('Share with group', 'Choose how to send:', [
-      { text: 'iMessage / SMS', onPress: () => Linking.openURL(Platform.OS === 'ios' ? `sms:&body=${encoded}` : `sms:?body=${encoded}`) },
-      { text: 'WhatsApp', onPress: () => Linking.openURL(`whatsapp://send?text=${encoded}`) },
-      { text: 'More options…', onPress: async () => { try { await Share.share({ message: msg }); } catch {} } },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  };
-
   const openMapsSheet = () => {
     if (!destination) return;
     const mapQuery = trip?.destination_address ?? destination;
@@ -262,29 +233,6 @@ const stage = trip ? getTripStage(trip) : 'deciding';
         { text: 'Copy address', onPress: () => Clipboard.setStringAsync(mapQuery) },
         { text: 'Cancel', style: 'cancel' },
       ]);
-    }
-  };
-
-  const handleCtaPress = () => {
-    switch (stage) {
-      case 'deciding':
-        handleShare();
-        break;
-      case 'confirmed':
-        router.push(`/(app)/trips/${id}/members`);
-        break;
-      case 'planning':
-        router.push(`/(app)/trips/${id}/hub?tab=itinerary`);
-        break;
-      case 'experiencing':
-        router.push(`/(app)/trips/${id}/hub?tab=itinerary`);
-        break;
-      case 'reconciling':
-        router.push(`/(app)/trips/${id}/hub?tab=expenses`);
-        break;
-      case 'done':
-        router.push(`/(app)/trips/${id}/hub?tab=itinerary`);
-        break;
     }
   };
 
@@ -437,12 +385,6 @@ const stage = trip ? getTripStage(trip) : 'deciding';
     subtitle: string;
     onPress: () => void;
   }> = useMemo(() => ({
-    polls: {
-      icon: 'stats-chart-outline',
-      title: 'Polls',
-      subtitle: pollBadge ?? 'Vote on destination, dates & more',
-      onPress: () => router.push(`/(app)/trips/${id}/polls`),
-    },
     itinerary: {
       icon: 'calendar-outline',
       title: 'Itinerary',
@@ -467,7 +409,7 @@ const stage = trip ? getTripStage(trip) : 'deciding';
       subtitle: 'Track and split costs',
       onPress: () => router.push(`/(app)/trips/${id}/hub?tab=expenses`),
     },
-  }), [id, nights, pollBadge, router]);
+  }), [id, nights, router]);
 
   const renderCard = useCallback((key: CardKey, isEditMode: boolean) => {
     if (key === 'members') {
@@ -506,14 +448,12 @@ const stage = trip ? getTripStage(trip) : 'deciding';
 
   return (
     <>
+    <FirstTripOnboardingModal trip={trip} />
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} accessibilityRole="button">
           <Text style={styles.backBtn}>← Back</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={handleShare} accessibilityRole="button" hitSlop={8}>
-          <Ionicons name="share-outline" size={18} color="#888" />
         </TouchableOpacity>
       </View>
 
@@ -573,33 +513,35 @@ const stage = trip ? getTripStage(trip) : 'deciding';
             )) : null}
           </View>
 
-          {/* CTA row — stop propagation so it doesn't also trigger the hero card's edit nav */}
-          <View style={{ flexDirection: 'row', gap: 8 }}>
+          {/* "Poll link" pill — replaces the older Invite-your-group CTA
+              + separate link icon. Single tap copies the share URL to
+              clipboard (handler shows a checkmark for ~2s on success). */}
+          {trip ? (
             <Pressable
-              onPress={(e) => { e.stopPropagation(); handleCtaPress(); }}
-              style={[styles.ctaBtn, { backgroundColor: hero.ctaBg, flex: 1 }]}
+              onPress={(e) => { e.stopPropagation(); handleLinkIconPress(); }}
+              style={[styles.ctaBtn, { backgroundColor: hero.ctaBg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }]}
               accessibilityRole="button"
+              accessibilityLabel="Copy poll link to clipboard"
             >
+              <Ionicons
+                name={linkCopied ? 'checkmark' : 'link-outline'}
+                size={18}
+                color={stage === 'experiencing' || stage === 'done' ? hero.titleColor : '#fff'}
+              />
               <Text style={[styles.ctaText, { color: stage === 'experiencing' || stage === 'done' ? hero.titleColor : '#fff' }]}>
-                {hero.ctaLabel}
+                {linkCopied ? 'Copied' : 'Poll link'}
               </Text>
             </Pressable>
-            {trip && (
-              <Pressable
-                onPress={(e) => { e.stopPropagation(); handleLinkIconPress(); }}
-                style={[styles.copyLinkPill, { backgroundColor: hero.pillBg }]}
-                accessibilityRole="button"
-                accessibilityLabel="Copy to clipboard"
-              >
-                <Ionicons name={linkCopied ? 'checkmark' : 'link-outline'} size={18} color={hero.titleColor} />
-              </Pressable>
-            )}
-          </View>
+          ) : null}
         </TouchableOpacity>
 
 
-        {/* Planner coach — only shown to planner */}
-        {canEditTrip ? <PlannerCoachCard tripId={id} /> : null}
+        {/* Coordination state — what needs the planner's attention now.
+            Each child renders nothing when there's nothing to show, so
+            this collapses to zero height on a brand-new trip. */}
+        <View style={{ marginTop: 12 }}>
+          <TripDashboardCards tripId={id} sessionId={tripSession?.id} />
+        </View>
 
         {/* Entry points — long-press any card to reorder */}
         <Text style={styles.sectionLabel}>Where do you want to start?</Text>
@@ -632,7 +574,6 @@ const styles = StyleSheet.create({
   pillText: { fontSize: 13 },
   ctaBtn: { marginTop: 8, borderRadius: 999, paddingVertical: 16, alignItems: 'center' },
   ctaText: { fontSize: 16, fontWeight: '600' },
-  copyLinkPill: { marginTop: 8, borderRadius: 999, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
 
   // Entry points
   sectionLabel: { fontSize: 13, color: '#999', textAlign: 'center', marginVertical: 16 },

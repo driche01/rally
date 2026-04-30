@@ -16,6 +16,7 @@ import { SplashScreen, Stack, useRouter } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { queryClient } from '@/lib/queryClient';
 import { initAnalytics } from '@/lib/analytics';
 import { initSentry, setUser, clearUser } from '@/lib/sentry';
@@ -82,13 +83,19 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ErrorBoundary>
-        <QueryClientProvider client={queryClient}>
-          <AppInitializer>
-            <Stack screenOptions={{ headerShown: false }} />
-          </AppInitializer>
-        </QueryClientProvider>
-      </ErrorBoundary>
+      {/* SafeAreaProvider must wrap everything that calls useSafeAreaInsets().
+          Passing initialMetrics avoids a one-frame layout flash on cold start —
+          insets are correct from the very first render instead of after the
+          provider measures them. */}
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+        <ErrorBoundary>
+          <QueryClientProvider client={queryClient}>
+            <AppInitializer>
+              <Stack screenOptions={{ headerShown: false }} />
+            </AppInitializer>
+          </QueryClientProvider>
+        </ErrorBoundary>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

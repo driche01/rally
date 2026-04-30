@@ -68,8 +68,8 @@ function makeSplit(
 
 const PLANNER: Pick<Profile, 'id' | 'name'> = { id: 'planner-1', name: 'Alice' };
 const RESPONDENTS: Respondent[] = [
-  { id: 'r1', trip_id: 't1', name: 'Bob', session_token: 'tok1', created_at: '2025-01-01' },
-  { id: 'r2', trip_id: 't1', name: 'Carol', session_token: 'tok2', created_at: '2025-01-01' },
+  { id: 'r1', trip_id: 't1', name: 'Bob', email: null, phone: null, session_token: 'tok1', is_planner: false, rsvp: null, preferences: null, created_at: '2025-01-01' },
+  { id: 'r2', trip_id: 't1', name: 'Carol', email: null, phone: null, session_token: 'tok2', is_planner: false, rsvp: null, preferences: null, created_at: '2025-01-01' },
 ];
 
 // ─── equalSplitCents ──────────────────────────────────────────────────────────

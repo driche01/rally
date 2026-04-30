@@ -131,3 +131,41 @@ export function parseDateRangeLabel(label: string): DateRange | null {
 
   return null;
 }
+
+// ─── Poll display order ──────────────────────────────────────────────────────
+
+/** Canonical title of the duration poll — lets us sort it as its own slot
+ *  even though it lives under the generic 'custom' type. Kept in sync with
+ *  the constant in trips/new.tsx and the migrations that seed it. */
+export const DURATION_POLL_TITLE = 'How long should the trip be?';
+
+/**
+ * Sort key matching the order fields appear on the new-trip form
+ * (destination → duration → dates → budget → other custom). Polls table
+ * positions are assigned by insertion order during creation, which mixes
+ * live polls (created inside createTrip) with decided polls (created by
+ * syncTripFieldsToPolls afterwards) — so ordering by `position` alone
+ * doesn't reflect the form layout. Use this comparator wherever the
+ * planner-facing list should mirror the create flow.
+ */
+export function comparePollsByFormOrder(
+  a: { type: string; title: string; position?: number },
+  b: { type: string; title: string; position?: number },
+): number {
+  const ka = pollFormSortKey(a);
+  const kb = pollFormSortKey(b);
+  if (ka !== kb) return ka - kb;
+  // Preserve original DB ordering on ties (the public RPC already orders
+  // by position but doesn't return the field). Stable sort makes 0 a
+  // safe fallback.
+  return (a.position ?? 0) - (b.position ?? 0);
+}
+
+function pollFormSortKey(p: { type: string; title: string }): number {
+  if (p.type === 'destination') return 0;
+  if (p.type === 'custom' && p.title === DURATION_POLL_TITLE) return 1;
+  if (p.type === 'dates') return 2;
+  if (p.type === 'budget') return 3;
+  if (p.type === 'custom') return 4;
+  return 99;
+}

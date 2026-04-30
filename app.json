@@ -17,7 +17,8 @@
       "bundleIdentifier": "io.rallyapp.app",
       "associatedDomains": ["applinks:rallysurveys.netlify.app"],
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSContactsUsageDescription": "Rally uses your contacts so you can pick who's coming on a trip without typing out phone numbers."
       }
     },
     "android": {
@@ -66,6 +67,12 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Rally uses your location to show your group where everyone is during the trip.",
           "locationWhenInUsePermission": "Rally uses your location to show your group where everyone is during the trip."
+        }
+      ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Rally uses your contacts so you can pick who's coming on a trip without typing out phone numbers."
         }
       ],
       "expo-secure-store",

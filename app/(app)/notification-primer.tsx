@@ -16,19 +16,19 @@ import { capture, Events } from '@/lib/analytics';
 
 const BENEFITS = [
   {
-    icon: 'people-outline' as const,
-    title: 'Crew activity',
-    description: 'Know when someone joins or votes on a poll',
+    icon: 'sparkles-outline' as const,
+    title: 'Decisions ready to lock',
+    description: "When responses are in, we ping you the second Rally has a recommendation to approve.",
   },
   {
-    icon: 'checkmark-circle-outline' as const,
-    title: 'Trip confirmed',
-    description: 'Get the heads up when your planner locks it in',
+    icon: 'chatbubble-ellipses-outline' as const,
+    title: 'Replies from your group',
+    description: 'When someone texts Rally with a question, see it instantly so you can follow up.',
   },
   {
-    icon: 'calendar-outline' as const,
-    title: 'Reminders',
-    description: 'Nudges to vote before polls close',
+    icon: 'pulse-outline' as const,
+    title: "When your trip needs you",
+    description: "Quiet, well-timed heads-ups — so plans don't stall when one decision is blocking everything.",
   },
 ];
 
@@ -85,7 +85,7 @@ export default function NotificationPrimerScreen() {
           marginBottom: 10,
         }}
       >
-        Stay in the loop
+        Never miss a decision
       </Text>
       <Text
         style={{
@@ -96,7 +96,7 @@ export default function NotificationPrimerScreen() {
           marginBottom: 36,
         }}
       >
-        Get notified when your crew makes moves — so nothing falls through the cracks.
+        Rally pings you the moment your group responds, when there's a decision to lock, or when someone texts back. Without notifications, you'll have to keep checking the app.
       </Text>
 
       {/* Benefits */}
@@ -108,13 +108,13 @@ export default function NotificationPrimerScreen() {
                 width: 40,
                 height: 40,
                 borderRadius: 12,
-                backgroundColor: 'rgba(216, 90, 48, 0.15)',
+                backgroundColor: 'rgba(15, 63, 46, 0.35)',
                 alignItems: 'center',
                 justifyContent: 'center',
                 marginTop: 1,
               }}
             >
-              <Ionicons name={b.icon} size={20} color="#0F3F2E" />
+              <Ionicons name={b.icon} size={20} color="#DFE8D2" />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 15, fontWeight: '600', color: '#FFFFFF', marginBottom: 2 }}>

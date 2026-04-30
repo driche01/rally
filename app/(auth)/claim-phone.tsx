@@ -95,7 +95,7 @@ export default function ClaimPhoneScreen() {
         added > 0
           ? `Added you to ${added} trip${added === 1 ? '' : 's'} from your text history.`
           : 'Your phone is verified — you\'ll see new trips here as your group plans them.',
-        [{ text: 'Open Rally', onPress: () => router.replace('/(app)/(tabs)') }],
+        [{ text: 'Open Rally', onPress: () => router.replace('/(app)/profile-setup') }],
       );
     } catch {
       setError('Something went wrong. Try again?');
@@ -128,7 +128,7 @@ export default function ClaimPhoneScreen() {
 
   function handleSkip() {
     capture(Events.NOTIFICATION_OPTED_IN, { flow: 'phone_claim_skipped' });
-    router.replace('/(app)/(tabs)');
+    router.replace('/(app)/profile-setup');
   }
 
   return (

@@ -40,3 +40,30 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Local Netlify folder
+.netlify
+
+# Claude Code worktrees (3GB+ of agent working copies — never commit)
+.claude/worktrees/
+
+# Local web preview build (regenerated via `npx expo export --platform web`)
+dist-preview/
+
+# Deno (used by supabase edge function tooling, not by the app)
+deno.lock
+
+# Supabase CLI cache
+supabase/.temp/
+
+# Local prototypes / marketing assets (not part of the app)
+/prototype customer examples/
+/prototype testing scenarios/
+/text agent/
+/website images/
+/rally text agent site.html
+/rally_landingpage_v1.html
+
+# Personal session handoff notes (not part of the app)
+/session-*-handoff.md
+/session-handoff-*.md

@@ -8,13 +8,34 @@ import {
   broadcastToSession,
   removeSessionParticipant,
   getSessionActivity,
+  getPlannerInbox,
+  ackPlannerInboxMessage,
+  ackPlannerInboxForTrip,
+  getNudgeSchedule,
+  sendNudgeNow,
+  skipNextNudge,
+  pauseParticipantNudges,
+  getFailedDeliveryPhones,
 } from '@/lib/api/dashboard';
 
 export const tripSessionKeys = {
   forTrip: (tripId: string) => ['trip_session', tripId] as const,
   participants: (sessionId: string) => ['trip_session_participants', sessionId] as const,
   activity: (sessionId: string) => ['trip_session_activity', sessionId] as const,
+  inbox: (sessionId: string) => ['planner_inbox', sessionId] as const,
+  nudges: (sessionId: string) => ['nudge_schedule', sessionId] as const,
+  failedDeliveries: (sessionId: string) => ['failed_deliveries', sessionId] as const,
 };
+
+export function useFailedDeliveryPhones(sessionId: string | undefined) {
+  return useQuery({
+    queryKey: tripSessionKeys.failedDeliveries(sessionId ?? ''),
+    queryFn: () => getFailedDeliveryPhones(sessionId!),
+    enabled: Boolean(sessionId),
+    refetchOnWindowFocus: true,
+    refetchInterval: 60_000,
+  });
+}
 
 /** Returns the most-recently-active trip_session for the given trip. */
 export function useTripSession(tripId: string | undefined) {
@@ -70,6 +91,91 @@ export function useRemoveSessionParticipant(sessionId: string | undefined) {
     mutationFn: (participantId: string) => removeSessionParticipant(participantId),
     onSuccess: () => {
       if (sessionId) qc.invalidateQueries({ queryKey: tripSessionKeys.participants(sessionId) });
+    },
+  });
+}
+
+/**
+ * Inbound participant SMS that needs planner attention. Powers the
+ * dashboard inbox card. Refetches on window focus so the planner sees
+ * new replies as soon as they switch back to the app.
+ */
+export function usePlannerInbox(sessionId: string | undefined) {
+  return useQuery({
+    queryKey: tripSessionKeys.inbox(sessionId ?? ''),
+    queryFn: () => getPlannerInbox(sessionId!),
+    enabled: Boolean(sessionId),
+    refetchOnWindowFocus: true,
+    refetchInterval: 30_000,
+  });
+}
+
+/** Mark one inbox item as read. */
+export function useAckPlannerInboxMessage(sessionId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (messageId: string) => ackPlannerInboxMessage(messageId),
+    onSuccess: () => {
+      if (sessionId) qc.invalidateQueries({ queryKey: tripSessionKeys.inbox(sessionId) });
+    },
+  });
+}
+
+/** Mark every unread inbox item for this trip as acknowledged. */
+export function useAckPlannerInboxForTrip(sessionId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (tripId: string) => ackPlannerInboxForTrip(tripId),
+    onSuccess: () => {
+      if (sessionId) qc.invalidateQueries({ queryKey: tripSessionKeys.inbox(sessionId) });
+    },
+  });
+}
+
+// ─── Nudge schedule (cadence card) ─────────────────────────────────────────
+
+export function useNudgeSchedule(sessionId: string | undefined) {
+  return useQuery({
+    queryKey: tripSessionKeys.nudges(sessionId ?? ''),
+    queryFn: () => getNudgeSchedule(sessionId!),
+    enabled: Boolean(sessionId),
+    refetchOnWindowFocus: true,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useSendNudgeNow(sessionId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (participantId?: string | null) =>
+      sessionId ? sendNudgeNow(sessionId, participantId ?? null)
+                : Promise.resolve({ ok: false, reason: 'no_session' as const }),
+    onSuccess: () => {
+      if (sessionId) qc.invalidateQueries({ queryKey: tripSessionKeys.nudges(sessionId) });
+    },
+  });
+}
+
+export function useSkipNextNudge(sessionId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (participantId?: string | null) =>
+      sessionId ? skipNextNudge(sessionId, participantId ?? null)
+                : Promise.resolve({ ok: false, reason: 'no_session' as const }),
+    onSuccess: () => {
+      if (sessionId) qc.invalidateQueries({ queryKey: tripSessionKeys.nudges(sessionId) });
+    },
+  });
+}
+
+export function usePauseParticipantNudges(sessionId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (participantId: string) =>
+      sessionId ? pauseParticipantNudges(sessionId, participantId)
+                : Promise.resolve({ ok: false, reason: 'no_session' as const }),
+    onSuccess: () => {
+      if (sessionId) qc.invalidateQueries({ queryKey: tripSessionKeys.nudges(sessionId) });
     },
   });
 }

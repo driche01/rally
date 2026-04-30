@@ -48,6 +48,10 @@ export interface Trip {
   destination: string | null;         // display name, e.g. "Dawn Ranch"
   destination_address: string | null; // full address for map links, e.g. "Dawn Ranch, CA 116, Guerneville, CA, USA"
   trip_duration: string | null;       // planner's target length, e.g. "3 days"
+  // 1:1 SMS pivot fields (migration 044)
+  book_by_date: string | null;        // ISO date 'YYYY-MM-DD' — external deadline (book by)
+  responses_due_date: string | null;  // ISO date 'YYYY-MM-DD' — internal deadline (book_by - 3 by default)
+  custom_intro_sms: string | null;    // planner override for the initial outreach SMS body
   created_at: string;
   updated_at: string;
 }
@@ -111,7 +115,12 @@ export interface PollResponse {
   id: string;
   poll_id: string;
   respondent_id: string;
-  option_id: string;
+  /** Set for option-based responses; null when numeric_value is used. */
+  option_id: string | null;
+  /** Set for free-form numeric responses (e.g. duration polls with no
+   *  preset options); null when option_id is used. Exactly one of
+   *  option_id / numeric_value is non-null. */
+  numeric_value: number | null;
   created_at: string;
 }
 
@@ -517,6 +526,8 @@ export interface TripSessionParticipant {
   joined_at: string;
   created_at: string;
   updated_at: string;
+  /** Most-recent inbound SMS or survey activity. Null until first touch. */
+  last_activity_at: string | null;
 }
 
 // ─── Join links (1:1 SMS pivot, Phase 1) ────────────────────────────────────

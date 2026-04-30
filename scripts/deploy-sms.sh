@@ -15,6 +15,8 @@ PROJECT_REF="qxpbnixvjtwckuedlrfj"
 ENTRY="supabase/functions/sms-inbound/index.ts"
 JOIN_ENTRY="supabase/functions/sms-join-submit/index.ts"
 BROADCAST_ENTRY="supabase/functions/sms-broadcast/index.ts"
+MEMBER_ADD_ENTRY="supabase/functions/member-add/index.ts"
+MEMBER_REMOVE_ENTRY="supabase/functions/member-remove/index.ts"
 
 # Locate deno: prefer ~/.deno/bin, fall back to PATH.
 DENO=""
@@ -34,6 +36,10 @@ else
   "$DENO" check "$JOIN_ENTRY"
   echo "==> deno check $BROADCAST_ENTRY"
   "$DENO" check "$BROADCAST_ENTRY"
+  echo "==> deno check $MEMBER_ADD_ENTRY"
+  "$DENO" check "$MEMBER_ADD_ENTRY"
+  echo "==> deno check $MEMBER_REMOVE_ENTRY"
+  "$DENO" check "$MEMBER_REMOVE_ENTRY"
 fi
 
 # Ensure NVM is loaded so npx finds a recent Node.
@@ -51,3 +57,9 @@ npx supabase functions deploy sms-join-submit --project-ref "$PROJECT_REF" --no-
 
 echo "==> deploying sms-broadcast to $PROJECT_REF"
 npx supabase functions deploy sms-broadcast --project-ref "$PROJECT_REF"
+
+echo "==> deploying member-add to $PROJECT_REF"
+npx supabase functions deploy member-add --project-ref "$PROJECT_REF"
+
+echo "==> deploying member-remove to $PROJECT_REF"
+npx supabase functions deploy member-remove --project-ref "$PROJECT_REF"

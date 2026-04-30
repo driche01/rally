@@ -25,6 +25,11 @@ import {
 } from './templates.ts';
 import { matchJoinConfirmIntent } from './join-intent.ts';
 import { sendDm } from './dm-sender.ts';
+import {
+  resolveInboundMatches,
+  notifyPlannerOfInbound,
+  buildRedirectBody,
+} from './planner-notify.ts';
 
 function getAppDownloadUrl(): string | null {
   try {
@@ -251,27 +256,67 @@ export async function processInboundMessage(
     return { response: rejoinReply, sessionId: null, phase: null };
   }
 
-  // ─── Default: soft redirect ─────────────────────────────────────────────
+  // ─── Default: soft redirect + planner notification ──────────────────────
   // Rally doesn't run conversational SMS anymore. Anything that wasn't
   // handled above (planning intent, name extraction, free-form replies,
   // legacy keyword commands) gets a friendly nudge back to the link funnel.
+  //
+  // If the sender phone matches an active trip session participant, we:
+  //   (a) tag the inbound thread_message with that trip_session_id so the
+  //       dashboard inbox can find it
+  //   (b) flag needs_planner_attention so it shows in the unread badge
+  //   (c) push-notify the planner with the participant's name + preview
+  //   (d) include the planner's name in the redirect SMS body so the
+  //       participant has a real human to reach out to
+  const matches = await resolveInboundMatches(admin, senderPhone);
+  const primaryMatch = matches[0] ?? null;
+
+  // Insert one inbound row per matching session (de-duped by message_sid +
+  // trip_session_id pair). When no sessions match, fall back to the legacy
+  // session-less row so we still log the message for support diagnosis.
+  if (matches.length === 0) {
+    await admin.from('thread_messages').insert({
+      thread_id: oneToOneThreadId,
+      trip_session_id: null,
+      direction: 'inbound',
+      sender_phone: senderPhone,
+      sender_role: 'participant',
+      body: trimmedBody,
+      message_sid: msg.MessageSid,
+    });
+  } else {
+    for (let i = 0; i < matches.length; i++) {
+      const m = matches[i];
+      await admin.from('thread_messages').insert({
+        thread_id: oneToOneThreadId,
+        trip_session_id: m.trip_session_id,
+        direction: 'inbound',
+        sender_phone: senderPhone,
+        sender_role: 'participant',
+        body: trimmedBody,
+        // message_sid is UNIQUE — only the first row carries it; the rest
+        // get null so the index stays clean across multi-session fan-out.
+        message_sid: i === 0 ? msg.MessageSid : null,
+        needs_planner_attention: true,
+      });
+      await notifyPlannerOfInbound(admin, m, trimmedBody).catch(() => {});
+
+      // Touch participant.last_activity_at for the dashboard "responded Xh ago" copy.
+      try {
+        await admin
+          .from('trip_session_participants')
+          .update({ last_activity_at: new Date().toISOString() })
+          .eq('id', m.participant_id);
+      } catch {
+        /* non-fatal — activity touch is best-effort */
+      }
+    }
+  }
+
+  const redirectReply = buildRedirectBody(matches);
   await admin.from('thread_messages').insert({
     thread_id: oneToOneThreadId,
-    trip_session_id: null,
-    direction: 'inbound',
-    sender_phone: senderPhone,
-    sender_role: 'participant',
-    body: trimmedBody,
-    message_sid: msg.MessageSid,
-  });
-  const redirectReply =
-    "I'm Rally — I help groups plan trips. " +
-    "If a friend invited you, tap their link to join. " +
-    "To start a trip, sign up at rallysurveys.netlify.app and share your link with friends. " +
-    "Reply STOP to opt out.";
-  await admin.from('thread_messages').insert({
-    thread_id: oneToOneThreadId,
-    trip_session_id: null,
+    trip_session_id: primaryMatch?.trip_session_id ?? null,
     direction: 'outbound',
     sender_phone: null,
     sender_role: 'rally',
@@ -282,6 +327,7 @@ export async function processInboundMessage(
     distinct_id: senderPhone,
     userId: user.id,
     bodyLength: trimmedBody.length,
+    matchedSessions: matches.length,
   }).catch(() => {});
-  return { response: redirectReply, sessionId: null, phase: null };
+  return { response: redirectReply, sessionId: primaryMatch?.trip_session_id ?? null, phase: null };
 }

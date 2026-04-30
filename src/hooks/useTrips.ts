@@ -54,6 +54,9 @@ export function useCreateTrip() {
     mutationFn: (input: CreateTripInput) => createTrip(input),
     onSuccess: async (data) => {
       // Auto-create decided polls for any fields set at creation time
+      // (the 1-option case from the inline poll editor). 0-option fields
+      // stay blank — no draft polls auto-created. 2+-option fields are
+      // created as live polls inside createTrip via createLivePollsFromOptions.
       await syncTripFieldsToPolls(data.id, {
         destination: data.destination,
         start_date: data.start_date,
@@ -83,13 +86,12 @@ export function useUpdateTrip() {
     mutationFn: ({ id, ...input }: { id: string } & Partial<CreateTripInput>) =>
       updateTrip(id, input),
     onSuccess: async (data) => {
-      // Auto-create decided polls for any fields added/set during edit
-      await syncTripFieldsToPolls(data.id, {
-        destination: data.destination,
-        start_date: data.start_date,
-        end_date: data.end_date,
-        budget_per_person: data.budget_per_person,
-      }).catch(() => {}); // non-blocking — don't fail the save if this errors
+      // Poll lifecycle on edit is owned by the edit screen's rebuildPoll
+      // path. Calling syncTripFieldsToPolls here used to race that path —
+      // sync would read the polls list before rebuildPoll's delete-then-
+      // insert, see no canonical poll, and create a second one alongside
+      // the one rebuildPoll was about to create. Leaving sync to
+      // useCreateTrip only.
       qc.invalidateQueries({ queryKey: tripKeys.all });
       qc.invalidateQueries({ queryKey: tripKeys.allWithCounts });
       qc.invalidateQueries({ queryKey: tripKeys.detail(data.id) });

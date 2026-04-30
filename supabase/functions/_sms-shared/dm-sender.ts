@@ -14,6 +14,7 @@
  */
 
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { personalizeBody } from './personalize.ts';
 
 const lastSendAt = new Map<string, number>();
 
@@ -74,9 +75,21 @@ export async function sendDm(
   const url  = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
   const auth = btoa(`${accountSid}:${authToken}`);
 
+  // StatusCallback registers the delivery webhook so Twilio reports back
+  // when this specific send transitions through queued → sent → delivered
+  // (or → failed/undelivered). Without this, we'd never know about
+  // carrier-level filtering or invalid numbers.
+  const statusCallback = Deno.env.get('TWILIO_STATUS_CALLBACK_URL')
+    ?? 'https://qxpbnixvjtwckuedlrfj.supabase.co/functions/v1/sms-status-webhook';
+
   const attempt = async (): Promise<SendDmResult> => {
     try {
-      const params = new URLSearchParams({ From: fromPhone, To: toPhone, Body: body });
+      const params = new URLSearchParams({
+        From: fromPhone,
+        To: toPhone,
+        Body: body,
+        StatusCallback: statusCallback,
+      });
       const res = await fetch(url, {
         method: 'POST',
         headers: {
@@ -111,7 +124,10 @@ export async function sendDm(
       thread_id: threadId,
       trip_session_id: opts.tripSessionId ?? null,
       direction: 'outbound',
-      sender_phone: null,
+      // Stamp the Twilio FROM number so dashboard / debug queries can tell
+      // which sender produced each row (matters when juggling FROM pools or
+      // diagnosing carrier-block patterns per-sender).
+      sender_phone: fromPhone || null,
       sender_role: opts.senderRole ?? 'rally',
       body,
       message_sid: result.sid,
@@ -170,7 +186,7 @@ export async function broadcast(
 
   let query = admin
     .from('trip_session_participants')
-    .select('user_id, phone')
+    .select('user_id, phone, display_name')
     .eq('trip_session_id', tripSessionId)
     .eq('status', 'active');
   if (attendingOnly) query = query.eq('is_attending', true);
@@ -191,7 +207,11 @@ export async function broadcast(
       result.skipped += 1;
       continue;
     }
-    const sendResult = await sendDm(admin, row.phone, body, {
+    // Per-recipient placeholder substitution. The body the planner
+    // typed contains `[Their name]` etc.; we resolve those here so
+    // each phone gets a personalized variant instead of the literal.
+    const personalized = personalizeBody(body, row.display_name);
+    const sendResult = await sendDm(admin, row.phone, personalized, {
       tripSessionId,
       idempotencyKey: `${seed}:${row.phone}`,
       senderRole: opts.senderRole,

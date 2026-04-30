@@ -17,14 +17,5 @@
         "EXPO_PUBLIC_APP_URL": "https://rallysurveys.netlify.app"
       }
     }
-  },
-  "submit": {
-    "production": {
-      "ios": {
-        "appleId": "",
-        "ascAppId": "",
-        "appleTeamId": ""
-      }
-    }
   }
 }

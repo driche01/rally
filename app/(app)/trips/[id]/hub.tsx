@@ -2,12 +2,11 @@
  * Trip Hub — Phase 2 entry point.
  *
  * Shown after a planner unlocks Phase 2 for a trip.
- * Hosts a custom bottom tab bar: Polls | Itinerary | Lodging | Travel | Expenses
+ * Hosts a custom bottom tab bar: Itinerary | Lodging | Travel | Expenses
  *
  * Navigation: pushed from the trip detail (index.tsx) after Phase 2 unlock.
  */
 
-import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -21,7 +20,6 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { getTripStage, STAGE_ACCENT } from '@/lib/tripStage';
 
 // Tab content components
-import { PollsTab } from '@/components/hub/PollsTab';
 import { ItineraryTab } from '@/components/hub/ItineraryTab';
 import { LodgingTab } from '@/components/hub/LodgingTab';
 import { TravelTab } from '@/components/hub/TravelTab';
@@ -29,7 +27,7 @@ import { ExpensesTab } from '@/components/hub/ExpensesTab';
 
 // ─── Tab definitions ─────────────────────────────────────────────────────────
 
-type TabId = 'polls' | 'itinerary' | 'lodging' | 'travel' | 'expenses';
+type TabId = 'itinerary' | 'lodging' | 'travel' | 'expenses';
 
 // ─── Hub screen ──────────────────────────────────────────────────────────────
 
@@ -40,21 +38,22 @@ export default function TripHubScreen() {
   const { data: trip } = useTrip(id);
   const accentColor = STAGE_ACCENT[trip ? getTripStage(trip) : 'deciding'];
   const {
-    isPlanner,
-    canManagePolls,
     canManageItinerary,
     canManageLodging,
     canManageTravel,
     canManageExpenses,
   } = usePermissions(id);
 
-  const [activeTab, setActiveTab] = useState<TabId>(
-    (initialTab as TabId | undefined) ?? 'itinerary'
-  );
+  // Old `?tab=polls` deep links from removed planner-coach nudges fall back
+  // to the itinerary tab so we don't crash on stale URLs.
+  const resolvedInitial: TabId =
+    initialTab === 'lodging' || initialTab === 'travel' || initialTab === 'expenses' || initialTab === 'itinerary'
+      ? initialTab
+      : 'itinerary';
+  const [activeTab, setActiveTab] = useState<TabId>(resolvedInitial);
 
   function renderTab() {
     switch (activeTab) {
-      case 'polls':     return <PollsTab tripId={id} isPlanner={canManagePolls} />;
       case 'itinerary': return <ItineraryTab tripId={id} isPlanner={canManageItinerary} />;
       case 'lodging':   return <LodgingTab tripId={id} isPlanner={canManageLodging} />;
       case 'travel':    return <TravelTab tripId={id} isPlanner={canManageTravel} />;

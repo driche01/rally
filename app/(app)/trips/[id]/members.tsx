@@ -33,19 +33,22 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/ui';
+import { CadenceCard } from '@/components/trips/CadenceCard';
+import { ResponsesDueCard } from '@/components/trips/ResponsesDueCard';
 import {
   useRespondents,
   useSetRespondentPlanner,
-  useCreateRespondentManually,
-  useDeleteRespondent,
 } from '@/hooks/useRespondents';
 import {
   useTripSession,
   useSessionParticipants,
   useBroadcastToSession,
-  useRemoveSessionParticipant,
   useSessionActivity,
+  usePlannerInbox,
+  useAckPlannerInboxForTrip,
+  useFailedDeliveryPhones,
 } from '@/hooks/useTripSession';
+import { useAddTripMember, useRemoveTripMember } from '@/hooks/useTripMembers';
 import type { ActivityItem } from '@/lib/api/dashboard';
 import { useTrip } from '@/hooks/useTrips';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -155,21 +158,23 @@ export default function GroupDashboardScreen() {
   const { data: tripSession } = useTripSession(id);
   const { data: participants = [] } = useSessionParticipants(tripSession?.id);
   const { data: activity = [] } = useSessionActivity(tripSession?.id);
+  const { data: inbox = [] } = usePlannerInbox(tripSession?.id);
+  const ackInbox = useAckPlannerInboxForTrip(tripSession?.id);
+  const unreadInbox = inbox.filter((i) => !i.acknowledged_at);
+  const { data: failedPhones } = useFailedDeliveryPhones(tripSession?.id);
   const { canDesignatePlanners } = usePermissions(id);
   const setPlanner = useSetRespondentPlanner(id);
-  const deleteRespondent = useDeleteRespondent(id);
-  const removeParticipant = useRemoveSessionParticipant(tripSession?.id);
+  const addMember = useAddTripMember(id, tripSession?.id);
+  const removeMember = useRemoveTripMember(id, tripSession?.id);
   const broadcastMutation = useBroadcastToSession(tripSession?.id);
   const currentUser = useAuthStore((s) => s.user);
   const { data: plannerProfile } = useProfile(trip?.created_by);
 
-  // Add-member modal (preserved)
+  // Add-member modal — phone required, first name optional. Server fires
+  // the welcome SMS with the survey link via the member-add edge function.
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [addFirstName, setAddFirstName] = useState('');
-  const [addLastName, setAddLastName] = useState('');
-  const [addEmail, setAddEmail] = useState('');
   const [addPhone, setAddPhone] = useState('');
-  const createMember = useCreateRespondentManually(id);
 
   // Broadcast composer
   const [broadcastVisible, setBroadcastVisible] = useState(false);
@@ -177,19 +182,30 @@ export default function GroupDashboardScreen() {
   const [lastSent, setLastSent] = useState<{ count: number; ts: number } | null>(null);
 
   function handleAddMember() {
-    const firstName = addFirstName.trim();
-    const lastName = addLastName.trim();
-    const name = [firstName, lastName].filter(Boolean).join(' ');
-    const email = addEmail.trim();
+    const name = addFirstName.trim();
     const phone = addPhone.trim();
-    if (!firstName || !email || !phone) {
-      Alert.alert('Required fields', 'Please fill in first name, email, and phone number.');
+    if (!phone) {
+      Alert.alert('Phone required', 'Enter a phone number so Rally can text them.');
       return;
     }
-    createMember.mutate({ name, email, phone }, {
-      onSuccess: () => {
+    addMember.mutate({ phone, name: name || null }, {
+      onSuccess: (result) => {
+        if (!result.ok) {
+          const reason = result.reason ?? 'unknown';
+          const message = reason === 'invalid_phone'
+            ? "That phone number doesn't look right."
+            : reason === 'forbidden'
+              ? 'Only the planner can add members.'
+              : `Could not add member (${reason}).`;
+          Alert.alert('Could not add member', message);
+          return;
+        }
         setAddModalVisible(false);
-        setAddFirstName(''); setAddLastName(''); setAddEmail(''); setAddPhone('');
+        setAddFirstName('');
+        setAddPhone('');
+        if (!result.sms_sent) {
+          Alert.alert('Added — but text didn\'t go through', 'They\'re on the trip, but Rally couldn\'t deliver the welcome text. Check the number and try again or copy the invite link.');
+        }
       },
       onError: (e: unknown) => Alert.alert('Could not add member', e instanceof Error ? e.message : 'Please try again.'),
     });
@@ -292,25 +308,33 @@ export default function GroupDashboardScreen() {
     capture('dashboard_broadcast_sent', { trip_id: id, sent: result.sent });
   }
 
-  // Per-participant remove flow
-  function handleRemoveParticipant(p: TripSessionParticipant, swipeRef: React.RefObject<Swipeable>) {
-    swipeRef.current?.close();
+  // Per-row remove flow — works for both SMS participants and web-only
+  // respondents. Server fires the "you've been removed" SMS to the phone
+  // and cleans up both the participant + respondent rows in one shot.
+  function handleRemoveByPhone(opts: {
+    name: string | null;
+    phone: string;
+    swipeRef?: React.RefObject<Swipeable>;
+  }) {
+    opts.swipeRef?.current?.close();
     Alert.alert(
       'Remove member?',
-      `${p.display_name ?? p.phone} will be removed from this trip. They won't receive further messages.`,
+      `${opts.name ?? opts.phone} will be removed from this trip and texted that they're no longer on it.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
-            const r = await removeParticipant.mutateAsync(p.id);
+            const r = await removeMember.mutateAsync({ phone: opts.phone });
             if (!r.ok) {
               Alert.alert(
                 'Could not remove',
-                r.reason === 'planner_must_transfer_first'
-                  ? 'Transfer the planner role first, then try again.'
-                  : r.reason ?? 'Try again.',
+                r.reason === 'cannot_remove_planner'
+                  ? "You can't remove the planner. Transfer the role first."
+                  : r.reason === 'forbidden'
+                    ? 'Only the planner can remove members.'
+                    : r.reason ?? 'Try again.',
               );
             }
           },
@@ -404,6 +428,73 @@ export default function GroupDashboardScreen() {
           </Pressable>
         </View>
 
+        {/* Responses-due passed banner — only renders when overdue + holdouts */}
+        <ResponsesDueCard tripId={id} sessionId={tripSession?.id} />
+
+        {/* GroupPreferencesCard moved to TripDashboardCards on the trip
+            detail screen so it sits below Live results and above the
+            Group entry-card. Don't re-mount it here. */}
+
+        {/* Cadence card — autonomous nudge schedule + planner controls */}
+        <CadenceCard sessionId={tripSession?.id} hideWhenEmpty />
+
+        {/* Inbox — inbound participant SMS that needs planner attention */}
+        {tripSession && inbox.length > 0 ? (
+          <View style={styles.inboxCard}>
+            <View style={styles.inboxHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="chatbubble-ellipses-outline" size={16} color="#163026" />
+                <Text style={styles.inboxTitle}>
+                  Inbox {unreadInbox.length > 0 ? `· ${unreadInbox.length} new` : ''}
+                </Text>
+              </View>
+              {unreadInbox.length > 0 ? (
+                <Pressable
+                  onPress={() => ackInbox.mutate(id)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Mark all as seen"
+                >
+                  <Text style={styles.inboxMarkAll}>Mark all as seen</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            {inbox.slice(0, 5).map((item, i) => {
+              const unread = !item.acknowledged_at;
+              return (
+                <Pressable
+                  key={item.message_id}
+                  onPress={() => Linking.openURL(`sms:${item.participant_phone}`).catch(() => {})}
+                  style={[
+                    styles.inboxRow,
+                    i < Math.min(inbox.length, 5) - 1 && styles.inboxRowBorder,
+                    unread && styles.inboxRowUnread,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Reply to ${item.participant_name ?? item.participant_phone}`}
+                >
+                  <View style={{ flex: 1, gap: 3 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      {unread ? <View style={styles.inboxUnreadDot} /> : null}
+                      <Text style={styles.inboxName}>
+                        {item.participant_name ?? item.participant_phone}
+                      </Text>
+                      <Text style={styles.inboxTime}>
+                        {relativeTime(item.created_at)}
+                      </Text>
+                    </View>
+                    <Text style={styles.inboxBody} numberOfLines={2}>{item.body}</Text>
+                  </View>
+                  <Ionicons name="arrow-forward" size={14} color="#A0A0A0" />
+                </Pressable>
+              );
+            })}
+            <Text style={styles.inboxFooter}>
+              Tap a reply to text the person back from your phone.
+            </Text>
+          </View>
+        ) : null}
+
         {/* Participants section — primary list when SMS session exists */}
         {tripSession && sortedParticipants.length > 0 ? (
           <>
@@ -414,14 +505,21 @@ export default function GroupDashboardScreen() {
               {sortedParticipants.map((p, i) => {
                 const norm = normalizePhone(p.phone) ?? '';
                 const respondent = respondentByPhone.get(norm);
-                const lastActive = relativeTime((p as any).updated_at ?? p.joined_at);
+                const responded = respondent && (respondent.rsvp || respondent.preferences);
+                const activityIso = p.last_activity_at ?? null;
+                const activityLabel = responded
+                  ? `Responded ${relativeTime(activityIso ?? respondent?.created_at ?? p.joined_at)}`
+                  : activityIso
+                    ? `Active ${relativeTime(activityIso)}`
+                    : `Joined ${relativeTime(p.joined_at)}`;
+                const deliveryFailed = failedPhones?.has(p.phone) ?? false;
                 return (
                   <SwipeRow
                     key={p.id}
                     canManage={canDesignatePlanners}
                     onPress={canDesignatePlanners ? () => handleParticipantTap(p) : undefined}
                     onDelete={canDesignatePlanners && !p.is_planner
-                      ? (ref) => handleRemoveParticipant(p, ref as any)
+                      ? (ref) => handleRemoveByPhone({ name: p.display_name ?? null, phone: p.phone, swipeRef: ref as any })
                       : undefined}
                     style={[styles.row, i < sortedParticipants.length - 1 && styles.rowBorder]}
                   >
@@ -445,6 +543,12 @@ export default function GroupDashboardScreen() {
                         ) : (
                           <StatusBadge kind="attending" />
                         )}
+                        {deliveryFailed ? (
+                          <View style={styles.deliveryFailedPill}>
+                            <Ionicons name="warning-outline" size={11} color="#9A2A2A" />
+                            <Text style={styles.deliveryFailedText}>Couldn't deliver</Text>
+                          </View>
+                        ) : null}
                       </View>
                       {respondent?.email ? (
                         <View style={styles.contactRow}>
@@ -456,8 +560,8 @@ export default function GroupDashboardScreen() {
                         <Ionicons name="call-outline" size={12} color="#888" />
                         <Text style={styles.contactText}>{p.phone}</Text>
                       </View>
-                      {lastActive ? (
-                        <Text style={styles.metaText}>Joined {lastActive}</Text>
+                      {activityLabel ? (
+                        <Text style={styles.metaText}>{activityLabel}</Text>
                       ) : null}
                     </View>
                     {canDesignatePlanners ? (
@@ -481,7 +585,14 @@ export default function GroupDashboardScreen() {
             </Text>
             <View style={styles.listCard}>
               {orphanRespondents.map((r, i) => (
-                <View key={r.id} style={[styles.row, i < orphanRespondents.length - 1 && styles.rowBorder]}>
+                <SwipeRow
+                  key={r.id}
+                  canManage={canDesignatePlanners}
+                  onDelete={canDesignatePlanners && !r.is_planner && r.phone
+                    ? (ref) => handleRemoveByPhone({ name: r.name ?? null, phone: r.phone!, swipeRef: ref as any })
+                    : undefined}
+                  style={[styles.row, i < orphanRespondents.length - 1 && styles.rowBorder]}
+                >
                   <View style={styles.avatarWrap}>
                     {r.is_planner ? (
                       <Ionicons name="ribbon" size={13} color="#D97706" style={styles.crownIcon} />
@@ -507,7 +618,7 @@ export default function GroupDashboardScreen() {
                     ) : null}
                     <Text style={styles.metaText}>Hasn't joined the SMS thread yet</Text>
                   </View>
-                </View>
+                </SwipeRow>
               ))}
             </View>
           </>
@@ -648,30 +759,38 @@ export default function GroupDashboardScreen() {
               <Text style={styles.modalCancel}>Cancel</Text>
             </Pressable>
             <Text style={styles.modalTitle}>Add member</Text>
-            <Pressable onPress={handleAddMember} disabled={createMember.isPending}>
-              <Text style={[styles.modalAction, createMember.isPending && { color: '#CCC' }]}>
-                {createMember.isPending ? 'Adding…' : 'Add'}
+            <Pressable onPress={handleAddMember} disabled={addMember.isPending}>
+              <Text style={[styles.modalAction, addMember.isPending && { color: '#CCC' }]}>
+                {addMember.isPending ? 'Adding…' : 'Add'}
               </Text>
             </Pressable>
           </View>
           <View style={{ padding: 20, gap: 16 }}>
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <View style={{ flex: 1, gap: 6 }}>
-                <Text style={styles.fieldLabel}>First name *</Text>
-                <TextInput value={addFirstName} onChangeText={setAddFirstName} style={styles.fieldInput} autoCapitalize="words" />
-              </View>
-              <View style={{ flex: 1, gap: 6 }}>
-                <Text style={styles.fieldLabel}>Last name</Text>
-                <TextInput value={addLastName} onChangeText={setAddLastName} style={styles.fieldInput} autoCapitalize="words" />
-              </View>
-            </View>
-            <View style={{ gap: 6 }}>
-              <Text style={styles.fieldLabel}>Email *</Text>
-              <TextInput value={addEmail} onChangeText={setAddEmail} style={styles.fieldInput} keyboardType="email-address" autoCapitalize="none" />
-            </View>
+            <Text style={styles.modalHint}>
+              Rally will text them a welcome with the survey link so they can fill out the poll.
+            </Text>
             <View style={{ gap: 6 }}>
               <Text style={styles.fieldLabel}>Phone *</Text>
-              <TextInput value={addPhone} onChangeText={setAddPhone} style={styles.fieldInput} keyboardType="phone-pad" />
+              <TextInput
+                value={addPhone}
+                onChangeText={setAddPhone}
+                style={styles.fieldInput}
+                keyboardType="phone-pad"
+                placeholder="+1 555 555 5555"
+                placeholderTextColor="#A0A0A0"
+                autoFocus
+              />
+            </View>
+            <View style={{ gap: 6 }}>
+              <Text style={styles.fieldLabel}>First name (optional)</Text>
+              <TextInput
+                value={addFirstName}
+                onChangeText={setAddFirstName}
+                style={styles.fieldInput}
+                autoCapitalize="words"
+                placeholder="So Rally can greet them by name"
+                placeholderTextColor="#A0A0A0"
+              />
             </View>
           </View>
         </View>
@@ -710,6 +829,41 @@ const styles = StyleSheet.create({
     borderRadius: 10, borderWidth: 1, paddingVertical: 10,
   },
   shareBtnText: { fontSize: 13, fontWeight: '600' },
+
+  // Delivery-failed pill (Twilio status)
+  deliveryFailedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#FCE8E8',
+    borderRadius: 999,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  deliveryFailedText: { fontSize: 10, fontWeight: '700', color: '#9A2A2A' },
+
+  // Inbox card
+  inboxCard: {
+    backgroundColor: '#FFFCF6', borderRadius: 16, borderWidth: 1, borderColor: '#E8DFC8',
+    padding: 14, gap: 4, marginBottom: 18,
+  },
+  inboxHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingBottom: 4,
+  },
+  inboxTitle: { fontSize: 14, fontWeight: '700', color: '#163026' },
+  inboxMarkAll: { fontSize: 12, color: '#0F3F2E', fontWeight: '600' },
+  inboxRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 10,
+  },
+  inboxRowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#EFE3D0' },
+  inboxRowUnread: {},
+  inboxUnreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#D85A30' },
+  inboxName: { fontSize: 13, fontWeight: '700', color: '#163026' },
+  inboxTime: { fontSize: 11, color: '#888' },
+  inboxBody: { fontSize: 13, color: '#404040', lineHeight: 18 },
+  inboxFooter: { fontSize: 11, color: '#888', textAlign: 'center', paddingTop: 6 },
 
   // Section + list
   sectionLabel: {

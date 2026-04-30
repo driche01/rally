@@ -29,16 +29,22 @@ import { getTripByShareToken } from '@/lib/api/trips';
 import { enrollRespondentAsMember } from '@/lib/api/members';
 import { normalizePhone } from '@/lib/phone';
 import { EmailCapture } from '@/components/landing/EmailCapture';
+import { MultiDatePicker } from '@/components/MultiDatePicker';
 import {
   getOrCreateRespondent,
   getExistingRespondentForTrip,
   getExistingResponses,
+  getExistingNumericResponses,
   submitPollResponses,
   clearTripSession,
-  saveRespondentRsvpAndPreferences,
+  sendSurveyConfirmationSms,
 } from '@/lib/api/respondents';
+import { daysUntil, formatCadenceDate } from '@/lib/cadence';
 import { getTripStage } from '@/lib/tripStage';
 import { getResponseCountsForTrip } from '@/lib/api/responses';
+import { getProfileByToken, upsertProfileByToken } from '@/lib/api/travelerProfiles';
+import { TravelerProfileForm } from '@/components/respond/TravelerProfileForm';
+import type { TravelerProfile } from '@/types/profile';
 import { capture, Events } from '@/lib/analytics';
 import { log } from '@/lib/logger';
 import type { TripWithPolls, PollWithOptions, Respondent } from '@/types/database';
@@ -113,6 +119,30 @@ async function storeName(name: string): Promise<void> {
   await AsyncStorage.setItem(NAME_KEY, name);
 }
 
+// Canonical duration poll title — must match what trip-creation writes
+// (DURATION_POLL_TITLE in app/(app)/trips/new.tsx). Used to identify the
+// duration poll for free-form numeric rendering.
+const DURATION_POLL_TITLE = 'How long should the trip be?';
+
+// ─── Poll title (survey-side override) ────────────────────────────────────
+// New polls are stored with respondent-friendly titles ("Where do you want
+// to go?", etc.) directly. This override is kept as a normalization layer
+// so that legacy polls created before the title refresh still render with
+// the right framing on the survey screen. Custom polls (e.g. trip length)
+// fall through to the planner's stored title.
+function surveyPollTitle(poll: { type?: string | null; title?: string | null }): string {
+  switch (poll.type) {
+    case 'destination': return 'Where do you want to go?';
+    case 'dates':       return 'When are you free?';
+    case 'budget':      return "What's your budget? (travel + lodging only)";
+    default:            return poll.title ?? '';
+  }
+}
+
+function isDurationPoll(poll: { type?: string | null; title?: string | null }): boolean {
+  return poll.type === 'custom' && poll.title === DURATION_POLL_TITLE;
+}
+
 // ─── Date range helpers ────────────────────────────────────────────────────────
 
 const MONTH_ABBR: Record<string, number> = {
@@ -181,7 +211,7 @@ function PollResponseCard({
 }) {
   return (
     <View className="mb-5">
-      <Text className="mb-3 text-lg font-semibold text-ink">{poll.title}</Text>
+      <Text className="mb-3 text-lg font-semibold text-ink">{surveyPollTitle(poll)}</Text>
       {poll.allow_multi_select ? (
         <Text className="mb-2 text-xs text-muted">Select all that apply</Text>
       ) : null}
@@ -232,17 +262,110 @@ function PollResponseCard({
   );
 }
 
+// ─── Duration poll card — chips when planner provided options, free-form
+// numeric input when they didn't. Identified by canonical title. ─────────
+
+function DurationPollCard({
+  poll,
+  selectedOptions,
+  numericValue,
+  onSelect,
+  onNumericChange,
+}: {
+  poll: PollWithOptions;
+  selectedOptions: string[];
+  numericValue: number | null;
+  onSelect: (optionId: string) => void;
+  onNumericChange: (n: number | null) => void;
+}) {
+  // Local input mirror for the free-form numeric mode. Declared here so
+  // the hook order is stable across re-renders, regardless of which
+  // branch we render below.
+  const [inputText, setInputText] = useState<string>(numericValue?.toString() ?? '');
+
+  // Keep input synced if the parent's numericValue changes externally
+  // (e.g. existing responses load asynchronously after mount).
+  useEffect(() => {
+    setInputText(numericValue?.toString() ?? '');
+  }, [numericValue]);
+
+  // Option-based: planner provided 2+ choices. Render as chips via the
+  // shared PollResponseCard. (1-option polls are decided + read-only —
+  // they get filtered out before reaching here.)
+  if (poll.poll_options.length > 0) {
+    return (
+      <PollResponseCard poll={poll} selectedOptions={selectedOptions} onSelect={onSelect} />
+    );
+  }
+
+  // Free-form: planner didn't pre-set durations. Respondent enters a
+  // number of nights. Stored as poll_responses.numeric_value.
+  function handleChange(t: string) {
+    // Strip non-digits — nights are always positive integers.
+    const digits = t.replace(/\D/g, '').slice(0, 3);
+    setInputText(digits);
+    if (digits.length === 0) {
+      onNumericChange(null);
+    } else {
+      const n = parseInt(digits, 10);
+      onNumericChange(isNaN(n) || n <= 0 ? null : n);
+    }
+  }
+
+  return (
+    <View className="mb-5">
+      <Text className="mb-3 text-lg font-semibold text-ink">How long should the trip be?</Text>
+      <Text className="mb-3 text-xs text-muted">Tell us how many nights work for you.</Text>
+      <View className="flex-row items-center gap-3 rounded-2xl border border-line bg-card px-4 py-3.5">
+        <TextInput
+          value={inputText}
+          onChangeText={handleChange}
+          keyboardType="number-pad"
+          placeholder="0"
+          placeholderTextColor="#A0A0A0"
+          maxLength={3}
+          style={{
+            fontSize: 28,
+            fontWeight: '700',
+            color: '#0F3F2E',
+            minWidth: 52,
+            textAlign: 'center',
+            padding: 0,
+          }}
+          accessibilityLabel="Number of nights"
+        />
+        <Text className="text-base font-medium text-ink">
+          {inputText === '1' ? 'night' : 'nights'}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 // ─── Calendar card for availability-style dates polls ─────────────────────────
 
 function DatesPollCard({
   poll,
   selectedOptions,
   onSelect,
+  onSetSelections,
+  tripDuration,
 }: {
   poll: PollWithOptions;
   selectedOptions: string[];
   onSelect: (optionId: string) => void;
+  /** Replace the entire selection set for this poll at once. Used by the
+   *  MultiDatePicker confirm — the picker hands us a final set of days, we
+   *  map them to option IDs in one shot. */
+  onSetSelections: (optionIds: string[]) => void;
+  /** Optional pre-set trip length, e.g. "3 days" or "1 week". Surfaced as
+   *  a small banner above the calendar so respondents know how long the
+   *  trip will be while picking days they're free. */
+  tripDuration?: string | null;
 }) {
+  // Hooks must run unconditionally for stable order across renders.
+  const [pickerVisible, setPickerVisible] = useState(false);
+
   const parsedOptions = poll.poll_options
     .map((opt) => ({ ...opt, range: parseDateRangeLabel(opt.label) }))
     .filter((opt): opt is typeof opt & { range: { start: Date; end: Date } } => opt.range !== null);
@@ -254,7 +377,9 @@ function DatesPollCard({
     );
   }
 
-  // Per-day poll: every option is a single day (start === end)
+  // Per-day poll: every option is a single day (start === end). Only
+  // per-day polls use MultiDatePicker — legacy range-style polls fall
+  // through to chip selection below so existing data still works.
   const isPerDayPoll = parsedOptions.every((o) => {
     const { start, end } = o.range;
     return start.getFullYear() === end.getFullYear() &&
@@ -262,160 +387,118 @@ function DatesPollCard({
       start.getDate() === end.getDate();
   });
 
-  const allDates = parsedOptions.flatMap((o) => [o.range.start, o.range.end]);
-  const minDate = new Date(Math.min(...allDates.map((d) => d.getTime())));
-  const maxDate = new Date(Math.max(...allDates.map((d) => d.getTime())));
-
-  const [viewYear, setViewYear] = useState(minDate.getFullYear());
-  const [viewMonth, setViewMonth] = useState(minDate.getMonth());
-
-  const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
-  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-  const trailingNulls = (7 - ((firstDayOfWeek + daysInMonth) % 7)) % 7;
-  const cells: (Date | null)[] = [
-    ...Array(firstDayOfWeek).fill(null),
-    ...Array.from({ length: daysInMonth }, (_, i) => new Date(viewYear, viewMonth, i + 1)),
-    ...Array(trailingNulls).fill(null),
-  ];
-
-  function getOptionForDate(date: Date) {
-    const t = date.getTime();
-    return parsedOptions.find((o) => {
-      const s = new Date(o.range.start.getFullYear(), o.range.start.getMonth(), o.range.start.getDate()).getTime();
-      const e = new Date(o.range.end.getFullYear(), o.range.end.getMonth(), o.range.end.getDate()).getTime() + 86399999;
-      return t >= s && t <= e;
-    });
+  if (!isPerDayPoll) {
+    return (
+      <PollResponseCard poll={poll} selectedOptions={selectedOptions} onSelect={onSelect} />
+    );
   }
 
-  const canGoPrev =
-    viewYear > minDate.getFullYear() ||
-    (viewYear === minDate.getFullYear() && viewMonth > minDate.getMonth());
-  const canGoNext =
-    viewYear < maxDate.getFullYear() ||
-    (viewYear === maxDate.getFullYear() && viewMonth < maxDate.getMonth());
+  // Build a Date → option map. Each option's range collapses to a single
+  // day; we key on ISO 'YYYY-MM-DD'.
+  function dateToIso(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+  const isoToOption = new Map<string, PollWithOptions['poll_options'][number]>();
+  for (const o of parsedOptions) {
+    isoToOption.set(dateToIso(o.range.start), o);
+  }
+  const allIsos = Array.from(isoToOption.keys()).sort();
+  const minIso = allIsos[0];
+  const maxIso = allIsos[allIsos.length - 1];
 
-  const monthLabel = new Date(viewYear, viewMonth, 1).toLocaleDateString('en-US', {
-    month: 'long',
-    year: 'numeric',
+  // ISO list of days the respondent has currently selected — derived from
+  // selectedOptions (option IDs).
+  const selectedIsos: string[] = [];
+  for (const [iso, opt] of isoToOption) {
+    if (selectedOptions.includes(opt.id)) selectedIsos.push(iso);
+  }
+
+  // Pretty range label, e.g. "Jun 1 – Jun 30".
+  const minLabel = new Date(minIso + 'T12:00:00').toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric',
   });
+  const maxLabel = new Date(maxIso + 'T12:00:00').toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric',
+  });
+  const windowLabel = minIso === maxIso ? minLabel : `${minLabel} – ${maxLabel}`;
+
+  function handleConfirmDays(days: string[]) {
+    const ids: string[] = [];
+    for (const day of days) {
+      const opt = isoToOption.get(day);
+      if (opt) ids.push(opt.id);
+    }
+    onSetSelections(ids);
+  }
 
   return (
     <View className="mb-5">
-      <Text className="mb-3 text-lg font-semibold text-ink">{poll.title}</Text>
-      {poll.allow_multi_select ? (
-        <Text className="mb-2 text-xs text-muted">
-          {isPerDayPoll ? "Tap each day you're available" : "Tap all dates you're available"}
-        </Text>
+      <Text className="mb-3 text-lg font-semibold text-ink">{surveyPollTitle(poll)}</Text>
+      {tripDuration ? (
+        <View className="mb-2 flex-row items-center gap-1.5 rounded-xl bg-green-soft px-3 py-2">
+          <Ionicons name="hourglass-outline" size={14} color="#0F3F2E" />
+          <Text className="text-xs font-medium text-green">
+            Trip is {tripDuration} — pick the days you're free.
+          </Text>
+        </View>
       ) : null}
+      <Text className="mb-2 text-xs text-muted">
+        Window: {windowLabel}. Tap to mark every day you're free.
+      </Text>
 
-      <View className="rounded-2xl border border-line bg-card p-4">
-        {/* Month navigation */}
-        <View className="mb-3 flex-row items-center justify-between">
-          <Pressable
-            onPress={() => {
-              const d = new Date(viewYear, viewMonth - 1, 1);
-              setViewYear(d.getFullYear());
-              setViewMonth(d.getMonth());
-            }}
-            disabled={!canGoPrev}
-            className="rounded-lg p-1.5 active:bg-cream-warm"
-            accessibilityRole="button"
-            accessibilityLabel="Previous month"
-          >
-            <Ionicons name="chevron-back" size={18} color={canGoPrev ? '#6B7280' : '#D1D5DB'} />
-          </Pressable>
-          <Text className="text-sm font-semibold text-ink">{monthLabel}</Text>
-          <Pressable
-            onPress={() => {
-              const d = new Date(viewYear, viewMonth + 1, 1);
-              setViewYear(d.getFullYear());
-              setViewMonth(d.getMonth());
-            }}
-            disabled={!canGoNext}
-            className="rounded-lg p-1.5 active:bg-cream-warm"
-            accessibilityRole="button"
-            accessibilityLabel="Next month"
-          >
-            <Ionicons name="chevron-forward" size={18} color={canGoNext ? '#6B7280' : '#D1D5DB'} />
-          </Pressable>
-        </View>
+      <Pressable
+        onPress={() => setPickerVisible(true)}
+        className="flex-row items-center gap-2.5 rounded-2xl border border-line bg-card px-4 py-3.5"
+        accessibilityRole="button"
+        accessibilityLabel="Pick days you're free"
+      >
+        <Ionicons name="calendar-outline" size={18} color="#0F3F2E" />
+        <Text className="flex-1 text-sm font-medium text-ink">
+          {selectedIsos.length === 0
+            ? "Pick days you're free"
+            : `${selectedIsos.length} day${selectedIsos.length === 1 ? '' : 's'} selected`}
+        </Text>
+        <Text className="text-[12px] text-muted">{selectedIsos.length === 0 ? 'Open' : 'Edit'}</Text>
+      </Pressable>
 
-        {/* Day headers */}
-        <View className="mb-1 flex-row">
-          {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => (
-            <Text key={d} className="flex-1 text-center text-xs font-medium text-muted">
-              {d}
-            </Text>
-          ))}
-        </View>
-
-        {/* Calendar grid */}
-        <View className="flex-row flex-wrap">
-          {cells.map((date, i) => {
-            if (!date) {
-              return <View key={`e-${i}`} style={{ width: `${100 / 7}%`, aspectRatio: 1 }} />;
-            }
-            const opt = getOptionForDate(date);
-            const isHighlighted = opt !== undefined;
-            const isSelected = opt ? selectedOptions.includes(opt.id) : false;
+      {/* Selection summary (chips of picked days) */}
+      {selectedIsos.length > 0 ? (
+        <View className="mt-3 flex-row flex-wrap gap-2">
+          {selectedIsos.slice(0, 8).map((iso) => {
+            const label = new Date(iso + 'T12:00:00').toLocaleDateString('en-US', {
+              month: 'short', day: 'numeric',
+            });
             return (
-              <Pressable
-                key={date.toISOString()}
-                onPress={() => opt && onSelect(opt.id)}
-                disabled={!isHighlighted}
-                style={{ width: `${100 / 7}%`, aspectRatio: 1, alignItems: 'center', justifyContent: 'center' }}
-                accessibilityRole={isHighlighted ? (poll.allow_multi_select ? 'checkbox' : 'radio') : 'none'}
-                accessibilityState={isHighlighted ? { checked: isSelected, selected: isSelected } : undefined}
-                accessibilityLabel={isHighlighted && opt ? opt.label : undefined}
-              >
-                <View
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 16,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    backgroundColor: isSelected ? '#0F3F2E' : isHighlighted ? '#DFE8D2' : 'transparent',
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 13,
-                      fontWeight: isHighlighted ? '600' : '400',
-                      color: isSelected ? '#FFFFFF' : isHighlighted ? '#0F3F2E' : '#D1D5DB',
-                    }}
-                  >
-                    {date.getDate()}
-                  </Text>
-                </View>
-              </Pressable>
+              <View key={iso} className="flex-row items-center gap-1 rounded-full bg-gold/40 px-3 py-1">
+                <Ionicons name="checkmark-circle" size={13} color="#0F3F2E" />
+                <Text className="text-xs font-medium text-ink">{label}</Text>
+              </View>
             );
           })}
+          {selectedIsos.length > 8 ? (
+            <View className="flex-row items-center rounded-full bg-cream-warm px-3 py-1">
+              <Text className="text-xs font-medium text-muted">
+                +{selectedIsos.length - 8} more
+              </Text>
+            </View>
+          ) : null}
         </View>
-      </View>
-
-      {/* Selection summary */}
-      {selectedOptions.length > 0 ? (
-        isPerDayPoll ? (
-          <View className="mt-3 flex-row items-center gap-1.5">
-            <Ionicons name="checkmark-circle" size={14} color="#0F3F2E" />
-            <Text className="text-xs font-medium text-ink">
-              {selectedOptions.length} day{selectedOptions.length !== 1 ? 's' : ''} selected
-            </Text>
-          </View>
-        ) : (
-          <View className="mt-3 flex-row flex-wrap gap-2">
-            {poll.poll_options
-              .filter((o) => selectedOptions.includes(o.id))
-              .map((o) => (
-                <View key={o.id} className="flex-row items-center gap-1 rounded-full bg-gold/40 px-3 py-1">
-                  <Ionicons name="checkmark-circle" size={13} color="#0F3F2E" />
-                  <Text className="text-xs font-medium text-ink">{o.label}</Text>
-                </View>
-              ))}
-          </View>
-        )
       ) : null}
+
+      <MultiDatePicker
+        visible={pickerVisible}
+        value={selectedIsos}
+        onConfirm={handleConfirmDays}
+        onClose={() => setPickerVisible(false)}
+        title="Pick days you're free"
+        confirmLabel="Confirm availability"
+        minDate={minIso}
+        maxDate={maxIso}
+        allowPastDates
+      />
     </View>
   );
 }
@@ -464,7 +547,7 @@ function PollResultsCard({
 
   return (
     <View className="mb-5">
-      <Text className="mb-3 text-sm font-semibold text-ink">{poll.title}</Text>
+      <Text className="mb-3 text-sm font-semibold text-ink">{surveyPollTitle(poll)}</Text>
       <View className="gap-3">
         {poll.poll_options.map((opt) => {
           const votes = counts[opt.id] ?? 0;
@@ -568,7 +651,7 @@ function DateResultsCalendar({
 
   return (
     <View className="mb-5">
-      <Text className="mb-1 text-sm font-semibold text-ink">{poll.title}</Text>
+      <Text className="mb-1 text-sm font-semibold text-ink">{surveyPollTitle(poll)}</Text>
       <Text className="mb-3 text-xs text-muted">
         {totalResponders === 0
           ? "You're the first — results will appear as others respond."
@@ -909,36 +992,6 @@ function ItineraryRsvpSection({
   );
 }
 
-// ─── Preference question constants ─────────────────────────────────────────────
-
-const PREF_NEEDS = [
-  '💤 At least one slow morning — no 7am wake-ups',
-  '🙋 Some solo or small group time — not together every moment',
-  '🥗 Options for dietary needs — I have restrictions that matter',
-  '💰 Staying close to budget — I\'ll stress if we go over',
-  '📵 Real downtime — not just busy the whole time',
-  '🧭 Knowing the plan in advance — I don\'t do well with ambiguity',
-];
-
-const PREF_ENERGY: { value: 'relaxing' | 'adventurous'; label: string; sublabel: string }[] = [
-  { value: 'relaxing',    label: '😌 Take it easy',  sublabel: 'Recharge, slow down, familiar comforts' },
-  { value: 'adventurous', label: '⚡ Push it',        sublabel: 'New experiences, active, off the beaten path' },
-];
-
-const PREF_VIBES = [
-  '🛋 Recharge',
-  '🍽 Eat & explore',
-  '🏔 Get outside',
-  '🎉 Go out',
-];
-
-const PREF_PACE = [
-  '☀ Loose mornings, activities pick up in the afternoon',
-  '🏃 Packed from the start — we want to maximize every day',
-  '🔀 Mix of structured days and free days',
-  '🌙 Slow days, big nights',
-];
-
 function formatTripDates(start: string | null, end: string | null): string | null {
   if (!start) return null;
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -952,7 +1005,7 @@ function formatTripDates(start: string | null, end: string | null): string | nul
 
 // ─── Main screen ───────────────────────────────────────────────────────────────
 
-type Step = 'name' | 'rsvp' | 'preferences' | 'out' | 'polls' | 'done';
+type Step = 'name' | 'polls' | 'profile' | 'done';
 
 export default function RespondScreen() {
   const { tripId: shareToken } = useLocalSearchParams<{ tripId: string }>();
@@ -974,9 +1027,13 @@ export default function RespondScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [hasExistingResponses, setHasExistingResponses] = useState(false);
   const [existingRespondent, setExistingRespondent] = useState<Respondent | null>(null);
+  const [initialTravelerProfile, setInitialTravelerProfile] = useState<TravelerProfile | null>(null);
 
-  // responses: { [pollId]: optionId[] }
+  // responses: { [pollId]: optionId[] } — option-based polls
   const [responses, setResponses] = useState<Record<string, string[]>>({});
+  // numericResponses: { [pollId]: nights } — free-form numeric polls
+  // (currently the duration poll when planner provided no preset chips).
+  const [numericResponses, setNumericResponses] = useState<Record<string, number | null>>({});
   // live vote counts fetched after submission: { [pollId]: { [optionId]: count } }
   const [resultCounts, setResultCounts] = useState<Record<string, Record<string, number>>>({});
   const [respondentId, setRespondentId] = useState<string | null>(null);
@@ -984,13 +1041,6 @@ export default function RespondScreen() {
   const [dayRsvps, setDayRsvps] = useState<Record<string, DayRsvpStatus>>({});
   const [rsvpSaving, setRsvpSaving] = useState<string | null>(null);
   const nameInputRef = useRef<TextInput>(null);
-
-  // ─── RSVP + preference state ───────────────────────────────────────────────
-  const [rsvpChoice, setRsvpChoice] = useState<'in' | 'out' | null>(null);
-  const [prefNeeds, setPrefNeeds] = useState<string[]>([]);
-  const [prefEnergy, setPrefEnergy] = useState<'relaxing' | 'adventurous' | null>(null);
-  const [prefVibes, setPrefVibes] = useState<string[]>([]);
-  const [prefPace, setPrefPace] = useState<string | null>(null);
 
   // ─── Load trip ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1020,10 +1070,16 @@ export default function RespondScreen() {
             applyStoredName(respondent.name); // Pre-fill with their actual stored name
             if (respondent.email) setEmail(respondent.email);
             if (respondent.phone) setPhone(respondent.phone);
-            const existing = await getExistingResponses(data.id, respondent.id);
-            const anyExisting = Object.values(existing).some((arr) => arr.length > 0);
+            const [existing, existingNumeric] = await Promise.all([
+              getExistingResponses(data.id, respondent.id),
+              getExistingNumericResponses(data.id, respondent.id),
+            ]);
+            const anyExisting =
+              Object.values(existing).some((arr) => arr.length > 0) ||
+              Object.keys(existingNumeric).length > 0;
             if (anyExisting) {
               setResponses(existing);
+              setNumericResponses(existingNumeric);
               setHasExistingResponses(true);
             }
           } else if (stored) {
@@ -1125,10 +1181,13 @@ export default function RespondScreen() {
       setExistingRespondent(null);
       setHasExistingResponses(false);
       setResponses({});
+      setNumericResponses({});
     }
 
-    const tripStage = getTripStage(trip!);
-    setStep(tripStage === 'deciding' ? 'polls' : 'rsvp');
+    // Trip-creation + polling are unified — every respondent answers
+    // the polls. Completing them is the implicit "I'm in"; there's no
+    // separate yes/no RSVP step.
+    setStep('polls');
   }
 
   // ─── Respond as someone else (clears stored session for this trip) ─────────
@@ -1138,6 +1197,7 @@ export default function RespondScreen() {
     setExistingRespondent(null);
     setHasExistingResponses(false);
     setResponses({});
+    setNumericResponses({});
     setFirstName('');
     setLastName('');
     setFirstNameError('');
@@ -1148,52 +1208,28 @@ export default function RespondScreen() {
     setPhoneError('');
   }
 
-  // ─── RSVP choice ──────────────────────────────────────────────────────────
-  async function handleRsvpChoice(choice: 'in' | 'out') {
-    setRsvpChoice(choice);
-    if (choice === 'out') {
-      if (!trip) return;
-      setSubmitting(true);
+  /**
+   * After the trip-survey path completes, look up any existing traveler
+   * profile and transition to the 'profile' step. Best-effort: if the
+   * RPC fails (e.g. network), we still move on with a null initial
+   * profile so the planner-side trip submission isn't blocked.
+   *
+   * Phone is normalized to E.164 to match `trip_session_participants.phone`
+   * — without this, the RPC's auth gate rejects the read/write because
+   * the user-entered "(917) 555-..." string doesn't equal the stored
+   * "+19175551234".
+   */
+  async function enterProfileStep() {
+    const normalizedPhone = normalizePhone(phone);
+    if (normalizedPhone) {
       try {
-        const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(' ');
-        const respondent = await getOrCreateRespondent(trip.id, fullName, email.trim() || null, phone.trim() || null);
-        setRespondentId(respondent.id);
-        await saveRespondentRsvpAndPreferences(respondent.id, 'out');
-      } catch { /* non-fatal */ }
-      setSubmitting(false);
-      setStep('out');
-    } else {
-      setStep('preferences');
-    }
-  }
-
-  // ─── Submit preferences (I'm in!) ─────────────────────────────────────────
-  async function handlePreferencesSubmit() {
-    if (!trip) return;
-    setSubmitting(true);
-    const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(' ');
-    try {
-      const respondent = await getOrCreateRespondent(trip.id, fullName, email.trim() || null, phone.trim() || null);
-      setRespondentId(respondent.id);
-      await saveRespondentRsvpAndPreferences(respondent.id, 'in', {
-        needs: prefNeeds,
-        energy: prefEnergy,
-        vibes: prefVibes,
-        pace: prefPace,
-      });
-      if (!hasExistingResponses) {
-        enrollRespondentAsMember(trip.id, email.trim(), firstName.trim(), lastName.trim(), phone.trim()).catch(() => {});
+        const existing = await getProfileByToken(shareToken, normalizedPhone);
+        setInitialTravelerProfile(existing);
+      } catch {
+        /* non-fatal */
       }
-      capture(Events.RESPONDENT_SUBMITTED, { trip_id: trip.id, rsvp: 'in' });
-      log.action(Events.RESPONDENT_SUBMITTED, { trip_id: trip.id, rsvp: 'in' });
-      celebrate();
-      setStep('done');
-    } catch (err) {
-      log.error('rsvp_submit_failed', err, { trip_id: trip.id });
-      Alert.alert('Error', 'Could not save your responses. Please try again.');
-    } finally {
-      setSubmitting(false);
     }
+    setStep('profile');
   }
 
   // ─── Submit all responses ──────────────────────────────────────────────────
@@ -1207,7 +1243,11 @@ export default function RespondScreen() {
       const polls = trip.polls ?? [];
       for (const poll of polls) {
         const optionIds = responses[poll.id] ?? [];
-        await submitPollResponses(poll.id, respondent.id, optionIds);
+        const numeric = numericResponses[poll.id] ?? null;
+        // Free-form numeric (duration poll without preset options) takes
+        // priority — option IDs and numeric values are mutually exclusive
+        // per poll per respondent.
+        await submitPollResponses(poll.id, respondent.id, optionIds, numeric);
       }
       capture(Events.RESPONDENT_SUBMITTED, { trip_id: trip.id, poll_count: polls.length });
       log.action(Events.RESPONDENT_SUBMITTED, { trip_id: trip.id, poll_count: polls.length });
@@ -1223,6 +1263,7 @@ export default function RespondScreen() {
           phone.trim(),
         ).catch(() => { /* non-fatal — account creation failure doesn't block UX */ });
       }
+      sendSurveyConfirmationSms(trip.id, phone.trim() || null, 'in');
       // Fetch live counts so the confirmation screen can show a results visual
       try {
         const counts = await getResponseCountsForTrip(trip.id);
@@ -1252,7 +1293,7 @@ export default function RespondScreen() {
         } catch { /* non-fatal — itinerary section will just not show */ }
       }
       celebrate();
-      setStep('done');
+      await enterProfileStep();
     } catch (err: unknown) {
       const msg =
         err instanceof Error
@@ -1323,6 +1364,28 @@ export default function RespondScreen() {
     );
   }
 
+  // Responses-due cutoff: planner set a deadline and it's passed. Block
+  // new submissions and updates. Done before the !trip null-guard (which
+  // is loaded by this point) and before any step rendering.
+  if (trip && trip.responses_due_date) {
+    const days = daysUntil(trip.responses_due_date);
+    if (days !== null && days < 0) {
+      return (
+        <WebPageShell cardStyle={{ padding: 40 }}>
+          <View className={IS_WEB ? 'items-center' : 'flex-1 items-center justify-center bg-cream px-8'}>
+            <Text className="text-5xl">⏰</Text>
+            <Text className="mt-4 text-center text-xl font-semibold text-ink">
+              Responses are closed.
+            </Text>
+            <Text className="mt-2 text-center text-sm text-muted">
+              The deadline was {formatCadenceDate(trip.responses_due_date)}. The planner is locking in plans now — reach out to them directly with any updates.
+            </Text>
+          </View>
+        </WebPageShell>
+      );
+    }
+  }
+
   if (loadError === 'error') {
     return (
       <WebPageShell cardStyle={{ padding: 40 }}>
@@ -1341,7 +1404,16 @@ export default function RespondScreen() {
 
   if (!trip) return null;
 
-  const polls: PollWithOptions[] = trip.polls ?? [];
+  // Render order on the survey: pin the duration question above the
+  // dates calendar so respondents tell us trip length first, then pick
+  // availability with that context. Other polls keep their saved order.
+  const polls: PollWithOptions[] = (() => {
+    const all = trip.polls ?? [];
+    const duration = all.filter(isDurationPoll);
+    const dates = all.filter((p) => p.type === 'dates');
+    const rest = all.filter((p) => !isDurationPoll(p) && p.type !== 'dates');
+    return [...duration, ...dates, ...rest];
+  })();
   const plannerLabel = 'Your trip planner';
 
   // ─── Name step ─────────────────────────────────────────────────────────────
@@ -1517,269 +1589,24 @@ export default function RespondScreen() {
     );
   }
 
-  // ─── Done step ─────────────────────────────────────────────────────────────
-  // ─── RSVP step ─────────────────────────────────────────────────────────────
-  if (step === 'rsvp') {
-    const dateDisplay = formatTripDates(trip.start_date ?? null, trip.end_date ?? null);
-    const pills: string[] = [];
-    if (trip.group_size_precise) pills.push(`${trip.group_size_precise} people`);
-    else if (trip.group_size_bucket) pills.push(`${trip.group_size_bucket} people`);
-    if (trip.budget_per_person) pills.push(`${trip.budget_per_person} pp`);
-    if (trip.trip_type) pills.push(trip.trip_type);
-
+  // ─── Traveler profile step (post trip-survey) ─────────────────────────────
+  if (step === 'profile') {
     return (
-      <WebPageShell cardStyle={IS_WEB ? { maxHeight: '95vh' } : {}}>
-        <ScrollView
-          style={IS_WEB ? {} : { flex: 1, backgroundColor: '#F9F9F7' }}
-          contentContainerStyle={{
-            paddingTop: IS_WEB ? 36 : insets.top + 24,
-            paddingHorizontal: IS_WEB ? 36 : 24,
-            paddingBottom: IS_WEB ? 36 : insets.bottom + 40,
-          }}
-          showsVerticalScrollIndicator={false}
-        >
-          <Text style={{ fontSize: 24, fontWeight: '800', color: '#0F3F2E', marginBottom: 4 }}>rally</Text>
-
-          {/* Trip hero */}
-          <View style={{ backgroundColor: '#DDE8D8', borderRadius: 20, padding: 20, marginTop: 8, gap: 6 }}>
-            <Text style={{ fontSize: 11, fontWeight: '700', letterSpacing: 1.2, color: '#3A7A55', textTransform: 'uppercase' }}>
-              YOU'RE INVITED
-            </Text>
-            <Text style={{ fontSize: 28, fontWeight: '800', color: '#1A3020' }}>{trip.destination ?? trip.name}</Text>
-            {dateDisplay ? (
-              <Text style={{ fontSize: 22, fontWeight: '700', color: '#1A3020' }}>{dateDisplay}</Text>
-            ) : null}
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
-              {pills.map((p) => (
-                <View key={p} style={{ backgroundColor: 'rgba(255,255,255,0.55)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 }}>
-                  <Text style={{ fontSize: 13, color: '#1A3020' }}>{p}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          <Text style={{ marginTop: 24, fontSize: 20, fontWeight: '700', color: '#163026', textAlign: 'center' }}>
-            Are you in?
-          </Text>
-          <Text style={{ marginTop: 6, fontSize: 14, color: '#888', textAlign: 'center' }}>
-            Let the group know so they can plan around you.
-          </Text>
-
-          <View style={{ marginTop: 24, gap: 12 }}>
-            <Pressable
-              onPress={() => handleRsvpChoice('in')}
-              disabled={submitting}
-              style={{ backgroundColor: '#235C38', borderRadius: 999, paddingVertical: 16, alignItems: 'center' }}
-            >
-              <Text style={{ fontSize: 16, fontWeight: '700', color: '#fff' }}>I'm in!</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => handleRsvpChoice('out')}
-              disabled={submitting}
-              style={{ borderWidth: 1.5, borderColor: '#D4D4D4', borderRadius: 999, paddingVertical: 14, alignItems: 'center' }}
-            >
-              <Text style={{ fontSize: 15, fontWeight: '500', color: '#888' }}>I'm out</Text>
-            </Pressable>
-          </View>
-        </ScrollView>
-      </WebPageShell>
-    );
-  }
-
-  // ─── Preferences step ──────────────────────────────────────────────────────
-  if (step === 'preferences') {
-    const canSubmit = prefPace !== null;
-    return (
-      <WebPageShell cardStyle={IS_WEB ? { maxHeight: '95vh' } : {}}>
-        <ScrollView
-          style={IS_WEB ? {} : { flex: 1, backgroundColor: '#F9F9F7' }}
-          contentContainerStyle={{
-            paddingTop: IS_WEB ? 36 : insets.top + 24,
-            paddingHorizontal: IS_WEB ? 36 : 24,
-            paddingBottom: IS_WEB ? 36 : insets.bottom + 40,
-          }}
-          showsVerticalScrollIndicator={false}
-        >
-          <Text style={{ fontSize: 24, fontWeight: '800', color: '#0F3F2E', marginBottom: 4 }}>rally</Text>
-          <Text style={{ fontSize: 18, fontWeight: '700', color: '#163026', marginTop: 4 }}>
-            Help the group plan around you
-          </Text>
-          <Text style={{ fontSize: 14, color: '#888', marginTop: 4, marginBottom: 24 }}>
-            These go to your planner — not the whole group.
-          </Text>
-
-          {/* Q1: Needs (multi-select, optional) */}
-          <View style={{ marginBottom: 28 }}>
-            <Text style={{ fontSize: 15, fontWeight: '700', color: '#163026', marginBottom: 12 }}>
-              What do you personally need to enjoy this trip?
-            </Text>
-            <Text style={{ fontSize: 12, color: '#aaa', marginBottom: 10 }}>Select all that apply</Text>
-            <View style={{ gap: 8 }}>
-              {PREF_NEEDS.map((opt) => {
-                const sel = prefNeeds.includes(opt);
-                return (
-                  <Pressable
-                    key={opt}
-                    onPress={() => setPrefNeeds((prev) => sel ? prev.filter((x) => x !== opt) : [...prev, opt])}
-                    style={{
-                      borderWidth: 1.5,
-                      borderColor: sel ? '#235C38' : '#E7DDCF',
-                      backgroundColor: sel ? '#EAF3EC' : '#fff',
-                      borderRadius: 12,
-                      paddingHorizontal: 14,
-                      paddingVertical: 12,
-                    }}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: sel }}
-                  >
-                    <Text style={{ fontSize: 14, color: sel ? '#235C38' : '#404040', fontWeight: sel ? '600' : '400' }}>
-                      {opt}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          {/* Q2: Energy (2-option pick, optional) */}
-          <View style={{ marginBottom: 28 }}>
-            <Text style={{ fontSize: 15, fontWeight: '700', color: '#163026', marginBottom: 4 }}>
-              How adventurous do you want to go?
-            </Text>
-            <Text style={{ fontSize: 12, color: '#aaa', marginBottom: 10 }}>Optional</Text>
-            <View style={{ gap: 8 }}>
-              {PREF_ENERGY.map((opt) => {
-                const sel = prefEnergy === opt.value;
-                return (
-                  <Pressable
-                    key={opt.value}
-                    onPress={() => setPrefEnergy(sel ? null : opt.value)}
-                    style={{
-                      borderWidth: 1.5,
-                      borderColor: sel ? '#235C38' : '#E7DDCF',
-                      backgroundColor: sel ? '#EAF3EC' : '#fff',
-                      borderRadius: 12,
-                      paddingHorizontal: 14,
-                      paddingVertical: 12,
-                    }}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: sel }}
-                  >
-                    <Text style={{ fontSize: 14, color: sel ? '#235C38' : '#404040', fontWeight: sel ? '600' : '400' }}>
-                      {opt.label}
-                    </Text>
-                    <Text style={{ fontSize: 12, color: sel ? '#3A7A55' : '#999', marginTop: 2 }}>
-                      {opt.sublabel}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          {/* Q3: Vibes (multi-select, max 2) */}
-          <View style={{ marginBottom: 28 }}>
-            <Text style={{ fontSize: 15, fontWeight: '700', color: '#163026', marginBottom: 12 }}>
-              Pick the 1–2 vibes that best describe your ideal trip.
-            </Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              {PREF_VIBES.map((opt) => {
-                const sel = prefVibes.includes(opt);
-                const maxReached = prefVibes.length >= 2 && !sel;
-                return (
-                  <Pressable
-                    key={opt}
-                    onPress={() => {
-                      if (maxReached) return;
-                      setPrefVibes((prev) => sel ? prev.filter((x) => x !== opt) : [...prev, opt]);
-                    }}
-                    style={{
-                      borderWidth: 1.5,
-                      borderColor: sel ? '#235C38' : maxReached ? '#eee' : '#E7DDCF',
-                      backgroundColor: sel ? '#EAF3EC' : '#fff',
-                      borderRadius: 999,
-                      paddingHorizontal: 16,
-                      paddingVertical: 10,
-                      opacity: maxReached ? 0.5 : 1,
-                    }}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: sel }}
-                  >
-                    <Text style={{ fontSize: 14, color: sel ? '#235C38' : '#404040', fontWeight: sel ? '600' : '400' }}>
-                      {opt}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          {/* Q4: Pace (single-select, required) */}
-          <View style={{ marginBottom: 32 }}>
-            <Text style={{ fontSize: 15, fontWeight: '700', color: '#163026', marginBottom: 4 }}>
-              What does a perfect trip day look like?
-            </Text>
-            <Text style={{ fontSize: 12, color: '#aaa', marginBottom: 10 }}>Pick 1</Text>
-            <View style={{ gap: 8 }}>
-              {PREF_PACE.map((opt) => {
-                const sel = prefPace === opt;
-                return (
-                  <Pressable
-                    key={opt}
-                    onPress={() => setPrefPace(opt)}
-                    style={{
-                      borderWidth: 1.5,
-                      borderColor: sel ? '#235C38' : '#E7DDCF',
-                      backgroundColor: sel ? '#EAF3EC' : '#fff',
-                      borderRadius: 12,
-                      paddingHorizontal: 14,
-                      paddingVertical: 12,
-                    }}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: sel }}
-                  >
-                    <Text style={{ fontSize: 14, color: sel ? '#235C38' : '#404040', fontWeight: sel ? '600' : '400' }}>
-                      {opt}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          {!canSubmit ? (
-            <Text style={{ textAlign: 'center', fontSize: 13, color: '#aaa', marginBottom: 12 }}>
-              Answer the last question to continue
-            </Text>
-          ) : null}
-          <Button
-            variant="primary"
-            size="lg"
-            onPress={handlePreferencesSubmit}
-            loading={submitting}
-            disabled={!canSubmit || submitting}
-            fullWidth
-          >
-            Submit
-          </Button>
-        </ScrollView>
-      </WebPageShell>
-    );
-  }
-
-  // ─── Out step ──────────────────────────────────────────────────────────────
-  if (step === 'out') {
-    return (
-      <WebPageShell cardStyle={{ padding: IS_WEB ? 48 : 0 }}>
-        <View style={IS_WEB ? { alignItems: 'center' } : { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F9F9F7', padding: 40 }}>
-          <Text style={{ fontSize: 48 }}>💙</Text>
-          <Text style={{ marginTop: 20, fontSize: 26, fontWeight: '800', color: '#163026', textAlign: 'center' }}>
-            We'll miss you!
-          </Text>
-          <Text style={{ marginTop: 10, fontSize: 15, color: '#888', textAlign: 'center', lineHeight: 22 }}>
-            No worries — the planner has been notified. If plans change, reach out to them directly.
-          </Text>
-        </View>
+      <WebPageShell
+        cardStyle={
+          IS_WEB
+            ? // @ts-ignore — web-only flex props
+              { padding: 0, maxHeight: '95vh', display: 'flex', flexDirection: 'column' }
+            : { padding: 0 }
+        }
+      >
+        <TravelerProfileForm
+          phone={normalizePhone(phone) ?? ''}
+          initialProfile={initialTravelerProfile}
+          respondentFirstName={firstName.trim() || null}
+          onSave={(draft) => upsertProfileByToken(shareToken, draft)}
+          onComplete={() => setStep('done')}
+        />
       </WebPageShell>
     );
   }
@@ -1814,12 +1641,10 @@ export default function RespondScreen() {
             <Ionicons name="sparkles" size={32} color="#0F3F2E" />
           </View>
           <Text className="mt-4 text-center text-2xl font-bold text-ink">
-            {rsvpChoice === 'in' ? "You're in!" : hasExistingResponses ? 'Responses updated!' : 'Responses sent!'}
+            {hasExistingResponses ? 'Responses updated!' : "You're in!"}
           </Text>
           <Text className="mt-2 text-center text-base text-muted">
-            {rsvpChoice === 'in'
-              ? 'Your preferences have been shared with the planner.'
-              : "You're in. Here's where the group stands so far."}
+            Your preferences have been shared with the planner.
           </Text>
         </View>
 
@@ -1864,7 +1689,14 @@ export default function RespondScreen() {
   }
 
   // ─── Polls step ────────────────────────────────────────────────────────────
-  const answeredCount = polls.filter((p) => (responses[p.id] ?? []).length > 0).length;
+  // A poll counts as answered when the respondent has either picked at
+  // least one option OR submitted a positive numeric value (free-form
+  // duration poll).
+  const answeredCount = polls.filter((p) => {
+    const optionPicks = (responses[p.id] ?? []).length > 0;
+    const numericPick = (numericResponses[p.id] ?? 0) > 0;
+    return optionPicks || numericPick;
+  }).length;
   const allAnswered = polls.length > 0 && answeredCount === polls.length;
 
   return (
@@ -1921,13 +1753,29 @@ export default function RespondScreen() {
             <Text className="text-base text-muted">No polls yet — check back soon.</Text>
           </View>
         ) : (
-          polls.map((poll) =>
-            isDateRangeLabel(poll.poll_options[0]?.label ?? '') ? (
+          polls.map((poll) => {
+            // Duration poll → chips when planner provided options, free-form
+            // numeric input when they didn't.
+            if (isDurationPoll(poll)) {
+              return (
+                <DurationPollCard
+                  key={poll.id}
+                  poll={poll}
+                  selectedOptions={responses[poll.id] ?? []}
+                  numericValue={numericResponses[poll.id] ?? null}
+                  onSelect={(optionId) => handleSelect(poll.id, optionId, poll.allow_multi_select)}
+                  onNumericChange={(n) => setNumericResponses((prev) => ({ ...prev, [poll.id]: n }))}
+                />
+              );
+            }
+            return isDateRangeLabel(poll.poll_options[0]?.label ?? '') ? (
               <DatesPollCard
                 key={poll.id}
                 poll={poll}
                 selectedOptions={responses[poll.id] ?? []}
                 onSelect={(optionId) => handleSelect(poll.id, optionId, poll.allow_multi_select)}
+                onSetSelections={(ids) => setResponses((prev) => ({ ...prev, [poll.id]: ids }))}
+                tripDuration={trip.trip_duration}
               />
             ) : (
               <PollResponseCard
@@ -1936,8 +1784,8 @@ export default function RespondScreen() {
                 selectedOptions={responses[poll.id] ?? []}
                 onSelect={(optionId) => handleSelect(poll.id, optionId, poll.allow_multi_select)}
               />
-            )
-          )
+            );
+          })
         )}
       </ScrollView>
 

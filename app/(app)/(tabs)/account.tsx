@@ -9,9 +9,16 @@ import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSignOut } from '@/hooks/useAuth';
-import { useMyProfile } from '@/hooks/useProfile';
+import { useMyProfile, profileKeys } from '@/hooks/useProfile';
 import { useAuthStore } from '@/stores/authStore';
 import { supabase } from '@/lib/supabase';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  EditNameModal,
+  EditEmailModal,
+  EditPhoneModal,
+  EditPasswordModal,
+} from '@/components/account/AccountFieldModals';
 
 export default function AccountScreen() {
   const insets = useSafeAreaInsets();
@@ -19,6 +26,10 @@ export default function AccountScreen() {
   const { user } = useAuthStore();
   const signOut = useSignOut();
   const { data: profile } = useMyProfile();
+  const qc = useQueryClient();
+
+  const [editing, setEditing] = useState<'name' | 'email' | 'phone' | 'password' | null>(null);
+  const refetchProfile = () => qc.invalidateQueries({ queryKey: profileKeys.me() });
 
   // Phase 6: detect users with phone history (SMS or survey) that hasn't yet
   // been claimed by their auth account, and surface a "Link your phone" CTA.
@@ -74,6 +85,66 @@ export default function AccountScreen() {
     ]);
   }
 
+  const [deleting, setDeleting] = useState(false);
+
+  function handleDeleteAccount() {
+    Alert.alert(
+      'Delete your account?',
+      'This permanently deletes your trips, polls, group history, and sign-in. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue',
+          style: 'destructive',
+          onPress: () => {
+            // Second confirmation so a single tap can't end the account.
+            Alert.alert(
+              'Are you sure?',
+              'Tap Delete to permanently remove your Rally account and all of its data.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Delete', style: 'destructive', onPress: () => doDeleteAccount() },
+              ],
+            );
+          },
+        },
+      ],
+    );
+  }
+
+  async function doDeleteAccount() {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        Alert.alert('Could not delete', 'You appear to be signed out. Sign in and try again.');
+        return;
+      }
+      const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/delete-account`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const json = (await res.json().catch(() => null)) as { ok?: boolean; reason?: string } | null;
+      if (!json?.ok) {
+        Alert.alert('Could not delete', json?.reason ?? 'Try again.');
+        return;
+      }
+      // Account deleted server-side. Sign out locally to clear cached state
+      // and route the user back to the auth stack.
+      await signOut();
+    } catch {
+      Alert.alert('Could not delete', 'Network error. Try again.');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   const version = Constants.expoConfig?.version ?? '1.0.0';
 
   return (
@@ -111,6 +182,78 @@ export default function AccountScreen() {
           ) : null}
         </View>
 
+        {/* Profile card — editable name / email / phone / password.
+            Email + phone changes route through Supabase verification
+            (link or OTP); password requires the current password. */}
+        <View
+          className="mx-6 mb-3 overflow-hidden rounded-2xl bg-card"
+          style={{
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.06,
+            shadowRadius: 8,
+            elevation: 2,
+          }}
+        >
+          <Pressable
+            onPress={() => setEditing('name')}
+            className="flex-row items-center gap-3 border-b border-line px-5 py-4"
+            accessibilityRole="button"
+          >
+            <Ionicons name="person-outline" size={20} color="#5F685F" />
+            <View className="flex-1">
+              <Text className="text-xs uppercase font-semibold text-muted" style={{ letterSpacing: 0.6 }}>Name</Text>
+              <Text className="text-base text-ink mt-0.5" numberOfLines={1}>
+                {(profile as { name?: string | null; last_name?: string | null } | null)?.name
+                  ? [(profile as { name?: string | null }).name, (profile as { last_name?: string | null }).last_name].filter(Boolean).join(' ')
+                  : (name ?? 'Add your name')}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+          </Pressable>
+
+          <Pressable
+            onPress={() => setEditing('email')}
+            className="flex-row items-center gap-3 border-b border-line px-5 py-4"
+            accessibilityRole="button"
+          >
+            <Ionicons name="mail-outline" size={20} color="#5F685F" />
+            <View className="flex-1">
+              <Text className="text-xs uppercase font-semibold text-muted" style={{ letterSpacing: 0.6 }}>Email</Text>
+              <Text className="text-base text-ink mt-0.5" numberOfLines={1}>{email ?? '—'}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+          </Pressable>
+
+          <Pressable
+            onPress={() => setEditing('phone')}
+            className="flex-row items-center gap-3 border-b border-line px-5 py-4"
+            accessibilityRole="button"
+          >
+            <Ionicons name="call-outline" size={20} color="#5F685F" />
+            <View className="flex-1">
+              <Text className="text-xs uppercase font-semibold text-muted" style={{ letterSpacing: 0.6 }}>Phone</Text>
+              <Text className="text-base text-ink mt-0.5" numberOfLines={1}>
+                {(profile as { phone?: string | null } | null)?.phone ?? 'Add a phone'}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+          </Pressable>
+
+          <Pressable
+            onPress={() => setEditing('password')}
+            className="flex-row items-center gap-3 px-5 py-4"
+            accessibilityRole="button"
+          >
+            <Ionicons name="lock-closed-outline" size={20} color="#5F685F" />
+            <View className="flex-1">
+              <Text className="text-xs uppercase font-semibold text-muted" style={{ letterSpacing: 0.6 }}>Password</Text>
+              <Text className="text-base text-ink mt-0.5">••••••••</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+          </Pressable>
+        </View>
+
         {/* Actions card */}
         <View
           className="mx-6 overflow-hidden rounded-2xl bg-card"
@@ -141,13 +284,44 @@ export default function AccountScreen() {
           ) : null}
 
           <Pressable
+            onPress={() => router.push('/(app)/profile-prefs')}
+            className="flex-row items-center gap-3 border-b border-line px-5 py-4"
+            accessibilityRole="button"
+            accessibilityLabel="Travel preferences"
+          >
+            <Ionicons name="person-circle-outline" size={20} color="#0F3F2E" />
+            <View className="flex-1">
+              <Text className="text-base font-medium text-ink">Travel preferences</Text>
+              <Text className="text-sm text-muted">
+                Your home airport, dietary needs, pace, and more.
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+          </Pressable>
+
+          <Pressable
             onPress={handleSignOut}
-            className="flex-row items-center gap-3 px-5 py-4"
+            className="flex-row items-center gap-3 border-b border-line px-5 py-4"
             accessibilityRole="button"
             accessibilityLabel="Sign out"
           >
             <Ionicons name="log-out-outline" size={20} color="#EF4444" />
             <Text className="flex-1 text-base font-medium text-red-500">Sign out</Text>
+            <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+          </Pressable>
+
+          <Pressable
+            onPress={handleDeleteAccount}
+            disabled={deleting}
+            className="flex-row items-center gap-3 px-5 py-4"
+            accessibilityRole="button"
+            accessibilityLabel="Delete account"
+            accessibilityState={{ busy: deleting }}
+          >
+            <Ionicons name="trash-outline" size={20} color="#B91C1C" />
+            <Text className="flex-1 text-base font-medium text-red-700">
+              {deleting ? 'Deleting account…' : 'Delete account'}
+            </Text>
             <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
           </Pressable>
         </View>
@@ -158,6 +332,36 @@ export default function AccountScreen() {
         </Text>
 
       </ScrollView>
+
+      {/* Edit modals — mounted at root, controlled via `editing` state. */}
+      <EditNameModal
+        visible={editing === 'name'}
+        onClose={() => setEditing(null)}
+        onSaved={refetchProfile}
+        initialName={
+          (profile as { name?: string | null; last_name?: string | null } | null)?.name
+            ? [(profile as { name?: string | null }).name, (profile as { last_name?: string | null }).last_name].filter(Boolean).join(' ')
+            : name ?? null
+        }
+      />
+      <EditEmailModal
+        visible={editing === 'email'}
+        onClose={() => setEditing(null)}
+        onSaved={refetchProfile}
+        initialEmail={email ?? null}
+      />
+      <EditPhoneModal
+        visible={editing === 'phone'}
+        onClose={() => setEditing(null)}
+        onSaved={refetchProfile}
+        initialPhone={(profile as { phone?: string | null } | null)?.phone ?? null}
+      />
+      <EditPasswordModal
+        visible={editing === 'password'}
+        onClose={() => setEditing(null)}
+        onSaved={() => { /* no profile refetch needed for password */ }}
+        email={email ?? null}
+      />
     </View>
   );
 }

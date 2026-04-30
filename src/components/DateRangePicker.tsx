@@ -27,6 +27,13 @@ interface Props {
   confirmLabel?: string;
   /** When true, removes the minDate constraint so past dates can be selected. */
   allowPastDates?: boolean;
+  /**
+   * Other date ranges that have already been added as poll options.
+   * Rendered on the calendar as faded bands so the planner can see
+   * what's already been picked while choosing a new range. The active
+   * range (the one being edited) overrides any overlap.
+   */
+  existingRanges?: Array<{ start: string | null; end: string | null }>;
 }
 
 type MarkedDates = Record<string, {
@@ -37,24 +44,52 @@ type MarkedDates = Record<string, {
   marked?: boolean;
 }>;
 
-function buildMarkedDates(start: string | null, end: string | null): MarkedDates {
-  if (!start) return {};
+function buildMarkedDates(
+  start: string | null,
+  end: string | null,
+  existingRanges: Array<{ start: string | null; end: string | null }> = [],
+): MarkedDates {
   // Range endpoints render in brand green; in-between days use green-soft so
   // the selected range reads as a continuous green band on the calendar.
   const accentDark = '#0F3F2E';   // T.green
   const accentLight = '#DFE8D2';  // T.greenSoft
-
-  if (!end || start === end) {
-    return {
-      [start]: { startingDay: true, endingDay: true, color: accentDark, textColor: '#fff' },
-    };
-  }
+  // Existing (non-active) ranges render as a muted band so the planner can
+  // see what's already picked without confusion about which is the live
+  // selection. Distinct enough to spot but visibly secondary.
+  const existingBand = '#E8DFC8'; // T.line — warm beige
+  const existingText = '#5F685F'; // T.muted
 
   const marks: MarkedDates = {};
-  const startMs = new Date(start).getTime();
-  const endMs = new Date(end).getTime();
   const dayMs = 86400000;
 
+  // Layer 1: paint existing ranges first, so the active range can overlay.
+  for (const r of existingRanges) {
+    if (!r.start) continue;
+    const sMs = new Date(r.start).getTime();
+    const eMs = (r.end ? new Date(r.end).getTime() : sMs);
+    for (let ms = sMs; ms <= eMs; ms += dayMs) {
+      const d = new Date(ms).toISOString().slice(0, 10);
+      const isStart = d === r.start;
+      const isEnd = d === (r.end ?? r.start);
+      marks[d] = {
+        startingDay: isStart,
+        endingDay: isEnd,
+        color: existingBand,
+        textColor: existingText,
+      };
+    }
+  }
+
+  // Layer 2: active range overrides.
+  if (!start) return marks;
+
+  if (!end || start === end) {
+    marks[start] = { startingDay: true, endingDay: true, color: accentDark, textColor: '#fff' };
+    return marks;
+  }
+
+  const startMs = new Date(start).getTime();
+  const endMs = new Date(end).getTime();
   for (let ms = startMs; ms <= endMs; ms += dayMs) {
     const d = new Date(ms).toISOString().slice(0, 10);
     if (d === start) {
@@ -82,6 +117,7 @@ export function DateRangePicker({
   endLabel = 'End',
   confirmLabel = 'Confirm dates',
   allowPastDates = false,
+  existingRanges,
 }: Props) {
   const insets = useSafeAreaInsets();
   const [localStart, setLocalStart] = useState<string | null>(startDate);
@@ -125,7 +161,7 @@ export function DateRangePicker({
     onClose();
   }
 
-  const markedDates = buildMarkedDates(localStart, localEnd);
+  const markedDates = buildMarkedDates(localStart, localEnd, existingRanges);
   const today = new Date().toISOString().slice(0, 10);
 
   return (

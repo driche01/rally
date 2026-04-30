@@ -37,4 +37,8 @@ export const Events = {
   DOWNLOAD_PROMPT_TAPPED: 'download_prompt_tapped',
   NOTIFICATION_OPTED_IN: 'notification_opted_in',
   TRIP_CLOSED: 'trip_closed',
+  // Decision queue events (1:1 SMS pivot)
+  RECOMMENDATION_APPROVED: 'recommendation_approved',
+  RECOMMENDATION_HELD:     'recommendation_held',
+  LOCK_BROADCAST_SENT:     'lock_broadcast_sent',
 } as const;

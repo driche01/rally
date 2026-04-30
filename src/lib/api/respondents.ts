@@ -3,6 +3,39 @@ import { supabase } from '../supabase';
 import { normalizePhone } from '../phone';
 import type { PollResponse, Respondent } from '../../types/database';
 
+// ─── Survey confirmation SMS ──────────────────────────────────────────────────
+
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+const SURVEY_CONFIRMATION_URL = `${SUPABASE_URL}/functions/v1/sms-survey-confirmation`;
+
+/**
+ * Fire the post-submit confirmation SMS. Best-effort, never throws — the
+ * survey submit succeeds even if the SMS fails. Server-side guards
+ * dedupe (per trip+phone+day) and skip opted-out users.
+ */
+export async function sendSurveyConfirmationSms(
+  tripId: string,
+  phone: string | null,
+  rsvp: 'in' | 'out',
+): Promise<void> {
+  if (!phone) return;
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return;
+  try {
+    await fetch(SURVEY_CONFIRMATION_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        apikey: SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ trip_id: tripId, phone, rsvp }),
+    });
+  } catch {
+    /* non-fatal — confirmation is informational */
+  }
+}
+
 // ─── Global session token (legacy / backward compat) ──────────────────────────
 // Originally one token per device used across all trips.
 const SESSION_KEY = 'rally_session_token';
@@ -317,14 +350,30 @@ export async function deleteRespondent(respondentId: string): Promise<void> {
 export async function submitPollResponses(
   pollId: string,
   respondentId: string,
-  optionIds: string[]
+  optionIds: string[],
+  numericValue?: number | null
 ): Promise<void> {
-  // Clear existing responses for this poll + respondent
+  // Clear existing responses for this poll + respondent (covers both
+  // option-based and numeric prior submissions).
   await supabase
     .from('poll_responses')
     .delete()
     .eq('poll_id', pollId)
     .eq('respondent_id', respondentId);
+
+  // Free-form numeric response (e.g. duration poll's "how many nights")
+  if (numericValue != null) {
+    const { error } = await supabase
+      .from('poll_responses')
+      .insert({
+        poll_id: pollId,
+        respondent_id: respondentId,
+        option_id: null,
+        numeric_value: numericValue,
+      });
+    if (error) throw error;
+    return;
+  }
 
   if (optionIds.length === 0) return;
 
@@ -350,13 +399,39 @@ export async function getExistingResponses(
   const { data, error } = await supabase
     .from('poll_responses')
     .select('poll_id, option_id')
-    .eq('respondent_id', respondentId);
+    .eq('respondent_id', respondentId)
+    .not('option_id', 'is', null);
   if (error) throw error;
 
   const map: Record<string, string[]> = {};
   for (const row of data ?? []) {
+    if (!row.option_id) continue;
     if (!map[row.poll_id]) map[row.poll_id] = [];
     map[row.poll_id].push(row.option_id);
+  }
+  return map;
+}
+
+/**
+ * Returns the numeric_value (e.g. duration poll's free-form answer) keyed
+ * by poll_id for a given respondent. Only populated for polls where the
+ * respondent submitted a numeric_value response.
+ */
+export async function getExistingNumericResponses(
+  tripId: string,
+  respondentId: string
+): Promise<Record<string, number>> {
+  const { data, error } = await supabase
+    .from('poll_responses')
+    .select('poll_id, numeric_value')
+    .eq('respondent_id', respondentId)
+    .not('numeric_value', 'is', null);
+  if (error) throw error;
+
+  const map: Record<string, number> = {};
+  for (const row of data ?? []) {
+    if (row.numeric_value == null) continue;
+    map[row.poll_id] = row.numeric_value;
   }
   return map;
 }
