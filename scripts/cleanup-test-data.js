@@ -5,9 +5,13 @@
  */
 const { createClient } = require('@supabase/supabase-js');
 
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.error('SUPABASE_SERVICE_ROLE_KEY env var required'); process.exit(1);
+}
+
 const admin = createClient(
   process.env.SUPABASE_URL || 'https://qxpbnixvjtwckuedlrfj.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || '***SCRUBBED-SUPABASE-SERVICE-ROLE-KEY***',
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
 );
 
 async function cleanup() {

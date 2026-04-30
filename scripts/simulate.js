@@ -23,7 +23,8 @@ if (scriptIdx === -1 || !args[scriptIdx + 1]) {
 
 const scriptPath = args[scriptIdx + 1];
 const BASE_URL = baseUrlIdx !== -1 ? args[baseUrlIdx + 1] : (process.env.RALLY_BASE_URL || 'https://qxpbnixvjtwckuedlrfj.supabase.co/functions/v1');
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '***SCRUBBED-SUPABASE-SERVICE-ROLE-KEY***';
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!SERVICE_KEY) { console.error("SUPABASE_SERVICE_ROLE_KEY env var required"); process.exit(1); }
 const RALLY_PHONE = process.env.TWILIO_PHONE_NUMBER || '+18559310010';
 
 const script = JSON.parse(fs.readFileSync(scriptPath, 'utf8'));

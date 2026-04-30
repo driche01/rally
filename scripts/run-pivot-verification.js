@@ -24,8 +24,8 @@
 const { createClient } = require('@supabase/supabase-js');
 
 const SUPABASE_URL = 'https://qxpbnixvjtwckuedlrfj.supabase.co';
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  '***SCRUBBED-SUPABASE-SERVICE-ROLE-KEY***';
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!SERVICE_KEY) { console.error("SUPABASE_SERVICE_ROLE_KEY env var required"); process.exit(1); }
 const RALLY_PHONE = '+16624283059';
 
 const sb = createClient(SUPABASE_URL, SERVICE_KEY);

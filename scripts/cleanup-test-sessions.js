@@ -3,7 +3,8 @@
  * Clean up test sessions/participants/messages from the database.
  * Removes anything with phone numbers matching test prefixes.
  */
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '***SCRUBBED-SUPABASE-SERVICE-ROLE-KEY***';
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!SERVICE_KEY) { console.error("SUPABASE_SERVICE_ROLE_KEY env var required"); process.exit(1); }
 const BASE = 'https://qxpbnixvjtwckuedlrfj.supabase.co/rest/v1';
 const HEADERS = {
   'apikey': SERVICE_KEY,
