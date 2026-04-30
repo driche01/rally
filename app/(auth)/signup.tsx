@@ -1,15 +1,59 @@
+/**
+ * Signup — new users.
+ *
+ * Creates the auth.users row + profiles row, then routes:
+ *   - claim-phone — if the phone has unclaimed SMS / survey history
+ *   - profile-setup — otherwise
+ *
+ * 2026-04-24 brand: cream surface, small "● RALLY" mark, Georgia headline,
+ * staggered fade-in matching the welcome and login screens.
+ */
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withDelay,
+  withSpring,
+  Easing,
+} from 'react-native-reanimated';
 import { Button, Input } from '@/components/ui';
 import { useGoogleSignIn, useSignUp } from '@/hooks/useAuth';
+import { T, headlineFont } from '@/theme';
+
+/**
+ * Celebration shown after successful signup, before routing to the
+ * next step (claim-phone or profile-setup). Total visible time: ~1500ms.
+ *   - Check icon: spring scale-in from 0
+ *   - Headline: fade + lift
+ *   - Background: soft cream wash so the form behind doesn't compete
+ *
+ * Kept inline (not extracted to a reusable component) — Phase 6.1 calls
+ * out other celebrations (trip created, RSVP confirmed) which will get
+ * their own screens, not a shared overlay.
+ */
+const CELEBRATION_DURATION_MS = 1500;
 
 export default function SignupScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const signUp = useSignUp();
   const googleSignIn = useGoogleSignIn();
+
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [celebrating, setCelebrating] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -23,6 +67,58 @@ export default function SignupScreen() {
     phone?: string;
     password?: string;
   }>({});
+
+  // ── Stagger fade-in (matches onboarding + login) ──────────────────────────
+  const logoOpacity     = useSharedValue(0);
+  const logoTranslate   = useSharedValue(20);
+  const heroOpacity     = useSharedValue(0);
+  const heroTranslate   = useSharedValue(28);
+  const formOpacity     = useSharedValue(0);
+  const formTranslate   = useSharedValue(28);
+  const footerOpacity   = useSharedValue(0);
+  const footerTranslate = useSharedValue(20);
+
+  useEffect(() => {
+    const cfg = { duration: 600, easing: Easing.out(Easing.cubic) };
+    logoOpacity.value     = withDelay(0,   withTiming(1, cfg));
+    logoTranslate.value   = withDelay(0,   withTiming(0, cfg));
+    heroOpacity.value     = withDelay(120, withTiming(1, cfg));
+    heroTranslate.value   = withDelay(120, withTiming(0, cfg));
+    formOpacity.value     = withDelay(260, withTiming(1, cfg));
+    formTranslate.value   = withDelay(260, withTiming(0, cfg));
+    footerOpacity.value   = withDelay(420, withTiming(1, cfg));
+    footerTranslate.value = withDelay(420, withTiming(0, cfg));
+  }, []);
+
+  const logoStyle   = useAnimatedStyle(() => ({ opacity: logoOpacity.value,   transform: [{ translateY: logoTranslate.value   }] }));
+  const heroStyle   = useAnimatedStyle(() => ({ opacity: heroOpacity.value,   transform: [{ translateY: heroTranslate.value   }] }));
+  const formStyle   = useAnimatedStyle(() => ({ opacity: formOpacity.value,   transform: [{ translateY: formTranslate.value   }] }));
+  const footerStyle = useAnimatedStyle(() => ({ opacity: footerOpacity.value, transform: [{ translateY: footerTranslate.value }] }));
+
+  // ── Celebration overlay ───────────────────────────────────────────────────
+  const celebrationBgOpacity   = useSharedValue(0);
+  const celebrationCheckScale  = useSharedValue(0);
+  const celebrationTextOpacity = useSharedValue(0);
+  const celebrationTextY       = useSharedValue(12);
+
+  const celebrationBgStyle = useAnimatedStyle(() => ({ opacity: celebrationBgOpacity.value }));
+  const celebrationCheckStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: celebrationCheckScale.value }],
+  }));
+  const celebrationTextStyle = useAnimatedStyle(() => ({
+    opacity: celebrationTextOpacity.value,
+    transform: [{ translateY: celebrationTextY.value }],
+  }));
+
+  /** Fire the celebration, then resolve when it's safe to navigate. */
+  function playCelebration(): Promise<void> {
+    setCelebrating(true);
+    celebrationBgOpacity.value   = withTiming(1, { duration: 180, easing: Easing.out(Easing.cubic) });
+    celebrationCheckScale.value  = withDelay(80,  withSpring(1, { damping: 11, stiffness: 160 }));
+    celebrationTextOpacity.value = withDelay(280, withTiming(1, { duration: 280, easing: Easing.out(Easing.cubic) }));
+    celebrationTextY.value       = withDelay(280, withTiming(0, { duration: 280, easing: Easing.out(Easing.cubic) }));
+    return new Promise((resolve) => setTimeout(resolve, CELEBRATION_DURATION_MS));
+  }
 
   function validate(): boolean {
     const errs: typeof errors = {};
@@ -40,7 +136,13 @@ export default function SignupScreen() {
     setGoogleLoading(true);
     try {
       const result = await googleSignIn();
-      if (result) router.replace('/(app)/(tabs)');
+      // Route new accounts through the traveler-profile setup step. The
+      // setup screen self-checks whether a profile already exists (claim
+      // flow may have pre-filled it) and skips through to tabs when so.
+      if (result) {
+        await playCelebration();
+        router.replace('/(app)/profile-setup');
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Google sign-in failed.';
       Alert.alert('Sign-in failed', message);
@@ -78,6 +180,7 @@ export default function SignupScreen() {
         } catch {
           // Silent — claim screen has Resend
         }
+        await playCelebration();
         router.replace({
           pathname: '/(auth)/claim-phone' as Parameters<typeof router.replace>[0] extends string
             ? string
@@ -87,15 +190,14 @@ export default function SignupScreen() {
         return;
       }
 
-      router.replace('/(app)/(tabs)');
+      await playCelebration();
+      router.replace('/(app)/profile-setup');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Signup failed.';
       const isDuplicate = message.toLowerCase().includes('already');
       Alert.alert(
         'Signup failed',
-        isDuplicate
-          ? 'An account with this email already exists.'
-          : message,
+        isDuplicate ? 'An account with this email already exists.' : message,
       );
     } finally {
       setLoading(false);
@@ -104,115 +206,223 @@ export default function SignupScreen() {
 
   return (
     <KeyboardAvoidingView
-      className="flex-1 bg-cream"
+      style={{ flex: 1, backgroundColor: T.cream }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView
-        contentContainerClassName="flex-grow justify-center px-6 py-12"
+        contentContainerStyle={{
+          flexGrow: 1,
+          paddingTop: insets.top + 24,
+          paddingBottom: insets.bottom + 32,
+          paddingHorizontal: 32,
+        }}
         keyboardShouldPersistTaps="handled"
       >
-        <View className="mb-10">
-          <Text
-            style={{ fontFamily: Platform.OS === 'android' ? 'serif' : 'Georgia' }}
-            className="text-5xl font-bold text-green"
-          >
-            rally
-          </Text>
-          <Text className="mt-2 text-base text-muted">
-            Join your group. Big trips ahead.
-          </Text>
-        </View>
+        {/* Brand mark */}
+        <Animated.View style={logoStyle}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: T.green }} />
+            <Text style={{ ...headlineFont.bold, fontSize: 20, color: T.green, letterSpacing: 1 }}>
+              RALLY
+            </Text>
+          </View>
+        </Animated.View>
 
-        <View className="gap-4">
-          {/* Google sign-in */}
+        {/* Headline */}
+        <Animated.View style={[{ marginTop: 64, marginBottom: 32 }, heroStyle]}>
+          <Text
+            style={{
+              ...headlineFont.bold,
+              fontSize: 44,
+              color: T.ink,
+              lineHeight: 48,
+              letterSpacing: -1.2,
+              marginBottom: 8,
+            }}
+          >
+            Get started.
+          </Text>
+          <Text style={{ fontSize: 16, color: T.muted, lineHeight: 24 }}>
+            One account, one link. Your group plans the rest.
+          </Text>
+        </Animated.View>
+
+        {/* Form */}
+        <Animated.View style={formStyle}>
+          {/* Google sign-in.
+              Layout lives on the inner View (static style) so NativeWind's
+              JSX runtime doesn't drop it on native — see investigation
+              2026-04-30. Pressable only toggles backgroundColor on press. */}
           <Pressable
             onPress={handleGoogleSignIn}
             disabled={googleLoading}
-            className="flex-row items-center justify-center gap-3 rounded-md border border-line bg-card py-3.5"
+            accessibilityRole="button"
+            style={{ alignSelf: 'stretch', marginBottom: 16 }}
           >
-            {googleLoading ? (
-              <Text className="text-sm font-medium text-muted">Signing in…</Text>
-            ) : (
-              <>
-                <Ionicons name="logo-google" size={18} color="#4285F4" />
-                <Text className="text-sm font-medium text-ink">Continue with Google</Text>
-              </>
+            {({ pressed }) => (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 12,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: T.line,
+                  backgroundColor: pressed ? T.creamWarm : T.card,
+                  paddingVertical: 14,
+                }}
+              >
+                {googleLoading ? (
+                  <Text style={{ fontSize: 14, fontWeight: '500', color: T.muted }}>
+                    Signing in…
+                  </Text>
+                ) : (
+                  <>
+                    <Ionicons name="logo-google" size={18} color="#4285F4" />
+                    <Text style={{ fontSize: 14, fontWeight: '500', color: T.ink }}>
+                      Continue with Google
+                    </Text>
+                  </>
+                )}
+              </View>
             )}
           </Pressable>
 
           {/* Divider */}
-          <View className="flex-row items-center gap-3">
-            <View className="h-px flex-1 bg-line" />
-            <Text className="text-xs text-muted">or sign up with email</Text>
-            <View className="h-px flex-1 bg-line" />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+            <View style={{ flex: 1, height: 1, backgroundColor: T.line }} />
+            <Text style={{ fontSize: 12, color: T.muted }}>or sign up with email</Text>
+            <View style={{ flex: 1, height: 1, backgroundColor: T.line }} />
           </View>
 
-          <View className="flex-row gap-3">
-            <View className="flex-1">
-              <Input
-                label="First name"
-                placeholder="Jane"
-                value={firstName}
-                onChangeText={setFirstName}
-                autoComplete="given-name"
-                autoCapitalize="words"
-                error={errors.firstName}
-              />
+          <View style={{ gap: 16 }}>
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <View style={{ flex: 1 }}>
+                <Input
+                  label="First name"
+                  placeholder="Jane"
+                  value={firstName}
+                  onChangeText={setFirstName}
+                  autoComplete="given-name"
+                  autoCapitalize="words"
+                  error={errors.firstName}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Input
+                  label="Last name"
+                  placeholder="Smith"
+                  value={lastName}
+                  onChangeText={setLastName}
+                  autoComplete="family-name"
+                  autoCapitalize="words"
+                  error={errors.lastName}
+                />
+              </View>
             </View>
-            <View className="flex-1">
-              <Input
-                label="Last name"
-                placeholder="Smith"
-                value={lastName}
-                onChangeText={setLastName}
-                autoComplete="family-name"
-                autoCapitalize="words"
-                error={errors.lastName}
-              />
-            </View>
+            <Input
+              label="Email"
+              placeholder="you@example.com"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+              error={errors.email}
+            />
+            <Input
+              label="Phone number"
+              placeholder="+1 555 000 0000"
+              value={phone}
+              onChangeText={setPhone}
+              keyboardType="phone-pad"
+              autoComplete="tel"
+              error={errors.phone}
+            />
+            <Input
+              label="Password"
+              placeholder="Min. 8 characters"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoComplete="new-password"
+              textContentType="oneTimeCode"
+              error={errors.password}
+            />
+
+            <Button onPress={handleSignup} loading={loading} fullWidth>
+              Create account
+            </Button>
           </View>
-          <Input
-            label="Email"
-            placeholder="you@example.com"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoComplete="email"
-            error={errors.email}
-          />
-          <Input
-            label="Phone number"
-            placeholder="+1 555 000 0000"
-            value={phone}
-            onChangeText={setPhone}
-            keyboardType="phone-pad"
-            autoComplete="tel"
-            error={errors.phone}
-          />
-          <Input
-            label="Password"
-            placeholder="Min. 8 characters"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            autoComplete="new-password"
-            textContentType="oneTimeCode"
-            error={errors.password}
-          />
+        </Animated.View>
 
-          <Button onPress={handleSignup} loading={loading} fullWidth className="mt-2">
-            I'm in, let's go
-          </Button>
-        </View>
-
-        <View className="mt-8 flex-row justify-center gap-1">
-          <Text className="text-muted">Already have an account?</Text>
-          <Link href="/(auth)/login" asChild>
-            <Text className="font-medium text-green">Log in</Text>
-          </Link>
-        </View>
+        {/* Footer */}
+        <Animated.View style={[{ marginTop: 32, alignItems: 'center' }, footerStyle]}>
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            <Text style={{ color: T.muted }}>Already have an account?</Text>
+            <Link href="/(auth)/login" asChild>
+              <Text style={{ fontWeight: '600', color: T.green }}>Log in</Text>
+            </Link>
+          </View>
+        </Animated.View>
       </ScrollView>
+
+      {/* Celebration overlay — shown for ~1500ms after a successful signup,
+          then the surrounding handler navigates to the next step. */}
+      {celebrating ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            {
+              position: 'absolute',
+              top: 0,
+              right: 0,
+              bottom: 0,
+              left: 0,
+              backgroundColor: T.cream,
+              alignItems: 'center',
+              justifyContent: 'center',
+              paddingHorizontal: 32,
+            },
+            celebrationBgStyle,
+          ]}
+        >
+          <Animated.View
+            style={[
+              {
+                width: 96,
+                height: 96,
+                borderRadius: 48,
+                backgroundColor: T.greenSoft,
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 24,
+              },
+              celebrationCheckStyle,
+            ]}
+          >
+            <Ionicons name="checkmark" size={52} color={T.green} />
+          </Animated.View>
+          <Animated.View style={celebrationTextStyle}>
+            <Text
+              style={{
+                ...headlineFont.bold,
+                fontSize: 36,
+                color: T.ink,
+                letterSpacing: -1,
+                textAlign: 'center',
+                marginBottom: 6,
+              }}
+            >
+              You're in.
+            </Text>
+            <Text style={{ fontSize: 16, color: T.muted, textAlign: 'center' }}>
+              Setting up your Rally…
+            </Text>
+          </Animated.View>
+        </Animated.View>
+      ) : null}
     </KeyboardAvoidingView>
   );
 }
