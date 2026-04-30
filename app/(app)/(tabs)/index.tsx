@@ -179,7 +179,12 @@ export default function HomeScreen() {
   const currentUserId = useAuthStore((s) => s.user?.id ?? null);
 
   function handleDelete(id: string) {
-    deleteTrip.mutate(id);
+    deleteTrip.mutate(id, {
+      onError: (err: unknown) => {
+        const message = err instanceof Error ? err.message : 'Please try again.';
+        Alert.alert("Couldn't delete trip", message);
+      },
+    });
   }
 
   function handleUpdatePrecise(tripId: string, precise: number | null) {
