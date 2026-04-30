@@ -22,6 +22,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getAdmin } from '../_sms-shared/supabase.ts';
+import { getPublishableKey } from '../_sms-shared/api-keys.ts';
 import { sendDm } from '../_sms-shared/dm-sender.ts';
 import { captureError, track } from '../_sms-shared/telemetry.ts';
 
@@ -118,7 +119,7 @@ Deno.serve(async (req: Request) => {
     if (!token) return jsonResponse({ ok: false, reason: 'missing_auth' }, 401);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+    const anonKey = getPublishableKey();
     if (!supabaseUrl || !anonKey) {
       return jsonResponse({ ok: false, reason: 'misconfigured' }, 500);
     }

@@ -23,6 +23,7 @@
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getAdmin } from '../_sms-shared/supabase.ts';
+import { getPublishableKey } from '../_sms-shared/api-keys.ts';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -46,9 +47,9 @@ Deno.serve(async (req: Request) => {
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const anonKey     = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+    const anonKey     = getPublishableKey();
     if (!supabaseUrl || !anonKey) {
-      console.error('[delete-account] missing SUPABASE_URL / SUPABASE_ANON_KEY');
+      console.error('[delete-account] missing SUPABASE_URL / publishable key');
       return jsonResponse({ ok: false, reason: 'server_misconfigured' }, 500);
     }
 

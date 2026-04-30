@@ -29,6 +29,7 @@
 
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { normalizePhone } from '../_sms-shared/phone.ts';
+import { getServiceRoleKey } from '../_sms-shared/api-keys.ts';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin':  '*',
@@ -141,7 +142,7 @@ function json(payload: unknown, status = 200): Response {
 
 function getServiceRoleClient(): SupabaseClient {
   const url = Deno.env.get('SUPABASE_URL') ?? '';
-  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const key = getServiceRoleKey();
   return createClient(url, key, { auth: { persistSession: false } });
 }
 

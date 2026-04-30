@@ -43,6 +43,7 @@ import { sendDm, broadcast } from '../_sms-shared/dm-sender.ts';
 import { personalizeBody } from '../_sms-shared/personalize.ts';
 import { pushToPlanner } from '../_sms-shared/planner-notify.ts';
 import { track, captureError } from '../_sms-shared/telemetry.ts';
+import { getServiceRoleKey } from '../_sms-shared/api-keys.ts';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -793,7 +794,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const serviceRoleKey = getServiceRoleKey();
   if (!supabaseUrl || !serviceRoleKey) {
     return jsonResponse({ ok: false, reason: 'misconfigured' }, 500);
   }

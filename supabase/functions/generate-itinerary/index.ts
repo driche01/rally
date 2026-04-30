@@ -13,6 +13,7 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getServiceRoleKey } from '../_sms-shared/api-keys.ts';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -281,7 +282,7 @@ Deno.serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    const serviceRoleKey = getServiceRoleKey();
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY') ?? '';
 
     if (!geminiApiKey) return json({ error: 'GEMINI_API_KEY not configured' }, 500);
