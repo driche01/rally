@@ -190,8 +190,12 @@ const stage = trip ? getTripStage(trip) : 'deciding';
   const decidedDurationLabel  = decidedDurationPoll?.poll_options.find((o) => o.id === decidedDurationPoll.decided_option_id)?.label ?? null;
   const decidedBudgetLabel    = budgetPoll?.poll_options.find((o) => o.id === budgetPoll.decided_option_id)?.label ?? null;
 
-  // Priority: planner-entered destination > decided poll > trip name
-  const destination = trip?.destination ?? decidedDestination2 ?? trip?.name ?? '';
+  // Only set when the destination is actually confirmed — either the
+  // planner entered one directly or the destination poll has been
+  // decided. We deliberately do NOT fall back to trip.name here so the
+  // hero card hides the location row until it's locked. The trip name
+  // is shown separately (heroTripName).
+  const destination = trip?.destination ?? decidedDestination2 ?? '';
   const dateRange = formatDateRange(trip?.start_date ?? null, trip?.end_date ?? null);
   const nights = calcNights(trip?.start_date ?? null, trip?.end_date ?? null);
   const whoIsIn = formatWhoIsIn(respondents);
