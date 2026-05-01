@@ -18,6 +18,7 @@
 import { getAdmin } from '../_sms-shared/supabase.ts';
 import { sendDm } from '../_sms-shared/dm-sender.ts';
 import { normalizePhone } from '../_sms-shared/phone.ts';
+import { formatShortDate } from '../_sms-shared/templates.ts';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -65,9 +66,10 @@ Deno.serve(async (req: Request) => {
 
     // Pull trip + planner context for personalization. share_token is
     // needed to construct the survey URL appended to the confirmation.
+    // responses_due_date drives the "finalize by" framing in the body.
     const { data: trip } = await admin
       .from('trips')
-      .select('id, name, destination, created_by, share_token')
+      .select('id, name, destination, created_by, share_token, responses_due_date')
       .eq('id', tripId)
       .maybeSingle();
     if (!trip) return jsonResponse({ ok: false, reason: 'trip_not_found' }, 200);
@@ -95,11 +97,14 @@ Deno.serve(async (req: Request) => {
 
     const planner = plannerFirstName ?? 'your planner';
     const dest = trip.destination ? ` to ${trip.destination}` : '';
+    const finalizeBy = trip.responses_due_date
+      ? ` ${planner} will finalize details by ${formatShortDate(trip.responses_due_date)}.`
+      : '';
     // TODO: re-append `: ${surveyBase}/respond/${trip.share_token}` once a
     // custom domain replaces netlify.app (carriers filter free-tier hosts).
     const body = rsvp === 'out'
       ? `Thanks for letting us know. ${planner} has been notified you can't make the trip${dest}. No more nudges from me.`
-      : `Got it — your survey for ${planner}'s trip${dest} is in. I'll text once the plan is locked. To update: tap your survey link anytime.`;
+      : `Thanks — your survey for ${planner}'s trip${dest} is in.${finalizeBy} You won't get any more nudges from me. Tap your survey link to update.`;
 
     // Per-day idempotency key prevents double-send when the survey is
     // re-submitted in quick succession.
@@ -111,6 +116,27 @@ Deno.serve(async (req: Request) => {
       idempotencyKey: idem,
       senderRole: 'rally_survey_confirm',
     });
+
+    // Eagerly skip any pending nudges for this participant. The scheduler
+    // also filters at fire time via hasResponded(), but skipping now keeps
+    // the planner's CadenceCard accurate — no ghost "next nudge" entries
+    // for a member who's already done.
+    if (session?.id) {
+      const { data: participant } = await admin
+        .from('trip_session_participants')
+        .select('id')
+        .eq('trip_session_id', session.id)
+        .eq('phone', phone)
+        .maybeSingle();
+      if (participant?.id) {
+        await admin
+          .from('nudge_sends')
+          .update({ skipped_at: new Date().toISOString(), skip_reason: 'already_responded' })
+          .eq('participant_id', participant.id)
+          .is('sent_at', null)
+          .is('skipped_at', null);
+      }
+    }
 
     return jsonResponse({ ok: !result.error, sid: result.sid, error: result.error });
   } catch (err) {

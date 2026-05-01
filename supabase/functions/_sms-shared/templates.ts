@@ -101,7 +101,7 @@ export interface NudgeBodyOpts {
   responsesDueDate?: string | null;
 }
 
-function formatShortDate(iso: string): string {
+export function formatShortDate(iso: string): string {
   // "Mon May 6" — same shape as src/lib/cadence.ts formatCadenceDate so the
   // app preview and the actual SMS body stay visually consistent.
   const d = new Date(iso + 'T16:00:00.000Z');

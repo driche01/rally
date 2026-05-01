@@ -64,6 +64,7 @@ interface Trip {
   book_by_date: string | null;
   responses_due_date: string | null;
   custom_intro_sms: string | null;
+  finalize_prompt_sent_at?: string | null;
 }
 
 interface Participant {
@@ -539,6 +540,8 @@ async function skip(admin: SupabaseClient, rowId: string, reason: string): Promi
  */
 async function seedAllActive(admin: SupabaseClient): Promise<{
   sessions: number; inserted: number; recommendations_created: number; synths_sent: number;
+  finalize_prompts_fired: number;
+  finalize_checks: Array<{ trip_id: string; ready: boolean; trigger: string | null; reason?: string; detail?: Record<string, unknown> }>;
 }> {
   const { data: sessions, error } = await admin
     .from('trip_sessions')
@@ -547,18 +550,20 @@ async function seedAllActive(admin: SupabaseClient): Promise<{
     .not('trip_id', 'is', null);
   if (error) {
     console.error('[scheduler] sessions query failed:', error.message);
-    return { sessions: 0, inserted: 0, recommendations_created: 0, synths_sent: 0 };
+    return { sessions: 0, inserted: 0, recommendations_created: 0, synths_sent: 0, finalize_prompts_fired: 0, finalize_checks: [] };
   }
 
   let totalInserted = 0;
   let sessionCount = 0;
   let recsCreated = 0;
   let synthsSent = 0;
+  let finalizePromptsFired = 0;
+  const finalizeChecks: Array<{ trip_id: string; ready: boolean; trigger: string | null; reason?: string; detail?: Record<string, unknown> }> = [];
 
   for (const ses of (sessions ?? []) as ActiveSession[]) {
     const { data: trip } = await admin
       .from('trips')
-      .select('id, share_token, destination, book_by_date, responses_due_date, custom_intro_sms')
+      .select('id, share_token, destination, book_by_date, responses_due_date, custom_intro_sms, finalize_prompt_sent_at')
       .eq('id', ses.trip_id)
       .maybeSingle();
     if (!trip || !trip.book_by_date || !trip.responses_due_date) continue;
@@ -592,6 +597,38 @@ async function seedAllActive(admin: SupabaseClient): Promise<{
     });
     if (synthResult.sent) synthsSent++;
 
+    // Phase 1 of the trip-finalize flow. Once everyone's weighed in (or
+    // book_by_date hits), text the planner a deep link asking them to
+    // review and lock the trip. trips.finalize_prompt_sent_at is the
+    // idempotency guard — checked here AND inside the prompt function.
+    if (!trip.finalize_prompt_sent_at) {
+      const finalizeCheck = await isFinalizeReady(
+        admin,
+        trip as Trip,
+        (participants ?? []) as Participant[],
+      );
+      console.log(
+        `[scheduler] finalize-check trip=${trip.id} ready=${finalizeCheck.ready} ` +
+          `trigger=${finalizeCheck.trigger ?? '-'} reason=${finalizeCheck.reason ?? '-'} ` +
+          `detail=${JSON.stringify(finalizeCheck.detail ?? {})}`,
+      );
+      finalizeChecks.push({ trip_id: trip.id, ...finalizeCheck });
+      if (finalizeCheck.ready) {
+        // Make sure recommendations exist before pinging the planner —
+        // the dashboard banner (Phase 2) will surface these.
+        await generateRecommendationsForTrip(admin, trip.id).catch(() => 0);
+        const fired = await fireFinalizePrompt(trip.id);
+        if (fired) finalizePromptsFired++;
+        track('finalize_prompt_fired', {
+          distinct_id: trip.id,
+          trip_id: trip.id,
+          trigger: finalizeCheck.trigger,
+          ok: fired,
+          trip_model: '1to1',
+        }).catch(() => {});
+      }
+    }
+
     // Auto-generate recommendations once responses_due is reached. The
     // responses-due-passes screen surfaces them to the planner; the
     // recommendation engine is idempotent (one pending row per poll).
@@ -608,7 +645,149 @@ async function seedAllActive(admin: SupabaseClient): Promise<{
     sessionCount++;
   }
 
-  return { sessions: sessionCount, inserted: totalInserted, recommendations_created: recsCreated, synths_sent: synthsSent };
+  return {
+    sessions: sessionCount,
+    inserted: totalInserted,
+    recommendations_created: recsCreated,
+    synths_sent: synthsSent,
+    finalize_prompts_fired: finalizePromptsFired,
+    finalize_checks: finalizeChecks,
+  };
+}
+
+/**
+ * Phase 1 of the trip-finalize flow: detect whether a trip is "ready to
+ * lock". Two paths fire the prompt:
+ *   1. book_by_date has been reached (today >= book_by_date)
+ *   2. every active+attending non-planner participant has answered every
+ *      poll on the trip whose status is not 'decided'
+ *
+ * Returns false when there are no undecided polls AND book_by hasn't
+ * passed — in that case the planner has manually decided everything and
+ * doesn't need a prompt to "review group input".
+ */
+async function isFinalizeReady(
+  admin: SupabaseClient,
+  trip: Trip,
+  participants: Participant[],
+): Promise<{
+  ready: boolean;
+  trigger: 'book_by_passed' | 'all_responded' | null;
+  reason?: string;
+  detail?: Record<string, unknown>;
+}> {
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const bookByPassed = !!(trip.book_by_date && trip.book_by_date <= todayIso);
+
+  const { data: undecidedPolls } = await admin
+    .from('polls')
+    .select('id')
+    .eq('trip_id', trip.id)
+    .neq('status', 'decided');
+  const polls = ((undecidedPolls ?? []) as { id: string }[]);
+
+  if (bookByPassed) return { ready: true, trigger: 'book_by_passed' };
+
+  // No undecided polls + book_by not passed → planner already decided
+  // everything; no review prompt needed.
+  if (polls.length === 0) {
+    return { ready: false, trigger: null, reason: 'no_undecided_polls' };
+  }
+
+  const members = participants.filter(
+    (p) => p.status === 'active' && p.is_attending && !p.is_planner,
+  );
+  if (members.length === 0) {
+    return { ready: false, trigger: null, reason: 'no_active_members' };
+  }
+
+  // Normalize phones on both sides — participant.phone is canonical e164,
+  // but respondent.phone falls back to raw if un-normalizable, so do not
+  // assume formats match without normalization.
+  const memberPhones = new Set(members.map((m) => normalizeForJoin(m.phone)));
+
+  const { data: respondents } = await admin
+    .from('respondents')
+    .select('id, phone')
+    .eq('trip_id', trip.id);
+  const resp = ((respondents ?? []) as { id: string; phone: string | null }[]);
+
+  // Map normalized phone → respondent id (newest wins if duplicates).
+  const respByPhone = new Map<string, string>();
+  for (const r of resp) {
+    if (!r.phone) continue;
+    respByPhone.set(normalizeForJoin(r.phone), r.id);
+  }
+
+  const missingMembers: string[] = [];
+  const respondentIds: string[] = [];
+  for (const phone of memberPhones) {
+    const rid = respByPhone.get(phone);
+    if (!rid) missingMembers.push(phone);
+    else respondentIds.push(rid);
+  }
+  if (missingMembers.length > 0) {
+    return {
+      ready: false,
+      trigger: null,
+      reason: 'members_without_respondent',
+      detail: { missing_phones: missingMembers, member_count: members.length },
+    };
+  }
+
+  const pollIds = polls.map((p) => p.id);
+  const { data: votes } = await admin
+    .from('poll_responses')
+    .select('respondent_id, poll_id')
+    .in('poll_id', pollIds)
+    .in('respondent_id', respondentIds);
+  const voteRows = ((votes ?? []) as { respondent_id: string; poll_id: string }[]);
+  const have = new Set(voteRows.map((v) => `${v.respondent_id}:${v.poll_id}`));
+  const missingVotes: Array<{ respondent_id: string; poll_id: string }> = [];
+  for (const rid of respondentIds) {
+    for (const pid of pollIds) {
+      if (!have.has(`${rid}:${pid}`)) missingVotes.push({ respondent_id: rid, poll_id: pid });
+    }
+  }
+  if (missingVotes.length > 0) {
+    return {
+      ready: false,
+      trigger: null,
+      reason: 'members_with_unanswered_polls',
+      detail: { missing_count: missingVotes.length, sample: missingVotes.slice(0, 3) },
+    };
+  }
+  return { ready: true, trigger: 'all_responded' };
+}
+
+function normalizeForJoin(phone: string | null): string {
+  if (!phone) return '';
+  return phone.replace(/[^\d+]/g, '').toLowerCase();
+}
+
+/**
+ * Calls sms-trip-finalize-prompt to text the planner. The downstream
+ * function double-checks finalize_prompt_sent_at server-side and stamps
+ * it on success, so this call is safe to retry.
+ */
+async function fireFinalizePrompt(tripId: string): Promise<boolean> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+  const serviceRoleKey = getServiceRoleKey();
+  if (!supabaseUrl || !serviceRoleKey) return false;
+  try {
+    const res = await fetch(`${supabaseUrl}/functions/v1/sms-trip-finalize-prompt`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${serviceRoleKey}`,
+      },
+      body: JSON.stringify({ trip_id: tripId }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.error('[scheduler] finalize prompt invoke failed:', err);
+    return false;
+  }
 }
 
 /**

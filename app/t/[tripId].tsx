@@ -2,25 +2,25 @@
  * Universal-link trip route — `/t/<tripId>`
  *
  * Job:
- *   - Native (iOS/Android with the app installed): never renders. Universal
- *     links route directly into the in-app trip detail via `associatedDomains`
- *     in app.json.
- *   - Web (without the app): renders the public landing page in trip-context
- *     mode — same layout as `/`, but the hero foregrounds the user's trip
- *     and email signups attribute to `beta_signups.trip_id`.
- *
- * Previous standalone "Your trip is waiting / I don't have Rally yet"
- * interstitial was removed in favor of this contextual landing — fewer
- * clicks, trip context preserved through to signup.
+ *   - Native + signed-in planner/member: redirect to the in-app trip
+ *     dashboard at `/(app)/trips/<tripId>` so deep-linked SMS prompts
+ *     (e.g. "review and lock the trip") land the planner exactly where
+ *     they need to be.
+ *   - Native + not signed in (or web): render the public landing page in
+ *     trip-context mode — same layout as `/`, but the hero foregrounds the
+ *     user's trip and email signups attribute to `beta_signups.trip_id`.
  */
 import { useEffect } from 'react';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Platform } from 'react-native';
 import LandingPage from '@/components/landing/LandingPage';
 import { capture, Events } from '@/lib/analytics';
+import { useAuthStore } from '@/stores/authStore';
 
 export default function TripUniversalLink() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
+  const router = useRouter();
+  const session = useAuthStore((s) => s.session);
 
   useEffect(() => {
     if (!tripId) return;
@@ -30,6 +30,12 @@ export default function TripUniversalLink() {
       platform: Platform.OS,
     });
   }, [tripId]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    if (!tripId || !session) return;
+    router.replace(`/(app)/trips/${tripId}` as Parameters<typeof router.replace>[0]);
+  }, [tripId, session, router]);
 
   return <LandingPage tripId={tripId} source="trip_link" />;
 }
