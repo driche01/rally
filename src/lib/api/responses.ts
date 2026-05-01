@@ -1,4 +1,5 @@
 import { supabase } from '../supabase';
+import { parseDateRangeLabel } from '@/lib/pollFormUtils';
 
 /**
  * Returns vote counts per option, grouped by poll.
@@ -117,6 +118,83 @@ export async function getRespondentCountsForTrip(
     perPoll[pid] = perPollSets[pid].size;
   }
   return { totalRespondents: totalSet.size, perPoll };
+}
+
+/**
+ * For each *decided* poll on the trip, return how many distinct respondents
+ * voted for the planner's locked option(s) ("aligned") vs how many voted
+ * on the poll at all ("total"). Drives the "X of Y agreed" badge on the
+ * planner dashboard's Live results card.
+ *
+ * Alignment definition:
+ *   • destination/duration/budget/custom — voted for decided_option_id.
+ *   • dates — voted for *every* option whose date label falls inside
+ *     [trips.start_date, trips.end_date]. Anything less than fully-aligned
+ *     is not counted (a respondent only free 2 of 3 locked days didn't
+ *     "agree" with the picked range).
+ */
+export async function getAlignedVoteCountsForTrip(
+  tripId: string,
+): Promise<Record<string, { aligned: number; total: number }>> {
+  const { data: polls } = await supabase
+    .from('polls')
+    .select('id, type, decided_option_id, status, poll_options(id, label)')
+    .eq('trip_id', tripId)
+    .eq('status', 'decided');
+  if (!polls || polls.length === 0) return {};
+
+  const { data: trip } = await supabase
+    .from('trips')
+    .select('start_date, end_date')
+    .eq('id', tripId)
+    .maybeSingle();
+
+  const result: Record<string, { aligned: number; total: number }> = {};
+  type PollRow = {
+    id: string;
+    type: string;
+    decided_option_id: string | null;
+    poll_options: { id: string; label: string }[] | null;
+  };
+
+  for (const p of polls as PollRow[]) {
+    const decidedSet = new Set<string>();
+    if (p.type === 'dates' && trip?.start_date) {
+      const startMs = new Date(trip.start_date + 'T00:00:00').getTime();
+      const endMs = new Date((trip.end_date ?? trip.start_date) + 'T23:59:59').getTime();
+      for (const o of p.poll_options ?? []) {
+        const r = parseDateRangeLabel(o.label);
+        if (!r) continue;
+        const t = r.start.getTime();
+        if (t >= startMs && t <= endMs) decidedSet.add(o.id);
+      }
+    } else if (p.decided_option_id) {
+      decidedSet.add(p.decided_option_id);
+    }
+    if (decidedSet.size === 0) continue;
+
+    const { data: votes } = await supabase
+      .from('poll_responses')
+      .select('respondent_id, option_id')
+      .eq('poll_id', p.id);
+    const byRespondent = new Map<string, Set<string>>();
+    for (const v of (votes ?? []) as { respondent_id: string; option_id: string | null }[]) {
+      if (!byRespondent.has(v.respondent_id)) byRespondent.set(v.respondent_id, new Set());
+      if (v.option_id) byRespondent.get(v.respondent_id)!.add(v.option_id);
+    }
+
+    let aligned = 0;
+    for (const [, voteSet] of byRespondent) {
+      let allIn = true;
+      for (const dop of decidedSet) {
+        if (!voteSet.has(dop)) { allIn = false; break; }
+      }
+      if (allIn) aligned++;
+    }
+    result[p.id] = { aligned, total: byRespondent.size };
+  }
+
+  return result;
 }
 
 /**

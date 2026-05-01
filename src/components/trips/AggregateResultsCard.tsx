@@ -17,6 +17,7 @@ import {
   getResponseCountsForTrip,
   getNumericResponseCountsForTrip,
   getRespondentCountsForTrip,
+  getAlignedVoteCountsForTrip,
 } from '@/lib/api/responses';
 import {
   comparePollsByFormOrder,
@@ -76,6 +77,16 @@ export function AggregateResultsCard({ tripId }: Props) {
     refetchInterval: 5_000,
   });
 
+  // For each decided poll, aligned = respondents who voted for the
+  // planner's locked option(s); total = respondents who voted on the
+  // poll. Drives the "X of Y agreed" badge on locked rows.
+  const { data: aligned = {} } = useQuery<Record<string, { aligned: number; total: number }>>({
+    queryKey: ['poll_aligned_counts', tripId],
+    queryFn: () => getAlignedVoteCountsForTrip(tripId),
+    enabled: Boolean(tripId),
+    refetchInterval: 30_000,
+  });
+
   // Distinct-respondent counts: people-not-votes. Used for the header
   // total and the per-poll badge so multi-select polls (dates,
   // destination) don't inflate the headline number.
@@ -125,6 +136,7 @@ export function AggregateResultsCard({ tripId }: Props) {
           pollRespondents={respondentCounts.perPoll[poll.id] ?? 0}
           tripStartDate={trip?.start_date ?? null}
           tripEndDate={trip?.end_date ?? null}
+          alignment={aligned[poll.id] ?? null}
         />
       ))}
     </View>
@@ -143,9 +155,12 @@ interface PollBarsProps {
    *  line for dates polls (decided_option_id is best-effort there). */
   tripStartDate?: string | null;
   tripEndDate?: string | null;
+  /** For decided polls: how many respondents voted for the planner's
+   *  locked option(s) out of the total who voted on this poll. */
+  alignment?: { aligned: number; total: number } | null;
 }
 
-function PollBars({ poll, counts, numericCounts = {}, pollRespondents, tripStartDate, tripEndDate }: PollBarsProps) {
+function PollBars({ poll, counts, numericCounts = {}, pollRespondents, tripStartDate, tripEndDate, alignment }: PollBarsProps) {
   const [userOpen, setUserOpen] = useState(false);
   const totalVotes = Object.values(counts).reduce((a, b) => a + b, 0);
   const numericTotal = Object.values(numericCounts).reduce((a, b) => a + b, 0);
@@ -222,7 +237,8 @@ function PollBars({ poll, counts, numericCounts = {}, pollRespondents, tripStart
         // matches the "Bali, Indonesia · planner pick" look used by
         // destination/duration. Per the design ask, dates and budget
         // also collapse to text once locked instead of staying on the
-        // calendar / bar chart.
+        // calendar / bar chart. When respondents voted on the poll, swap
+        // the "planner pick" hint for "X of Y agreed".
         (() => {
           let summary: string | null = null;
           if (poll.type === 'dates' && tripStartDate) {
@@ -230,13 +246,16 @@ function PollBars({ poll, counts, numericCounts = {}, pollRespondents, tripStart
           } else if (decidedId) {
             summary = poll.poll_options.find((o) => o.id === decidedId)?.label ?? null;
           }
+          const hint = alignment && alignment.total > 0
+            ? `${alignment.aligned} of ${alignment.total} agreed`
+            : 'planner pick';
           return (
             <View style={styles.decidedNoVotesRow}>
               <Ionicons name="checkmark-circle" size={14} color="#0F3F2E" />
               <Text style={styles.decidedNoVotesLabel} numberOfLines={1}>
                 {summary ?? 'Locked'}
               </Text>
-              <Text style={styles.decidedNoVotesHint}>planner pick</Text>
+              <Text style={styles.decidedNoVotesHint}>{hint}</Text>
             </View>
           );
         })()
