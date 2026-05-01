@@ -32,9 +32,11 @@ interface Props {
 }
 
 function confidencePill(confidence: number | null): { label: string; tone: 'high' | 'mid' | 'low' | 'unknown' } {
+  // confidence = winner.works_for / total_respondents.
+  // ≥ 0.8 = High, ≥ 0.5 = Medium, < 0.5 = Low.
   if (confidence === null) return { label: 'No data', tone: 'unknown' };
-  if (confidence >= 0.5) return { label: 'High confidence', tone: 'high' };
-  if (confidence >= 0.2) return { label: 'Medium confidence', tone: 'mid' };
+  if (confidence >= 0.8) return { label: 'High confidence', tone: 'high' };
+  if (confidence >= 0.5) return { label: 'Medium confidence', tone: 'mid' };
   return { label: 'Low confidence', tone: 'low' };
 }
 

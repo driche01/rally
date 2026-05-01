@@ -947,8 +947,10 @@ async function computeRecommendationRow(
   });
   const winnerId = sorted[0]?.[0] ?? null;
   const winnerCount = sorted[0]?.[1] ?? 0;
-  const runnerUp = sorted[1]?.[1] ?? 0;
-  const confidence = total > 0 ? Number(((winnerCount - runnerUp) / total).toFixed(2)) : null;
+  // Confidence = share of respondents the winning option works for.
+  // (Multi-select polls can have many tied options; "margin of lead"
+  // misreports those even when the winner works for everyone.)
+  const confidence = total > 0 ? Number((winnerCount / total).toFixed(2)) : null;
   const winnerLabel = winnerId ? labelByOption.get(winnerId) ?? null : null;
 
   // Holdouts: active+attending non-planner participants in the trip's
