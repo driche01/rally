@@ -13,6 +13,7 @@ import {
 } from '@/lib/api/recommendations';
 import { getPollsForTrip } from '@/lib/api/polls';
 import { tripKeys } from './useTrips';
+import type { PollRecommendation } from '@/lib/api/recommendations';
 
 export const recommendationKeys = {
   forTrip: (tripId: string) => ['poll_recommendations', tripId] as const,
@@ -44,7 +45,40 @@ export function useApproveRecommendation(tripId: string | undefined) {
     mutationFn: ({ recommendationId, overrideOptionId }: {
       recommendationId: string; overrideOptionId?: string | null;
     }) => approveRecommendation(recommendationId, overrideOptionId ?? null),
-    onSuccess: () => {
+    // Optimistic flip: stamp the rec as approved + set planner_action_at
+    // before the network roundtrip resolves, so the dashboard's "Just
+    // locked · Undo within 5 min" treatment shows up the same frame the
+    // user taps Lock in. Server response then confirms or rolls back.
+    onMutate: async ({ recommendationId, overrideOptionId }) => {
+      if (!tripId) return { previous: undefined };
+      await qc.cancelQueries({ queryKey: recommendationKeys.forTrip(tripId) });
+      const previous = qc.getQueryData<PollRecommendation[]>(
+        recommendationKeys.forTrip(tripId),
+      );
+      if (previous) {
+        const now = new Date().toISOString();
+        qc.setQueryData<PollRecommendation[]>(
+          recommendationKeys.forTrip(tripId),
+          previous.map((r) =>
+            r.id === recommendationId
+              ? {
+                  ...r,
+                  status: overrideOptionId ? 'edited' : 'approved',
+                  planner_action_at: now,
+                  recommended_option_id: overrideOptionId ?? r.recommended_option_id,
+                }
+              : r,
+          ),
+        );
+      }
+      return { previous };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (tripId && ctx?.previous) {
+        qc.setQueryData(recommendationKeys.forTrip(tripId), ctx.previous);
+      }
+    },
+    onSettled: () => {
       if (tripId) {
         qc.invalidateQueries({ queryKey: recommendationKeys.forTrip(tripId) });
         qc.invalidateQueries({ queryKey: tripKeys.detail(tripId) });
@@ -64,7 +98,31 @@ export function useApproveRecommendationWithDates(tripId: string | undefined) {
     mutationFn: ({ recommendationId, dates }: {
       recommendationId: string; dates: string[];
     }) => approveRecommendationWithDates(recommendationId, dates),
-    onSuccess: () => {
+    onMutate: async ({ recommendationId }) => {
+      if (!tripId) return { previous: undefined };
+      await qc.cancelQueries({ queryKey: recommendationKeys.forTrip(tripId) });
+      const previous = qc.getQueryData<PollRecommendation[]>(
+        recommendationKeys.forTrip(tripId),
+      );
+      if (previous) {
+        const now = new Date().toISOString();
+        qc.setQueryData<PollRecommendation[]>(
+          recommendationKeys.forTrip(tripId),
+          previous.map((r) =>
+            r.id === recommendationId
+              ? { ...r, status: 'edited', planner_action_at: now }
+              : r,
+          ),
+        );
+      }
+      return { previous };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (tripId && ctx?.previous) {
+        qc.setQueryData(recommendationKeys.forTrip(tripId), ctx.previous);
+      }
+    },
+    onSettled: () => {
       if (tripId) {
         qc.invalidateQueries({ queryKey: recommendationKeys.forTrip(tripId) });
         qc.invalidateQueries({ queryKey: tripKeys.detail(tripId) });
