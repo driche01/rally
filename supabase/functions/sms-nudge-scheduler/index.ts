@@ -883,54 +883,73 @@ async function computeRecommendationRow(
 ): Promise<Record<string, unknown> | null> {
   const { data: poll } = await admin
     .from('polls')
-    .select('id, status, trip_id')
+    .select('id, status, type, trip_id')
     .eq('id', pollId)
     .maybeSingle();
   if (!poll || poll.status === 'decided') return null;
 
-  const { data: responses } = await admin
-    .from('poll_responses')
-    .select('option_id')
+  // All option rows for this poll (label + position needed for the
+  // works-for compute and the position-ASC tiebreak).
+  const { data: optionsData } = await admin
+    .from('poll_options')
+    .select('id, label, position')
     .eq('poll_id', pollId);
-  const counts = new Map<string, number>();
-  for (const r of (responses ?? []) as { option_id: string }[]) {
-    counts.set(r.option_id, (counts.get(r.option_id) ?? 0) + 1);
-  }
-  // Lookup display position so we can break ties deterministically.
-  // Budget polls store options in ascending price order, so position-ASC
-  // resolves a tie to the lower price point.
-  const optionIds = Array.from(counts.keys());
+  const allOptions = ((optionsData ?? []) as { id: string; label: string; position: number }[]);
   const positionByOption = new Map<string, number>();
-  if (optionIds.length > 0) {
-    const { data: opts } = await admin
-      .from('poll_options')
-      .select('id, position')
-      .in('id', optionIds);
-    for (const o of (opts ?? []) as { id: string; position: number }[]) {
-      positionByOption.set(o.id, o.position);
-    }
+  const labelByOption = new Map<string, string>();
+  for (const o of allOptions) {
+    positionByOption.set(o.id, o.position);
+    labelByOption.set(o.id, o.label);
   }
+
+  // Per-respondent vote sets. Lets us compute "respondents this option
+  // works for" — which for budget polls factors in the implicit-acceptance
+  // rule (a pick at position P implies acceptance of every cheaper option).
+  const { data: votes } = await admin
+    .from('poll_responses')
+    .select('respondent_id, option_id')
+    .eq('poll_id', pollId);
+  const respondentPicks = new Map<string, Set<string>>();
+  for (const v of (votes ?? []) as { respondent_id: string; option_id: string | null }[]) {
+    if (!v.option_id) continue;
+    if (!respondentPicks.has(v.respondent_id)) respondentPicks.set(v.respondent_id, new Set());
+    respondentPicks.get(v.respondent_id)!.add(v.option_id);
+  }
+  const total = respondentPicks.size;
+
+  // For each option, count distinct respondents the option works for.
+  // Budget: a respondent's pick at position P means options 0..P all work.
+  // Other polls: an option works for someone iff they explicitly picked it.
+  const counts = new Map<string, number>();
+  for (const o of allOptions) {
+    let n = 0;
+    for (const [, picks] of respondentPicks) {
+      if (poll.type === 'budget') {
+        // Did this respondent pick anything at-or-above O.position?
+        let works = false;
+        for (const pickId of picks) {
+          const pickPos = positionByOption.get(pickId);
+          if (pickPos !== undefined && pickPos >= o.position) { works = true; break; }
+        }
+        if (works) n++;
+      } else if (picks.has(o.id)) {
+        n++;
+      }
+    }
+    counts.set(o.id, n);
+  }
+
   const sorted = Array.from(counts.entries()).sort((a, b) => {
     if (b[1] !== a[1]) return b[1] - a[1];
     const pa = positionByOption.get(a[0]) ?? Number.MAX_SAFE_INTEGER;
     const pb = positionByOption.get(b[0]) ?? Number.MAX_SAFE_INTEGER;
     return pa - pb;
   });
-  const total = (responses ?? []).length;
   const winnerId = sorted[0]?.[0] ?? null;
   const winnerCount = sorted[0]?.[1] ?? 0;
   const runnerUp = sorted[1]?.[1] ?? 0;
   const confidence = total > 0 ? Number(((winnerCount - runnerUp) / total).toFixed(2)) : null;
-
-  let winnerLabel: string | null = null;
-  if (winnerId) {
-    const { data: opt } = await admin
-      .from('poll_options')
-      .select('label')
-      .eq('id', winnerId)
-      .maybeSingle();
-    winnerLabel = opt?.label ?? null;
-  }
+  const winnerLabel = winnerId ? labelByOption.get(winnerId) ?? null : null;
 
   // Holdouts: active+attending non-planner participants in the trip's
   // active session who haven't voted on this poll.
@@ -968,7 +987,7 @@ async function computeRecommendationRow(
   }
 
   const text = winnerLabel
-    ? `${winnerLabel} leads with ${winnerCount} of ${total} votes${holdoutIds.length > 0 ? ` (${holdoutIds.length} still haven't voted)` : ''}.`
+    ? `${winnerLabel} works for ${winnerCount} of ${total} ${total === 1 ? 'respondent' : 'respondents'}${holdoutIds.length > 0 ? ` (${holdoutIds.length} still haven't voted)` : ''}.`
     : 'No clear leader yet — wait for more responses or pick manually.';
 
   const breakdown: Record<string, number> = {};
