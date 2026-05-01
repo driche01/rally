@@ -466,9 +466,23 @@ const stage = trip ? getTripStage(trip) : 'deciding';
           accessibilityLabel={canEditTrip ? 'Edit rally details' : undefined}
           style={[styles.heroCard, { backgroundColor: hero.bg }]}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          {/* Top row: stage eyebrow on the left, chevron cue on the right
+              for planners (signals the whole card is tappable → edit). */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <Text style={[styles.heroBadge, { color: hero.badgeColor }]}>{hero.badge}</Text>
+            {canEditTrip ? (
+              <Ionicons name="chevron-forward" size={18} color={hero.badgeColor} />
+            ) : null}
           </View>
+
+          {/* Trip name — eyebrow-style, sits above the location. */}
+          {trip?.name ? (
+            <Text style={[styles.heroTripName, { color: hero.subtitleColor }]} numberOfLines={1}>
+              {trip.name}
+            </Text>
+          ) : null}
+
+          {/* Location — primary visual. Tappable opens the maps sheet. */}
           {destination ? (
             <Pressable
               onPress={(e) => { e.stopPropagation(); openMapsSheet(); }}
@@ -480,9 +494,13 @@ const stage = trip ? getTripStage(trip) : 'deciding';
               </Text>
             </Pressable>
           ) : null}
+
+          {/* Date — secondary, slightly smaller than the location. */}
           {dateDisplay ? (
-            <Text style={[styles.heroTitle, { color: hero.titleColor }]}>{dateDisplay}</Text>
+            <Text style={[styles.heroDate, { color: hero.titleColor }]}>{dateDisplay}</Text>
           ) : null}
+
+          {/* Participants line ("D R and David Riche are all in"). */}
           {whoIsIn ? (
             <Text style={[styles.heroSubtitle, { color: hero.subtitleColor }]}>{whoIsIn}</Text>
           ) : null}
@@ -566,7 +584,9 @@ const styles = StyleSheet.create({
   // Hero
   heroCard: { borderRadius: 24, padding: 24, gap: 10, marginBottom: 8 },
   heroBadge: { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase' },
+  heroTripName: { fontSize: 14, fontWeight: '500', letterSpacing: 0.2 },
   heroTitle: { fontSize: 30, fontFamily: 'SpaceGrotesk_700Bold', lineHeight: 36 },
+  heroDate: { fontSize: 22, fontFamily: 'SpaceGrotesk_700Bold', lineHeight: 28 },
   heroSubtitle: { fontSize: 15, lineHeight: 22 },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 2 },
   pill: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999 },
