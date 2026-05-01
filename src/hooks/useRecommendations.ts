@@ -1,6 +1,7 @@
 /**
  * Hooks for the dashboard decision queue.
  */
+import { useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getPendingRecommendations,
@@ -10,6 +11,7 @@ import {
   holdRecommendation,
   undoPollLock,
 } from '@/lib/api/recommendations';
+import { getPollsForTrip } from '@/lib/api/polls';
 import { tripKeys } from './useTrips';
 
 export const recommendationKeys = {
@@ -88,6 +90,58 @@ export function useUndoPollLock(tripId: string | undefined) {
       }
     },
   });
+}
+
+/**
+ * On dashboard mount, ensure every still-live poll has a pending
+ * recommendation. The RPC is idempotent (returns "existed" when a row
+ * already exists), so calling it for every undecided poll is a cheap
+ * no-op when recs are already there. Closes the gap between the cron
+ * scheduler's 15-min tick and the planner opening the trip — recs show
+ * up immediately on dashboard load instead of waiting on the next tick.
+ */
+export function useAutoGenerateRecommendations(tripId: string | undefined) {
+  const qc = useQueryClient();
+  const ranForTrip = useRef<string | null>(null);
+
+  // Load polls + current pending recs so we know what's missing.
+  const { data: polls } = useQuery({
+    queryKey: ['polls', tripId, 'auto_rec'],
+    queryFn: () => getPollsForTrip(tripId!),
+    enabled: Boolean(tripId),
+    staleTime: 30_000,
+  });
+  const { data: recs } = useQuery({
+    queryKey: recommendationKeys.forTrip(tripId ?? ''),
+    queryFn: () => getPendingRecommendations(tripId!),
+    enabled: Boolean(tripId),
+  });
+
+  useEffect(() => {
+    if (!tripId || !polls || !recs) return;
+    if (ranForTrip.current === tripId) return; // once per trip per session
+
+    const livePolls = polls.filter((p) => p.status === 'live');
+    if (livePolls.length === 0) return;
+
+    const pollsWithPendingRec = new Set(
+      recs.filter((r) => r.status === 'pending').map((r) => r.poll_id),
+    );
+    const pollsToRequest = livePolls.filter((p) => !pollsWithPendingRec.has(p.id));
+    if (pollsToRequest.length === 0) return;
+
+    ranForTrip.current = tripId;
+    (async () => {
+      let any = false;
+      for (const p of pollsToRequest) {
+        const r = await requestRecommendation(p.id).catch(() => ({ ok: false }));
+        if (r.ok) any = true;
+      }
+      if (any) {
+        qc.invalidateQueries({ queryKey: recommendationKeys.forTrip(tripId) });
+      }
+    })();
+  }, [tripId, polls, recs, qc]);
 }
 
 export function useHoldRecommendation(tripId: string | undefined) {

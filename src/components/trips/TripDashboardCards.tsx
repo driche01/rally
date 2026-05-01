@@ -21,6 +21,7 @@ import { DecisionQueueCard } from './DecisionQueueCard';
 import { CadenceCard } from './CadenceCard';
 import { AggregateResultsCard } from './AggregateResultsCard';
 import { GroupPreferencesCard } from './GroupPreferencesCard';
+import { useAutoGenerateRecommendations } from '@/hooks/useRecommendations';
 
 interface Props {
   tripId: string;
@@ -28,6 +29,12 @@ interface Props {
 }
 
 export function TripDashboardCards({ tripId, sessionId }: Props) {
+  // Fire request_poll_recommendation for every live poll without a pending
+  // rec on dashboard mount. RPC is idempotent so this is a no-op when recs
+  // are already there; closes the gap between the cron's 15-min cadence
+  // and the planner opening the trip.
+  useAutoGenerateRecommendations(tripId);
+
   return (
     <View>
       <ResponsesDueCard tripId={tripId} sessionId={sessionId} />
