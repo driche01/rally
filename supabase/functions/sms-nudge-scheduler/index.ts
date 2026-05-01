@@ -896,7 +896,26 @@ async function computeRecommendationRow(
   for (const r of (responses ?? []) as { option_id: string }[]) {
     counts.set(r.option_id, (counts.get(r.option_id) ?? 0) + 1);
   }
-  const sorted = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+  // Lookup display position so we can break ties deterministically.
+  // Budget polls store options in ascending price order, so position-ASC
+  // resolves a tie to the lower price point.
+  const optionIds = Array.from(counts.keys());
+  const positionByOption = new Map<string, number>();
+  if (optionIds.length > 0) {
+    const { data: opts } = await admin
+      .from('poll_options')
+      .select('id, position')
+      .in('id', optionIds);
+    for (const o of (opts ?? []) as { id: string; position: number }[]) {
+      positionByOption.set(o.id, o.position);
+    }
+  }
+  const sorted = Array.from(counts.entries()).sort((a, b) => {
+    if (b[1] !== a[1]) return b[1] - a[1];
+    const pa = positionByOption.get(a[0]) ?? Number.MAX_SAFE_INTEGER;
+    const pb = positionByOption.get(b[0]) ?? Number.MAX_SAFE_INTEGER;
+    return pa - pb;
+  });
   const total = (responses ?? []).length;
   const winnerId = sorted[0]?.[0] ?? null;
   const winnerCount = sorted[0]?.[1] ?? 0;
