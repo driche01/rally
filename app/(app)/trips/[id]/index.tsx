@@ -475,7 +475,7 @@ const stage = trip ? getTripStage(trip) : 'deciding';
               accessibilityRole="link"
               accessibilityLabel={`Directions to ${destination}`}
             >
-              <Text style={[styles.heroTitle, styles.heroTitleLink, { color: hero.titleColor }]}>
+              <Text style={[styles.heroTitle, { color: hero.titleColor }]}>
                 {destination}
               </Text>
             </Pressable>
@@ -567,7 +567,6 @@ const styles = StyleSheet.create({
   heroCard: { borderRadius: 24, padding: 24, gap: 10, marginBottom: 8 },
   heroBadge: { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase' },
   heroTitle: { fontSize: 30, fontFamily: 'SpaceGrotesk_700Bold', lineHeight: 36 },
-  heroTitleLink: { textDecorationLine: 'underline' },
   heroSubtitle: { fontSize: 15, lineHeight: 22 },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 2 },
   pill: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999 },
