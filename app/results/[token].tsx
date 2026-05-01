@@ -9,7 +9,7 @@
  * read-only and self-contained (no app shell).
  */
 import React from 'react';
-import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
@@ -60,9 +60,9 @@ function PageShell({ children }: { children: React.ReactNode }) {
     return <View style={styles.nativeWrap}>{children}</View>;
   }
   return (
-    <View style={styles.webWrap}>
+    <ScrollView style={styles.webWrap} contentContainerStyle={styles.webWrapContent}>
       <View style={styles.webCard}>{children}</View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -260,11 +260,13 @@ const styles = StyleSheet.create({
   },
   webWrap: {
     flex: 1,
-    minHeight: '100%' as any,
     backgroundColor: '#F4ECDF',
+  },
+  webWrapContent: {
     alignItems: 'center',
     paddingVertical: 32,
     paddingHorizontal: 16,
+    minHeight: '100%' as any,
   },
   webCard: {
     width: '100%',
