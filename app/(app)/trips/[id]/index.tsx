@@ -584,9 +584,9 @@ const styles = StyleSheet.create({
   // Hero
   heroCard: { borderRadius: 24, padding: 24, gap: 10, marginBottom: 8 },
   heroBadge: { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase' },
-  heroTripName: { fontSize: 14, fontWeight: '500', letterSpacing: 0.2 },
-  heroTitle: { fontSize: 30, fontFamily: 'SpaceGrotesk_700Bold', lineHeight: 36 },
-  heroDate: { fontSize: 22, fontFamily: 'SpaceGrotesk_700Bold', lineHeight: 28 },
+  heroTripName: { fontSize: 30, fontFamily: 'SpaceGrotesk_700Bold', lineHeight: 36 },
+  heroTitle: { fontSize: 22, fontFamily: 'SpaceGrotesk_700Bold', lineHeight: 28 },
+  heroDate: { fontSize: 14, fontWeight: '500', letterSpacing: 0.2 },
   heroSubtitle: { fontSize: 15, lineHeight: 22 },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 2 },
   pill: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999 },
