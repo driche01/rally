@@ -100,11 +100,11 @@ Deno.serve(async (req: Request) => {
     const finalizeBy = trip.responses_due_date
       ? ` ${planner} will finalize details by ${formatShortDate(trip.responses_due_date)}.`
       : '';
-    // TODO: re-append `: ${surveyBase}/respond/${trip.share_token}` once a
-    // custom domain replaces netlify.app (carriers filter free-tier hosts).
+    const surveyBase = Deno.env.get('PUBLIC_SURVEY_BASE_URL') ?? 'https://rallysurveys.netlify.app';
+    const surveyUrl = `${surveyBase}/respond/${trip.share_token}`;
     const body = rsvp === 'out'
       ? `Thanks for letting us know. ${planner} has been notified you can't make the trip${dest}. No more nudges from me.`
-      : `Thanks — your survey for ${planner}'s trip${dest} is in.${finalizeBy} You won't get any more nudges from me. Tap your survey link to update.`;
+      : `Thanks — your survey for ${planner}'s trip${dest} is in.${finalizeBy} You won't get any more nudges from me. To update, tap the poll link anytime: ${surveyUrl}`;
 
     // Per-day idempotency key prevents double-send when the survey is
     // re-submitted in quick succession.
