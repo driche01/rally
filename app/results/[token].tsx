@@ -221,7 +221,9 @@ function PollResults({
         // Locked poll — show the chosen value as a single line, matching
         // the destination/duration treatment. Dates use trip.start_date /
         // end_date (decided_option_id is best-effort there); everything
-        // else falls back to the decided option's label.
+        // else falls back to the decided option's label. Drop the
+        // "planner pick" hint when the group already weighed in (any
+        // response on the poll); keep it for pure planner-only picks.
         (() => {
           let summary: string | null = null;
           if (poll.type === 'dates' && tripStartDate) {
@@ -229,13 +231,16 @@ function PollResults({
           } else if (poll.decided_option_id) {
             summary = poll.options.find((o) => o.id === poll.decided_option_id)?.label ?? null;
           }
+          const hadResponses = total > 0;
           return (
             <View style={styles.decidedNoVotesRow}>
               <Ionicons name="checkmark-circle" size={16} color="#0F3F2E" />
               <Text style={styles.decidedNoVotesLabel} numberOfLines={1}>
                 {summary ?? 'Locked'}
               </Text>
-              <Text style={styles.decidedNoVotesHint}>planner pick</Text>
+              {hadResponses ? null : (
+                <Text style={styles.decidedNoVotesHint}>planner pick</Text>
+              )}
             </View>
           );
         })()

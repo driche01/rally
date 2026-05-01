@@ -246,16 +246,26 @@ function PollBars({ poll, counts, numericCounts = {}, pollRespondents, tripStart
           } else if (decidedId) {
             summary = poll.poll_options.find((o) => o.id === decidedId)?.label ?? null;
           }
-          const hint = alignment && alignment.total > 0
-            ? `${alignment.aligned} of ${alignment.total} agreed`
-            : 'planner pick';
+          // Hint rules:
+          //   • Has alignment data → "X of Y agreed".
+          //   • Poll had responses but no alignment data → no hint (drop
+          //     "planner pick" since the group did weigh in).
+          //   • Zero responses → "planner pick" (pure planner choice).
+          let hint: string | null = null;
+          if (alignment && alignment.total > 0) {
+            hint = `${alignment.aligned} of ${alignment.total} agreed`;
+          } else if (pollRespondents === 0) {
+            hint = 'planner pick';
+          }
           return (
             <View style={styles.decidedNoVotesRow}>
               <Ionicons name="checkmark-circle" size={14} color="#0F3F2E" />
               <Text style={styles.decidedNoVotesLabel} numberOfLines={1}>
                 {summary ?? 'Locked'}
               </Text>
-              <Text style={styles.decidedNoVotesHint}>{hint}</Text>
+              {hint ? (
+                <Text style={styles.decidedNoVotesHint}>{hint}</Text>
+              ) : null}
             </View>
           );
         })()
