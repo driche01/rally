@@ -192,6 +192,30 @@ Deno.serve(async (req: Request) => {
       smsSent: !sendResult.error,
     }).catch(() => {});
 
+    // Audit: planner-driven removal carries the planner's actor_id;
+    // pure opt-outs (status flips to 'opted_out') are auto-emitted by
+    // the trigger in migration 090. Best-effort.
+    try {
+      const { data: actorRow } = await admin
+        .from('users')
+        .select('id')
+        .eq('auth_user_id', authUserId)
+        .maybeSingle();
+      const actorId = (actorRow as { id?: string } | null)?.id ?? null;
+      await admin.from('trip_audit_events').insert({
+        trip_id: tripId,
+        actor_id: actorId,
+        kind: 'member_removed_by_planner',
+        payload: {
+          phone,
+          participant_removed: participantRemoved,
+          respondent_removed: respondentRemoved,
+        },
+      });
+    } catch (auditErr) {
+      console.warn('[member-remove] audit emit failed:', auditErr);
+    }
+
     return jsonResponse({
       ok: true,
       removed: {

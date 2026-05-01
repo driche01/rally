@@ -3,10 +3,6 @@ import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActionSheetIOS,
-  Alert,
-  Linking,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,7 +13,9 @@ import {
 import { SortableEntryList, type CardKey } from '@/components/SortableEntryList';
 import { TripDashboardCards } from '@/components/trips/TripDashboardCards';
 import { FirstTripOnboardingModal } from '@/components/trips/FirstTripOnboardingModal';
-import { useTripSession } from '@/hooks/useTripSession';
+import { useTripSession, useSessionParticipants } from '@/hooks/useTripSession';
+import { useTripAuditEvents } from '@/hooks/useTripAuditEvents';
+import { TextBlastComposerModal } from '@/components/trips/TextBlastComposerModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePolls, pollKeys } from '@/hooks/usePolls';
 import { useRespondents, respondentKeys } from '@/hooks/useRespondents';
@@ -86,39 +84,49 @@ const HERO_CONFIG: Record<TripStage, {
   done:         { bg: '#1A1715', badge: 'WHAT A TRIP!',    badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaBg: 'rgba(255,255,255,0.15)' },
 };
 
-// ─── Group Members Card ───────────────────────────────────────────────────────
+// ─── Activity entry-card ──────────────────────────────────────────────────────
+// Replaces the old "Members" entry-card. Subtitle reflects the latest
+// audit-event timestamp; Members management lives on the Edit-rally
+// screen now (per Phase 15).
 
-function GroupMembersCard({
-  trip,
-  respondents,
-  onViewRoster,
+function relativeShort(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 60_000) return 'just now';
+  const min = Math.round(ms / 60_000);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const d = Math.round(hr / 24);
+  return `${d}d ago`;
+}
+
+function ActivityEntryCard({
+  latestEventAt,
+  onPress,
   editMode = false,
 }: {
-  trip: Trip;
-  respondents: Respondent[];
-  onViewRoster: () => void;
+  latestEventAt: string | null;
+  onPress: () => void;
   editMode?: boolean;
 }) {
-  const confirmedCount = 1 + respondents.length;
-  const total = trip.group_size_precise ?? GROUP_SIZE_MIDPOINTS[trip.group_size_bucket];
+  const subtitle = latestEventAt
+    ? `Last update ${relativeShort(latestEventAt)}`
+    : 'Nothing yet';
 
   return (
     <Pressable
-      onPress={editMode ? undefined : onViewRoster}
+      onPress={editMode ? undefined : onPress}
       style={styles.membersCard}
       accessibilityRole="button"
-      accessibilityLabel="View group members"
+      accessibilityLabel="View trip activity"
     >
       <View style={styles.entryIcon}>
-        <Ionicons name="people-outline" size={20} color="#555" />
+        <Ionicons name="pulse-outline" size={20} color="#555" />
       </View>
       <View style={styles.entryText}>
-        <Text style={styles.entryTitle}>Group</Text>
-        <Text style={styles.entrySubtitle}>
-          {respondents.length === 0
-            ? 'No one else in yet'
-            : `${confirmedCount} of ${total} in`}
-        </Text>
+        <Text style={styles.entryTitle}>Activity</Text>
+        <Text style={styles.entrySubtitle}>{subtitle}</Text>
       </View>
       {editMode
         ? <Ionicons name="reorder-three-outline" size={20} color="#CCC" />
@@ -138,14 +146,25 @@ export default function TripDashboard() {
 
   const { data: trip } = useTrip(id);
   const { data: tripSession } = useTripSession(id);
+  const { data: sessionParticipants = [] } = useSessionParticipants(tripSession?.id);
   const { data: polls = [] } = usePolls(id);
   const { data: respondents = [] } = useRespondents(id);
-  const { canEditTrip, canReorderCards } = usePermissions(id);
+  const { data: auditEvents = [] } = useTripAuditEvents(id);
+  const latestAuditEventAt = auditEvents[0]?.created_at ?? null;
+  const { canEditTrip, canReorderCards, canDesignatePlanners } = usePermissions(id);
   const { data: itineraryBlocks = [] } = useItineraryBlocks(id);
   const { data: lodgingOptions = [] } = useLodgingOptions(id);
   const { data: travelLegs = [] } = useTravelLegs(id);
   const { data: expenses = [] } = useExpenses(id);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [textBlastVisible, setTextBlastVisible] = useState(false);
+
+  // Active+attending recipient count drives the "Text blast · N" pill
+  // visibility and the composer's "to N people" copy.
+  const textBlastRecipientCount = sessionParticipants.filter(
+    (p) => p.status === 'active' && p.is_attending,
+  ).length;
+  const showTextBlast = canDesignatePlanners && Boolean(tripSession?.id) && textBlastRecipientCount > 0;
 
   // Realtime: keep badge counts fresh
   const pollIdString = useMemo(() => polls.map((p) => p.id).sort().join(','), [polls]);
@@ -207,38 +226,6 @@ const stage = trip ? getTripStage(trip) : 'deciding';
   // Budget / duration: explicit trip field takes precedence, then decided poll
   const budgetDisplay   = trip?.budget_per_person ?? decidedBudgetLabel ?? null;
   const durationDisplay = trip?.trip_duration ?? decidedDurationLabel ?? null;
-
-  const openMapsSheet = () => {
-    if (!destination) return;
-    const mapQuery = trip?.destination_address ?? destination;
-    const encoded = encodeURIComponent(mapQuery);
-    const actions = [
-      { label: 'Open in Apple Maps', url: `maps://?q=${encoded}` },
-      { label: 'Open in Google Maps', url: `https://maps.google.com/?q=${encoded}` },
-      { label: 'Open in Waze', url: `waze://?q=${encoded}` },
-    ];
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          title: destination,
-          message: trip?.destination_address ?? undefined,
-          options: ['Cancel', ...actions.map((a) => a.label), 'Copy address'],
-          cancelButtonIndex: 0,
-        },
-        (i) => {
-          if (i >= 1 && i <= 3) Linking.openURL(actions[i - 1].url).catch(() => {});
-          if (i === 4) Clipboard.setStringAsync(mapQuery);
-        },
-      );
-    } else {
-      Alert.alert(destination, trip?.destination_address ?? undefined, [
-        { text: 'Google Maps', onPress: () => Linking.openURL(actions[1].url).catch(() => {}) },
-        { text: 'Waze', onPress: () => Linking.openURL(actions[2].url).catch(() => {}) },
-        { text: 'Copy address', onPress: () => Clipboard.setStringAsync(mapQuery) },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
-    }
-  };
 
   const handleLinkIconPress = () => {
     if (!trip) return;
@@ -383,7 +370,7 @@ const stage = trip ? getTripStage(trip) : 'deciding';
     }
   };
 
-  const ENTRY_CONFIG: Record<Exclude<CardKey, 'members'>, {
+  const ENTRY_CONFIG: Record<Exclude<CardKey, 'activity'>, {
     icon: React.ComponentProps<typeof Ionicons>['name'];
     title: string;
     subtitle: string;
@@ -416,18 +403,17 @@ const stage = trip ? getTripStage(trip) : 'deciding';
   }), [id, nights, router]);
 
   const renderCard = useCallback((key: CardKey, isEditMode: boolean) => {
-    if (key === 'members') {
+    if (key === 'activity') {
       if (!trip) return null;
       return (
-        <GroupMembersCard
-          trip={trip}
-          respondents={respondents}
-          onViewRoster={() => router.push(`/(app)/trips/${id}/members`)}
+        <ActivityEntryCard
+          latestEventAt={latestAuditEventAt}
+          onPress={() => router.push(`/(app)/trips/${id}/activity`)}
           editMode={isEditMode}
         />
       );
     }
-    const ep = ENTRY_CONFIG[key as Exclude<CardKey, 'members'>];
+    const ep = ENTRY_CONFIG[key as Exclude<CardKey, 'activity'>];
     if (!ep) return null;
     return (
       <Pressable
@@ -448,7 +434,7 @@ const stage = trip ? getTripStage(trip) : 'deciding';
         }
       </Pressable>
     );
-  }, [ENTRY_CONFIG, trip, respondents, router, id]);
+  }, [ENTRY_CONFIG, trip, latestAuditEventAt, router, id]);
 
   return (
     <>
@@ -486,17 +472,13 @@ const stage = trip ? getTripStage(trip) : 'deciding';
             </Text>
           ) : null}
 
-          {/* Location — primary visual. Tappable opens the maps sheet. */}
+          {/* Location — primary visual. Whole-card tap edits the rally;
+              the location is now a non-interactive label so taps don't
+              get hijacked into a maps sheet. */}
           {destination ? (
-            <Pressable
-              onPress={(e) => { e.stopPropagation(); openMapsSheet(); }}
-              accessibilityRole="link"
-              accessibilityLabel={`Directions to ${destination}`}
-            >
-              <Text style={[styles.heroTitle, { color: hero.titleColor }]}>
-                {destination}
-              </Text>
-            </Pressable>
+            <Text style={[styles.heroTitle, { color: hero.titleColor }]}>
+              {destination}
+            </Text>
           ) : null}
 
           {/* Date — secondary, slightly smaller than the location. */}
@@ -535,25 +517,45 @@ const stage = trip ? getTripStage(trip) : 'deciding';
             )) : null}
           </View>
 
-          {/* "Poll link" pill — replaces the older Invite-your-group CTA
-              + separate link icon. Single tap copies the share URL to
-              clipboard (handler shows a checkmark for ~2s on success). */}
+          {/* CTA row: "Poll link" copies the share URL; "Text blast"
+              opens the broadcast composer. The latter only renders for
+              planners on a trip with an active SMS session + at least
+              one attending recipient. */}
           {trip ? (
-            <Pressable
-              onPress={(e) => { e.stopPropagation(); handleLinkIconPress(); }}
-              style={[styles.ctaBtn, { backgroundColor: hero.ctaBg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }]}
-              accessibilityRole="button"
-              accessibilityLabel="Copy poll link to clipboard"
-            >
-              <Ionicons
-                name={linkCopied ? 'checkmark' : 'link-outline'}
-                size={18}
-                color={stage === 'experiencing' || stage === 'done' ? hero.titleColor : '#fff'}
-              />
-              <Text style={[styles.ctaText, { color: stage === 'experiencing' || stage === 'done' ? hero.titleColor : '#fff' }]}>
-                {linkCopied ? 'Copied' : 'Poll link'}
-              </Text>
-            </Pressable>
+            <View style={styles.ctaRow}>
+              <Pressable
+                onPress={(e) => { e.stopPropagation(); handleLinkIconPress(); }}
+                style={[styles.ctaBtn, styles.ctaFlex, { backgroundColor: hero.ctaBg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }]}
+                accessibilityRole="button"
+                accessibilityLabel="Copy poll link to clipboard"
+              >
+                <Ionicons
+                  name={linkCopied ? 'checkmark' : 'link-outline'}
+                  size={18}
+                  color={stage === 'experiencing' || stage === 'done' ? hero.titleColor : '#fff'}
+                />
+                <Text style={[styles.ctaText, { color: stage === 'experiencing' || stage === 'done' ? hero.titleColor : '#fff' }]}>
+                  {linkCopied ? 'Copied' : 'Poll link'}
+                </Text>
+              </Pressable>
+              {showTextBlast ? (
+                <Pressable
+                  onPress={(e) => { e.stopPropagation(); setTextBlastVisible(true); }}
+                  style={[styles.ctaBtn, styles.ctaFlex, { backgroundColor: hero.ctaBg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Send a text blast to ${textBlastRecipientCount} people`}
+                >
+                  <Ionicons
+                    name="megaphone-outline"
+                    size={18}
+                    color={stage === 'experiencing' || stage === 'done' ? hero.titleColor : '#fff'}
+                  />
+                  <Text style={[styles.ctaText, { color: stage === 'experiencing' || stage === 'done' ? hero.titleColor : '#fff' }]}>
+                    Text blast
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
           ) : null}
         </TouchableOpacity>
 
@@ -570,6 +572,13 @@ const stage = trip ? getTripStage(trip) : 'deciding';
 
         <SortableEntryList tripId={id} renderCard={renderCard} reorderEnabled={canReorderCards} />
       </ScrollView>
+
+      <TextBlastComposerModal
+        visible={textBlastVisible}
+        sessionId={tripSession?.id}
+        recipientCount={textBlastRecipientCount}
+        onClose={() => setTextBlastVisible(false)}
+      />
     </View>
 
     </>
@@ -595,7 +604,9 @@ const styles = StyleSheet.create({
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 2 },
   pill: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999 },
   pillText: { fontSize: 13 },
-  ctaBtn: { marginTop: 8, borderRadius: 999, paddingVertical: 16, alignItems: 'center' },
+  ctaRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  ctaBtn: { borderRadius: 999, paddingVertical: 16, alignItems: 'center' },
+  ctaFlex: { flex: 1 },
   ctaText: { fontSize: 16, fontWeight: '600' },
 
   // Entry points

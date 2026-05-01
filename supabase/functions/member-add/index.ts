@@ -177,6 +177,30 @@ Deno.serve(async (req: Request) => {
       smsSent: !sendResult.error,
     }).catch(() => {});
 
+    // Audit: planner-add events carry planner_intent context (who, what
+    // phone) that the trigger-based member_joined event doesn't have.
+    // Best-effort — never fails the request.
+    try {
+      const { data: actorRow } = await admin
+        .from('users')
+        .select('id')
+        .eq('auth_user_id', authUserId)
+        .maybeSingle();
+      const actorId = (actorRow as { id?: string } | null)?.id ?? null;
+      await admin.from('trip_audit_events').insert({
+        trip_id: tripId,
+        actor_id: actorId,
+        kind: 'member_added_by_planner',
+        payload: {
+          respondent_id: respondentId,
+          display_name: rawName || null,
+          phone,
+        },
+      });
+    } catch (auditErr) {
+      console.warn('[member-add] audit emit failed:', auditErr);
+    }
+
     return jsonResponse({
       ok: true,
       respondent_id: respondentId,

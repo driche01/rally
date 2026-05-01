@@ -24,7 +24,6 @@ import {
 import { sendDm } from './dm-sender.ts';
 import {
   resolveInboundMatches,
-  notifyPlannerOfInbound,
   buildRedirectBody,
 } from './planner-notify.ts';
 
@@ -180,18 +179,16 @@ export async function processInboundMessage(
     return { response: rejoinReply, sessionId: null, phase: null };
   }
 
-  // ─── Default: soft redirect + planner notification ──────────────────────
-  // Rally doesn't run conversational SMS anymore. Anything that wasn't
-  // handled above (planning intent, name extraction, free-form replies,
-  // legacy keyword commands) gets a friendly nudge back to the link funnel.
+  // ─── Default: soft redirect, no planner relay ────────────────────────────
+  // Rally doesn't run conversational SMS, and (Phase 15) it no longer relays
+  // member-to-planner messages either. Anything not handled above gets a
+  // friendly nudge: "I can't pass this along — text the planner directly."
   //
-  // If the sender phone matches an active trip session participant, we:
-  //   (a) tag the inbound thread_message with that trip_session_id so the
-  //       dashboard inbox can find it
-  //   (b) flag needs_planner_attention so it shows in the unread badge
-  //   (c) push-notify the planner with the participant's name + preview
-  //   (d) include the planner's name in the redirect SMS body so the
-  //       participant has a real human to reach out to
+  // If the sender matches an active trip session participant we still tag
+  // the inbound row with `trip_session_id` (for support diagnostics +
+  // threading) and bump `last_activity_at` (drives the "responded Xh ago"
+  // copy on the participant row). We do NOT flag the row for planner
+  // attention or push-notify — those surfaces are gone.
   const matches = await resolveInboundMatches(admin, senderPhone);
   const primaryMatch = matches[0] ?? null;
 
@@ -221,9 +218,7 @@ export async function processInboundMessage(
         // message_sid is UNIQUE — only the first row carries it; the rest
         // get null so the index stays clean across multi-session fan-out.
         message_sid: i === 0 ? msg.MessageSid : null,
-        needs_planner_attention: true,
       });
-      await notifyPlannerOfInbound(admin, m, trimmedBody).catch(() => {});
 
       // Touch participant.last_activity_at for the dashboard "responded Xh ago" copy.
       try {
@@ -237,7 +232,22 @@ export async function processInboundMessage(
     }
   }
 
-  const redirectReply = buildRedirectBody(matches);
+  // Pull the primary match's trip share_token so the redirect SMS can re-share
+  // the survey link. Best-effort: any failure falls back to the link-less body.
+  let primarySurveyUrl: string | null = null;
+  if (primaryMatch?.trip_id) {
+    const { data: trip } = await admin
+      .from('trips')
+      .select('share_token')
+      .eq('id', primaryMatch.trip_id)
+      .maybeSingle();
+    if (trip?.share_token) {
+      const base = (Deno.env.get('PUBLIC_SURVEY_BASE_URL') ?? 'https://rallysurveys.netlify.app').replace(/\/+$/, '');
+      primarySurveyUrl = `${base}/respond/${trip.share_token}`;
+    }
+  }
+
+  const redirectReply = buildRedirectBody(matches, primarySurveyUrl);
   await admin.from('thread_messages').insert({
     thread_id: oneToOneThreadId,
     trip_session_id: primaryMatch?.trip_session_id ?? null,

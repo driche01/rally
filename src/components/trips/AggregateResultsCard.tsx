@@ -115,30 +115,68 @@ export function AggregateResultsCard({ tripId }: Props) {
 
   const totalResponses = respondentCounts.totalRespondents;
 
+  // When every poll is locked, the trip hero already shows destination /
+  // dates / budget / duration — so default the whole card to collapsed
+  // and let the planner expand if they want the bars back.
+  const allLocked = visiblePolls.length > 0 && visiblePolls.every((p) => p.status === 'decided');
+  const [cardOpen, setCardOpen] = useState(!allLocked);
+  // If polls flip from mixed → all locked (or vice-versa) after first
+  // render — e.g. the planner just locked the last live poll — re-sync
+  // the default so the new state takes effect without a remount.
+  const lastAllLockedRef = React.useRef(allLocked);
+  React.useEffect(() => {
+    if (lastAllLockedRef.current !== allLocked) {
+      setCardOpen(!allLocked);
+      lastAllLockedRef.current = allLocked;
+    }
+  }, [allLocked]);
+
   if (!tripId || visiblePolls.length === 0) return null;
 
   return (
     <View style={styles.card}>
-      <View style={styles.headerRow}>
+      <Pressable
+        onPress={() => setCardOpen((v) => !v)}
+        style={styles.headerRow}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: cardOpen }}
+        accessibilityLabel={cardOpen ? 'Collapse live results' : 'Expand live results'}
+      >
         <Ionicons name="bar-chart-outline" size={16} color="#163026" />
         <Text style={styles.title}>Live results</Text>
         {totalResponses > 0 ? (
           <Text style={styles.totalCount}>· {totalResponses} {totalResponses === 1 ? 'response' : 'responses'}</Text>
         ) : null}
-      </View>
+        <View style={styles.headerSpacer} />
+        <Ionicons name={cardOpen ? 'chevron-up' : 'chevron-down'} size={16} color="#5F685F" />
+      </Pressable>
 
-      {visiblePolls.map((poll) => (
-        <PollBars
-          key={poll.id}
-          poll={poll}
-          counts={counts[poll.id] ?? {}}
-          numericCounts={numericCounts[poll.id] ?? {}}
-          pollRespondents={respondentCounts.perPoll[poll.id] ?? 0}
-          tripStartDate={trip?.start_date ?? null}
-          tripEndDate={trip?.end_date ?? null}
-          alignment={aligned[poll.id] ?? null}
-        />
-      ))}
+      {/* Always-visible "all locked" summary banner — mirrors the
+          GroupPreferencesCard NeedsRow pattern so the two siblings
+          read as a pair. Stays visible even when the card is
+          collapsed, since it's the at-a-glance state. */}
+      {allLocked ? (
+        <View style={styles.lockedBanner}>
+          <Ionicons name="checkmark-circle-outline" size={13} color="#1D9E75" />
+          <Text style={styles.lockedBannerLabel}>Decisions are locked</Text>
+          <Text style={styles.lockedBannerHint}>Ready to book.</Text>
+        </View>
+      ) : null}
+
+      {cardOpen
+        ? visiblePolls.map((poll) => (
+            <PollBars
+              key={poll.id}
+              poll={poll}
+              counts={counts[poll.id] ?? {}}
+              numericCounts={numericCounts[poll.id] ?? {}}
+              pollRespondents={respondentCounts.perPoll[poll.id] ?? 0}
+              tripStartDate={trip?.start_date ?? null}
+              tripEndDate={trip?.end_date ?? null}
+              alignment={aligned[poll.id] ?? null}
+            />
+          ))
+        : null}
     </View>
   );
 }
@@ -359,8 +397,23 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerSpacer: { flex: 1 },
   title: { fontSize: 14, fontWeight: '700', color: '#163026' },
   totalCount: { fontSize: 13, color: '#888' },
+
+  // Mirrors GroupPreferencesCard's `aggRowFlex` so the two cards
+  // share visual language for "everything's good" state.
+  lockedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#DFE8D2',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  lockedBannerLabel: { fontSize: 13, fontWeight: '600', color: '#404040' },
+  lockedBannerHint: { flex: 1, fontSize: 13, color: '#5F685F', textAlign: 'right' },
 
   pollBlock: { gap: 6 },
   pollHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },

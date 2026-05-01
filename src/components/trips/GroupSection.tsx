@@ -29,7 +29,11 @@ import {
 import { useQuery } from '@tanstack/react-query';
 
 import { Avatar } from '@/components/ui';
-import { useRespondents } from '@/hooks/useRespondents';
+import { usePermissions } from '@/hooks/usePermissions';
+import {
+  useRespondents,
+  useSetRespondentPlanner,
+} from '@/hooks/useRespondents';
 import {
   useTripSession,
   useSessionParticipants,
@@ -47,6 +51,11 @@ interface MemberRow {
   key: string;
   name: string | null;
   phone: string;
+  /** Captured during poll response — null until they answer. */
+  email: string | null;
+  /** Set when there's a matching respondent row — required to flip
+   *  planner access (the SMS participant table doesn't carry it). */
+  respondentId: string | null;
   /** Marker so we can show a different chip / disable removal. */
   isPlanner: boolean;
   /** Already participating in the SMS thread. */
@@ -55,6 +64,12 @@ interface MemberRow {
   hasResponded: boolean;
   /** Has saved a traveler profile (home airport, prefs, etc). */
   hasProfile: boolean;
+  /**
+   * Trip-level attendance state. 'declined' = opted out via the survey
+   * (rsvp='out' + is_attending=false). 'opted_out' = global STOP. 'in'
+   * is the default. Drives the "Declined" / "Opted out" pill on the row.
+   */
+  attendance: 'in' | 'declined' | 'opted_out';
 }
 
 export function GroupSection({ tripId }: { tripId: string }) {
@@ -73,6 +88,8 @@ export function GroupSection({ tripId }: { tripId: string }) {
   });
   const addMember = useAddTripMember(tripId, tripSession?.id);
   const removeMember = useRemoveTripMember(tripId, tripSession?.id);
+  const setPlanner = useSetRespondentPlanner(tripId);
+  const { canDesignatePlanners } = usePermissions(tripId);
 
   const [addModalVisible, setAddModalVisible] = useState(false);
 
@@ -97,10 +114,20 @@ export function GroupSection({ tripId }: { tripId: string }) {
       const norm = normalizePhone(p.phone) ?? p.phone;
       seen.add(norm);
       const matchingResp = respondentByPhone.get(norm);
+      // Attendance state — global STOP wins; otherwise survey rsvp='out'
+      // + is_attending=false marks them as declined; everything else is 'in'.
+      const attendance: MemberRow['attendance'] =
+        p.status === 'opted_out' || p.status === 'removed_by_planner'
+          ? 'opted_out'
+          : !p.is_attending && matchingResp?.rsvp === 'out'
+            ? 'declined'
+            : 'in';
       rows.push({
         key: `p:${p.id}`,
         name: p.display_name ?? matchingResp?.name ?? null,
         phone: p.phone,
+        email: matchingResp?.email ?? null,
+        respondentId: matchingResp?.id ?? null,
         isPlanner: p.is_planner,
         isActiveSms: p.status === 'active',
         hasResponded: Boolean(
@@ -109,6 +136,7 @@ export function GroupSection({ tripId }: { tripId: string }) {
           || (matchingResp && respondedIds?.has(matchingResp.id))
         ),
         hasProfile: profileByPhone.get(norm) === true,
+        attendance,
       });
     }
     for (const r of respondents) {
@@ -119,10 +147,13 @@ export function GroupSection({ tripId }: { tripId: string }) {
         key: `r:${r.id}`,
         name: r.name,
         phone: r.phone ?? '',
+        email: r.email,
+        respondentId: r.id,
         isPlanner: r.is_planner,
         isActiveSms: false,
         hasResponded: Boolean(r.rsvp || r.preferences || respondedIds?.has(r.id)),
         hasProfile: profileByPhone.get(norm) === true,
+        attendance: r.rsvp === 'out' ? 'declined' : 'in',
       });
     }
     // Planner first, then by name.
@@ -135,29 +166,102 @@ export function GroupSection({ tripId }: { tripId: string }) {
 
   function handleSubmitAdd(opts: { firstName: string; lastName: string; phone: string }) {
     const composed = [opts.firstName.trim(), opts.lastName.trim()].filter(Boolean).join(' ');
-    addMember.mutate({ phone: opts.phone, name: composed || null }, {
-      onSuccess: (result) => {
-        if (!result.ok) {
-          const reason = result.reason ?? 'unknown';
-          const message =
-            reason === 'invalid_phone' ? "That phone number doesn't look right." :
-            reason === 'forbidden'     ? 'Only the planner can add members.' :
-            `Could not add member (${reason}).`;
-          Alert.alert('Could not add member', message);
-          return;
-        }
-        setAddModalVisible(false);
-        if (!result.sms_sent) {
-          Alert.alert(
-            "Added — but text didn't go through",
-            "They're on the trip, but Rally couldn't deliver the welcome text. Check the number and try again.",
-          );
-        }
-      },
-      onError: (err: unknown) => {
-        Alert.alert('Could not add member', err instanceof Error ? err.message : 'Try again.');
-      },
+
+    // Phase 4.6 — warn-on-re-add. If this phone already matches a participant
+    // who's been opted out (either via the survey rsvp='out' path which flips
+    // is_attending=false, or via global STOP), confirm before re-enabling
+    // them. The mutation itself flips is_attending back to true server-side,
+    // so this is purely a "did you mean to do this?" prompt.
+    const normInput = normalizePhone(opts.phone);
+    const priorOptOut = participants.find((p: TripSessionParticipant) => {
+      const norm = normalizePhone(p.phone) ?? p.phone;
+      if (norm !== normInput) return false;
+      return !p.is_attending || p.status === 'opted_out';
     });
+
+    const proceed = () => {
+      addMember.mutate({ phone: opts.phone, name: composed || null }, {
+        onSuccess: (result) => {
+          if (!result.ok) {
+            const reason = result.reason ?? 'unknown';
+            const message =
+              reason === 'invalid_phone' ? "That phone number doesn't look right." :
+              reason === 'forbidden'     ? 'Only the planner can add members.' :
+              `Could not add member (${reason}).`;
+            Alert.alert('Could not add member', message);
+            return;
+          }
+          setAddModalVisible(false);
+          if (!result.sms_sent) {
+            Alert.alert(
+              "Added — but text didn't go through",
+              "They're on the trip, but Rally couldn't deliver the welcome text. Check the number and try again.",
+            );
+          }
+        },
+        onError: (err: unknown) => {
+          Alert.alert('Could not add member', err instanceof Error ? err.message : 'Try again.');
+        },
+      });
+    };
+
+    if (priorOptOut) {
+      const who = priorOptOut.display_name?.trim() || composed || opts.phone;
+      Alert.alert(
+        `${who} previously opted out`,
+        `Re-add ${who} and start sending Rally texts again?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Re-add', style: 'default', onPress: proceed },
+        ],
+      );
+      return;
+    }
+
+    proceed();
+  }
+
+  function handleTogglePlanner(row: MemberRow) {
+    if (!canDesignatePlanners) return;
+    if (!row.respondentId) {
+      Alert.alert(
+        row.name ?? row.phone,
+        "Planner access turns on once they've responded to the poll.",
+      );
+      return;
+    }
+    if (row.isPlanner) {
+      Alert.alert(
+        row.name ?? row.phone,
+        "Remove planner access? They'll no longer be able to edit polls and trip details.",
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Remove planner',
+            style: 'destructive',
+            onPress: () => setPlanner.mutate(
+              { respondentId: row.respondentId!, isPlanner: false },
+              { onError: () => Alert.alert('Error', 'Could not update planner status.') },
+            ),
+          },
+        ],
+      );
+    } else {
+      Alert.alert(
+        `Make ${row.name ?? row.phone} a planner?`,
+        "They'll be able to edit polls and trip details.",
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Make planner',
+            onPress: () => setPlanner.mutate(
+              { respondentId: row.respondentId!, isPlanner: true },
+              { onError: () => Alert.alert('Error', 'Could not update planner status.') },
+            ),
+          },
+        ],
+      );
+    }
   }
 
   function handleRemove(row: MemberRow) {
@@ -218,28 +322,64 @@ export function GroupSection({ tripId }: { tripId: string }) {
                     <Text className="text-[10px] font-bold text-[#92400E]">PLANNER</Text>
                   </View>
                 ) : null}
+                {row.attendance === 'declined' ? (
+                  <View style={{ backgroundColor: '#F4E5DC', borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2 }}>
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#8C4422' }}>DECLINED</Text>
+                  </View>
+                ) : row.attendance === 'opted_out' ? (
+                  <View style={{ backgroundColor: '#FCE8E8', borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2 }}>
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#9A2A2A' }}>OPTED OUT</Text>
+                  </View>
+                ) : null}
               </View>
               <Text className="text-[12px] text-[#888]">{row.phone}</Text>
+              {row.email ? (
+                <Text className="text-[12px] text-[#888]" numberOfLines={1}>
+                  {row.email}
+                </Text>
+              ) : null}
               <View className="flex-row gap-1.5 mt-1">
                 <StatusPill done={row.hasResponded} label="Polls" />
-                <StatusPill done={row.hasProfile} label="Profile" />
+                <StatusPill done={row.hasProfile} label="Travel preferences" />
               </View>
             </View>
-            {!row.isPlanner ? (
-              <Pressable
-                onPress={() => handleRemove(row)}
-                hitSlop={10}
-                accessibilityRole="button"
-                accessibilityLabel={`Remove ${row.name ?? row.phone}`}
-                disabled={removeMember.isPending}
-              >
-                <Ionicons
-                  name="trash-outline"
-                  size={18}
-                  color={removeMember.isPending ? '#D4D4D4' : '#A0A0A0'}
-                />
-              </Pressable>
-            ) : null}
+            <View className="flex-row items-center gap-3">
+              {canDesignatePlanners ? (
+                <Pressable
+                  onPress={() => handleTogglePlanner(row)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={row.isPlanner ? `Remove planner access from ${row.name ?? row.phone}` : `Make ${row.name ?? row.phone} a planner`}
+                  accessibilityState={{ selected: row.isPlanner }}
+                  disabled={setPlanner.isPending}
+                >
+                  <Ionicons
+                    name={row.isPlanner ? 'ribbon' : 'ribbon-outline'}
+                    size={20}
+                    color={
+                      setPlanner.isPending ? '#D4D4D4'
+                      : row.isPlanner ? '#D97706'
+                      : '#A0A0A0'
+                    }
+                  />
+                </Pressable>
+              ) : null}
+              {!row.isPlanner ? (
+                <Pressable
+                  onPress={() => handleRemove(row)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${row.name ?? row.phone}`}
+                  disabled={removeMember.isPending}
+                >
+                  <Ionicons
+                    name="person-remove-outline"
+                    size={18}
+                    color={removeMember.isPending ? '#D4D4D4' : '#A0A0A0'}
+                  />
+                </Pressable>
+              ) : null}
+            </View>
           </View>
         ))}
 

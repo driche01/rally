@@ -97,7 +97,6 @@ export function GroupPreferencesCard({ sessionId }: Props) {
   const [rows, setRows] = useState<ParticipantWithProfile[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const [showIndividual, setShowIndividual] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -270,29 +269,14 @@ export function GroupPreferencesCard({ sessionId }: Props) {
         </View>
       ) : null}
 
-      {/* Individual answers drill-in — hidden when the outer card is
-          collapsed so the collapsed state stays minimal. */}
-      {expanded ? (
-        <>
-          <Pressable
-            onPress={() => setShowIndividual((v) => !v)}
-            style={styles.toggleRow}
-            accessibilityRole="button"
-            accessibilityLabel={showIndividual ? 'Hide individual answers' : 'See individual answers'}
-          >
-            <Text style={styles.toggleText}>
-              {showIndividual ? '− Hide individual answers' : '+ See individual answers'}
-            </Text>
-          </Pressable>
-
-          {showIndividual && rows ? (
-            <View style={styles.individualList}>
-              {rows.map((r) => (
-                <IndividualProfile key={r.participant_id} row={r} />
-              ))}
-            </View>
-          ) : null}
-        </>
+      {/* Individual answers — always shown alongside the aggregate when
+          the outer card is expanded. Collapsed state stays minimal. */}
+      {expanded && rows ? (
+        <View style={styles.individualList}>
+          {rows.map((r) => (
+            <IndividualProfile key={r.participant_id} row={r} />
+          ))}
+        </View>
       ) : null}
     </View>
   );
@@ -508,15 +492,13 @@ const styles = StyleSheet.create({
   aggLabel: { fontSize: 13, fontWeight: '600', color: '#404040' },
   aggValue: { flex: 1, fontSize: 13, color: '#5F685F', textAlign: 'right' },
 
-  toggleRow: {
-    paddingTop: 8,
+  individualList: {
+    gap: 10,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: '#F3F1EC',
     marginTop: 4,
   },
-  toggleText: { fontSize: 13, fontWeight: '600', color: '#0F3F2E' },
-
-  individualList: { gap: 10, paddingTop: 6 },
   indCard: {
     backgroundColor: '#FBF7EF',
     borderRadius: 12,
