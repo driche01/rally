@@ -27,6 +27,23 @@ export const DEFAULT_BUDGET_RANGES: BudgetRange[] = [
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
+/**
+ * Format a YYYY-MM-DD pair as a compact human range:
+ *   "May 8"               (single day, end null or equal)
+ *   "May 8–9"             (same month)
+ *   "May 31 – Jun 2"      (cross-month)
+ */
+export function formatTripDateRange(startIso: string, endIso: string | null): string {
+  const s = new Date(startIso + 'T12:00:00');
+  const sm = MONTH_NAMES[s.getMonth()];
+  const sd = s.getDate();
+  if (!endIso || endIso === startIso) return `${sm} ${sd}`;
+  const e = new Date(endIso + 'T12:00:00');
+  const em = MONTH_NAMES[e.getMonth()];
+  const ed = e.getDate();
+  return sm === em ? `${sm} ${sd}–${ed}` : `${sm} ${sd} – ${em} ${ed}`;
+}
+
 export function stripTime(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }

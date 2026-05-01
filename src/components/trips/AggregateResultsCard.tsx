@@ -21,8 +21,10 @@ import {
 import {
   comparePollsByFormOrder,
   DURATION_POLL_TITLE,
+  formatTripDateRange,
   parseDateRangeLabel,
 } from '@/lib/pollFormUtils';
+import { useTrip } from '@/hooks/useTrips';
 import { DateHeatmap } from './DateHeatmap';
 import type { PollOption, PollWithOptions } from '@/types/database';
 
@@ -38,6 +40,10 @@ const POLL_TYPE_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
 };
 
 export function AggregateResultsCard({ tripId }: Props) {
+  // Trip start/end dates power the "decided" summary line for the dates
+  // poll — decided_option_id is best-effort there, so we read straight
+  // from trips.start_date / trips.end_date instead.
+  const { data: trip } = useTrip(tripId);
   const { data: polls = [] } = useQuery<PollWithOptions[]>({
     queryKey: ['polls', tripId, 'aggregate'],
     queryFn: () => getPollsForTrip(tripId),
@@ -117,6 +123,8 @@ export function AggregateResultsCard({ tripId }: Props) {
           counts={counts[poll.id] ?? {}}
           numericCounts={numericCounts[poll.id] ?? {}}
           pollRespondents={respondentCounts.perPoll[poll.id] ?? 0}
+          tripStartDate={trip?.start_date ?? null}
+          tripEndDate={trip?.end_date ?? null}
         />
       ))}
     </View>
@@ -131,9 +139,13 @@ interface PollBarsProps {
    *  Drives the per-poll badge ("· 5 voters") and the percent denominator
    *  for option bars so multi-select polls don't produce nonsense %s. */
   pollRespondents: number;
+  /** trips.start_date / end_date — used to render the "decided" summary
+   *  line for dates polls (decided_option_id is best-effort there). */
+  tripStartDate?: string | null;
+  tripEndDate?: string | null;
 }
 
-function PollBars({ poll, counts, numericCounts = {}, pollRespondents }: PollBarsProps) {
+function PollBars({ poll, counts, numericCounts = {}, pollRespondents, tripStartDate, tripEndDate }: PollBarsProps) {
   const [userOpen, setUserOpen] = useState(false);
   const totalVotes = Object.values(counts).reduce((a, b) => a + b, 0);
   const numericTotal = Object.values(numericCounts).reduce((a, b) => a + b, 0);
@@ -205,7 +217,30 @@ function PollBars({ poll, counts, numericCounts = {}, pollRespondents }: PollBar
         )}
       </Pressable>
 
-      {!open ? null : isFreeFormDuration ? (
+      {!open ? null : isDecided ? (
+        // Locked polls render as a single line with the chosen value —
+        // matches the "Bali, Indonesia · planner pick" look used by
+        // destination/duration. Per the design ask, dates and budget
+        // also collapse to text once locked instead of staying on the
+        // calendar / bar chart.
+        (() => {
+          let summary: string | null = null;
+          if (poll.type === 'dates' && tripStartDate) {
+            summary = formatTripDateRange(tripStartDate, tripEndDate ?? null);
+          } else if (decidedId) {
+            summary = poll.poll_options.find((o) => o.id === decidedId)?.label ?? null;
+          }
+          return (
+            <View style={styles.decidedNoVotesRow}>
+              <Ionicons name="checkmark-circle" size={14} color="#0F3F2E" />
+              <Text style={styles.decidedNoVotesLabel} numberOfLines={1}>
+                {summary ?? 'Locked'}
+              </Text>
+              <Text style={styles.decidedNoVotesHint}>planner pick</Text>
+            </View>
+          );
+        })()
+      ) : isFreeFormDuration ? (
         numericTotal === 0 ? (
           <Text style={styles.emptyHint}>No responses yet</Text>
         ) : (
@@ -241,21 +276,6 @@ function PollBars({ poll, counts, numericCounts = {}, pollRespondents }: PollBar
         )
       ) : isPerDayDates ? (
         <DateHeatmap options={poll.poll_options} counts={counts} />
-      ) : totalVotes === 0 && isDecided && decidedId ? (
-        // Planner locked the poll without votes — show the winner directly
-        // instead of "No votes yet" (which makes the locked state look broken).
-        (() => {
-          const winner = poll.poll_options.find((o) => o.id === decidedId);
-          return (
-            <View style={styles.decidedNoVotesRow}>
-              <Ionicons name="checkmark-circle" size={14} color="#0F3F2E" />
-              <Text style={styles.decidedNoVotesLabel} numberOfLines={1}>
-                {winner?.label ?? 'Locked'}
-              </Text>
-              <Text style={styles.decidedNoVotesHint}>planner pick</Text>
-            </View>
-          );
-        })()
       ) : totalVotes === 0 ? (
         <Text style={styles.emptyHint}>No votes yet</Text>
       ) : (

@@ -15,7 +15,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { supabaseAnon } from '@/lib/supabase';
 import { daysUntil, formatCadenceDate } from '@/lib/cadence';
-import { comparePollsByFormOrder, parseDateRangeLabel } from '@/lib/pollFormUtils';
+import { comparePollsByFormOrder, formatTripDateRange, parseDateRangeLabel } from '@/lib/pollFormUtils';
 import { DateHeatmap } from '@/components/trips/DateHeatmap';
 
 const IS_WEB = Platform.OS === 'web';
@@ -43,6 +43,8 @@ interface AggregateResultsResponse {
     destination: string | null;
     book_by_date: string | null;
     responses_due_date: string | null;
+    start_date?: string | null;
+    end_date?: string | null;
   };
   polls?: PollResult[];
   total_responses?: number;
@@ -151,7 +153,14 @@ export default function ResultsPage() {
       ) : (
         [...polls]
           .sort(comparePollsByFormOrder)
-          .map((poll) => <PollResults key={poll.id} poll={poll} />)
+          .map((poll) => (
+            <PollResults
+              key={poll.id}
+              poll={poll}
+              tripStartDate={trip.start_date ?? null}
+              tripEndDate={trip.end_date ?? null}
+            />
+          ))
       )}
 
       <Text style={styles.footer}>
@@ -161,7 +170,15 @@ export default function ResultsPage() {
   );
 }
 
-function PollResults({ poll }: { poll: PollResult }) {
+function PollResults({
+  poll,
+  tripStartDate,
+  tripEndDate,
+}: {
+  poll: PollResult;
+  tripStartDate: string | null;
+  tripEndDate: string | null;
+}) {
   const total = poll.options.reduce((a, b) => a + b.votes, 0);
   const maxVotes = Math.max(1, ...poll.options.map((o) => o.votes));
   const sorted = [...poll.options].sort((a, b) =>
@@ -182,6 +199,8 @@ function PollResults({ poll }: { poll: PollResult }) {
     ? Object.fromEntries(poll.options.map((o) => [o.id, o.votes]))
     : {};
 
+  const isDecided = poll.status === 'decided';
+
   return (
     <View style={styles.pollBlock}>
       <View style={styles.pollHeader}>
@@ -191,29 +210,37 @@ function PollResults({ poll }: { poll: PollResult }) {
           color="#5F685F"
         />
         <Text style={styles.pollTitle}>{poll.title}</Text>
-        {poll.status === 'decided' ? (
+        {isDecided ? (
           <View style={styles.lockedPill}>
             <Text style={styles.lockedPillText}>Locked</Text>
           </View>
         ) : null}
       </View>
 
-      {isPerDayDates ? (
-        <DateHeatmap options={poll.options} counts={heatmapCounts} />
-      ) : total === 0 && poll.status === 'decided' && poll.decided_option_id ? (
-        // Planner locked the poll without a vote tally — show the winner.
+      {isDecided ? (
+        // Locked poll — show the chosen value as a single line, matching
+        // the destination/duration treatment. Dates use trip.start_date /
+        // end_date (decided_option_id is best-effort there); everything
+        // else falls back to the decided option's label.
         (() => {
-          const winner = poll.options.find((o) => o.id === poll.decided_option_id);
+          let summary: string | null = null;
+          if (poll.type === 'dates' && tripStartDate) {
+            summary = formatTripDateRange(tripStartDate, tripEndDate);
+          } else if (poll.decided_option_id) {
+            summary = poll.options.find((o) => o.id === poll.decided_option_id)?.label ?? null;
+          }
           return (
             <View style={styles.decidedNoVotesRow}>
               <Ionicons name="checkmark-circle" size={16} color="#0F3F2E" />
               <Text style={styles.decidedNoVotesLabel} numberOfLines={1}>
-                {winner?.label ?? 'Locked'}
+                {summary ?? 'Locked'}
               </Text>
               <Text style={styles.decidedNoVotesHint}>planner pick</Text>
             </View>
           );
         })()
+      ) : isPerDayDates ? (
+        <DateHeatmap options={poll.options} counts={heatmapCounts} />
       ) : total === 0 ? (
         <Text style={styles.emptyHint}>No votes yet</Text>
       ) : (
