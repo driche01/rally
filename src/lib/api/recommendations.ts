@@ -119,27 +119,33 @@ export async function approveRecommendation(
     status: result.status,
   });
 
-  // Best-effort lock broadcast via the shared helper. Trip lookup
-  // happens via the poll → trip_id chain. The RPC already returned
-  // poll_type so we don't re-query.
+  // Best-effort lock broadcast — fire-and-forget so the planner's
+  // dashboard flips to "Just locked" the moment the RPC returns instead
+  // of waiting on Twilio fan-out (which can take a few seconds per
+  // participant). Failures are logged; they don't block the UX.
   if (result.poll_id && result.lock_label) {
-    try {
-      const { data: poll } = await supabase
-        .from('polls')
-        .select('trip_id')
-        .eq('id', result.poll_id)
-        .single();
-      if (poll?.trip_id) {
-        await broadcastDecisionLock({
-          tripId: poll.trip_id,
-          pollId: result.poll_id,
-          pollType: result.poll_type ?? null,
-          lockLabel: result.lock_label,
-        });
+    const pollId = result.poll_id;
+    const lockLabel = result.lock_label;
+    const pollType = result.poll_type ?? null;
+    (async () => {
+      try {
+        const { data: poll } = await supabase
+          .from('polls')
+          .select('trip_id')
+          .eq('id', pollId)
+          .single();
+        if (poll?.trip_id) {
+          await broadcastDecisionLock({
+            tripId: poll.trip_id,
+            pollId,
+            pollType,
+            lockLabel,
+          });
+        }
+      } catch (err) {
+        console.warn('[recommendations] post-approve broadcast failed:', err);
       }
-    } catch (err) {
-      console.warn('[recommendations] post-approve broadcast failed:', err);
-    }
+    })();
   }
 
   return { ok: true, lock_label: result.lock_label };
@@ -178,23 +184,30 @@ export async function approveRecommendationWithDates(
   });
 
   if (result.poll_id && result.lock_label) {
-    try {
-      const { data: poll } = await supabase
-        .from('polls')
-        .select('trip_id')
-        .eq('id', result.poll_id)
-        .single();
-      if (poll?.trip_id) {
-        await broadcastDecisionLock({
-          tripId: poll.trip_id,
-          pollId: result.poll_id,
-          pollType: result.poll_type ?? 'dates',
-          lockLabel: result.lock_label,
-        });
+    const pollId = result.poll_id;
+    const lockLabel = result.lock_label;
+    const pollType = result.poll_type ?? 'dates';
+    // Fire-and-forget the SMS fan-out so the dashboard flips to
+    // "Just locked" instantly. See approveRecommendation for context.
+    (async () => {
+      try {
+        const { data: poll } = await supabase
+          .from('polls')
+          .select('trip_id')
+          .eq('id', pollId)
+          .single();
+        if (poll?.trip_id) {
+          await broadcastDecisionLock({
+            tripId: poll.trip_id,
+            pollId,
+            pollType,
+            lockLabel,
+          });
+        }
+      } catch (err) {
+        console.warn('[recommendations] post-approve-with-dates broadcast failed:', err);
       }
-    } catch (err) {
-      console.warn('[recommendations] post-approve-with-dates broadcast failed:', err);
-    }
+    })();
   }
 
   return { ok: true, lock_label: result.lock_label };
