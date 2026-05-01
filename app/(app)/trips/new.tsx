@@ -46,7 +46,6 @@ const DURATION_OPTIONS = [
   '3 nights',
   '5 nights',
   '7 nights',
-  '10 nights',
 ];
 
 // Canonical title used everywhere the duration poll is referenced — server

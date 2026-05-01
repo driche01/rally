@@ -42,6 +42,7 @@ import {
 import { daysUntil, formatCadenceDate } from '@/lib/cadence';
 import { getTripStage } from '@/lib/tripStage';
 import { getResponseCountsForTrip } from '@/lib/api/responses';
+import { comparePollsByFormOrder } from '@/lib/pollFormUtils';
 import { getProfileByToken, upsertProfileByToken } from '@/lib/api/travelerProfiles';
 import { TravelerProfileForm } from '@/components/respond/TravelerProfileForm';
 import type { TravelerProfile } from '@/types/profile';
@@ -1622,16 +1623,11 @@ export default function RespondScreen() {
 
   if (!trip) return null;
 
-  // Render order on the survey: pin the duration question above the
-  // dates calendar so respondents tell us trip length first, then pick
-  // availability with that context. Other polls keep their saved order.
-  const polls: PollWithOptions[] = (() => {
-    const all = trip.polls ?? [];
-    const duration = all.filter(isDurationPoll);
-    const dates = all.filter((p) => p.type === 'dates');
-    const rest = all.filter((p) => !isDurationPoll(p) && p.type !== 'dates');
-    return [...duration, ...dates, ...rest];
-  })();
+  // Render order on the survey mirrors the trip-creation form (and the
+  // planner dashboard): destination → duration → dates → budget → other
+  // custom. Same comparator both surfaces use, so respondents see the
+  // questions in the same order the planner laid them out.
+  const polls: PollWithOptions[] = [...(trip.polls ?? [])].sort(comparePollsByFormOrder);
   const plannerLabel = 'Your trip planner';
 
   // ─── Name step ─────────────────────────────────────────────────────────────

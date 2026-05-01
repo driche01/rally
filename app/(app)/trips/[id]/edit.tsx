@@ -64,7 +64,6 @@ const DURATION_OPTIONS = [
   '3 nights',
   '5 nights',
   '7 nights',
-  '10 nights',
 ];
 
 // Old chip labels carried a parenthetical hint (e.g. "2 nights (weekend)").
