@@ -106,7 +106,7 @@ export function AggregateResultsCard({ tripId }: Props) {
         <Ionicons name="bar-chart-outline" size={16} color="#163026" />
         <Text style={styles.title}>Live results</Text>
         {totalResponses > 0 ? (
-          <Text style={styles.totalCount}>· {totalResponses} {totalResponses === 1 ? 'respondent' : 'respondents'}</Text>
+          <Text style={styles.totalCount}>· {totalResponses} {totalResponses === 1 ? 'response' : 'responses'}</Text>
         ) : null}
       </View>
 
@@ -198,8 +198,6 @@ function PollBars({ poll, counts, numericCounts = {}, pollRespondents }: PollBar
           <View style={styles.lockedPill}>
             <Text style={styles.lockedPillText}>Locked</Text>
           </View>
-        ) : pollRespondents > 0 ? (
-          <Text style={styles.totalCount}>· {pollRespondents} {pollRespondents === 1 ? 'voter' : 'voters'}</Text>
         ) : null}
         {/* Chevron only when collapsible — locked polls always expanded. */}
         {isDecided ? null : (

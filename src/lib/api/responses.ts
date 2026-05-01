@@ -118,3 +118,32 @@ export async function getRespondentCountsForTrip(
   }
   return { totalRespondents: totalSet.size, perPoll };
 }
+
+/**
+ * Set of respondent_ids that have submitted at least one poll response for
+ * this trip. Used by the planner roster to mark a member's "Polls" pill as
+ * done even when they haven't touched the legacy rsvp/preferences fields.
+ */
+export async function getRespondedRespondentIds(
+  tripId: string
+): Promise<Set<string>> {
+  const { data: polls, error: pollErr } = await supabase
+    .from('polls')
+    .select('id')
+    .eq('trip_id', tripId);
+  if (pollErr) throw pollErr;
+  if (!polls || polls.length === 0) return new Set();
+
+  const pollIds = polls.map((p) => p.id);
+  const { data: rows, error } = await supabase
+    .from('poll_responses')
+    .select('respondent_id')
+    .in('poll_id', pollIds);
+  if (error) throw error;
+
+  const ids = new Set<string>();
+  for (const row of rows ?? []) {
+    if (row.respondent_id) ids.add(row.respondent_id);
+  }
+  return ids;
+}

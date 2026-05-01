@@ -60,12 +60,19 @@ const BUDGET_OPTIONS = ['Under $500', '$500–$1k', '$1k–$2.5k', 'Above $2.5k'
 // editing stay in lockstep. Migrations 058/059 lock this exact title for
 // the duration poll, so don't rename without also updating those.
 const DURATION_OPTIONS = [
-  '2 nights (weekend)',
-  '3 nights (long weekend)',
+  '2 nights',
+  '3 nights',
   '5 nights',
-  '7 nights (1 week)',
+  '7 nights',
   '10 nights',
 ];
+
+// Old chip labels carried a parenthetical hint (e.g. "2 nights (weekend)").
+// Normalize stored options so trips created before the relabel still light
+// up the right preset chips on edit.
+function normalizeDurationLabel(label: string): string {
+  return label.replace(/\s*\([^)]*\)\s*$/, '').trim();
+}
 const DURATION_POLL_TITLE = 'How long should the trip be?';
 
 const FORM_LABEL_STYLE = { fontSize: 14, fontWeight: '500' as const, color: '#404040' };
@@ -137,6 +144,20 @@ export default function EditTripScreen() {
     () => groupConsecutiveDays(selectedDays).map((g) => ({ start: g.start, end: g.end === g.start ? null : g.end })),
     [selectedDays],
   );
+  // Mirrors new.tsx: a single date range whose night-count matches the only
+  // selected duration is treated as decided (no dates poll, no duration poll).
+  const decidedDateRange = useMemo<{ start: string; end: string | null } | null>(() => {
+    if (dateRanges.length !== 1 || durations.length !== 1) return null;
+    const r = dateRanges[0];
+    if (!r.start) return null;
+    const m = durations[0].trim().match(/^(\d+)\s*nights?\b/i);
+    if (!m) return null;
+    const nights = Number(m[1]);
+    const startMs = new Date(r.start + 'T12:00:00').getTime();
+    const endMs = new Date((r.end ?? r.start) + 'T12:00:00').getTime();
+    const days = Math.round((endMs - startMs) / 86400000) + 1;
+    return nights === days - 1 ? r : null;
+  }, [dateRanges, durations]);
   const [budgets, setBudgets] = useState<string[]>([]);
   const [customBudgets, setCustomBudgets] = useState<string[]>([]);
   const [customBudgetInput, setCustomBudgetInput] = useState('');
@@ -232,13 +253,14 @@ export default function EditTripScreen() {
     // section shipped).
     const durationPoll = polls.find((p) => p.type === 'custom' && p.title === DURATION_POLL_TITLE);
     if (durationPoll) {
-      const labels = durationPoll.poll_options.map((o) => o.label);
+      const labels = durationPoll.poll_options.map((o) => normalizeDurationLabel(o.label));
       setDurations(labels);
       setCustomDurations(labels.filter((l) => !DURATION_OPTIONS.includes(l)));
     } else if (trip.trip_duration) {
-      setDurations([trip.trip_duration]);
-      if (!DURATION_OPTIONS.includes(trip.trip_duration)) {
-        setCustomDurations([trip.trip_duration]);
+      const normalized = normalizeDurationLabel(trip.trip_duration);
+      setDurations([normalized]);
+      if (!DURATION_OPTIONS.includes(normalized)) {
+        setCustomDurations([normalized]);
       }
     } else {
       setDurations([]);
@@ -634,9 +656,12 @@ export default function EditTripScreen() {
           <View className="gap-2">
             <View className="flex-row items-baseline justify-between">
               <Text style={FORM_LABEL_STYLE}>Destination</Text>
-              {destinations.filter((d) => d.name.trim()).length >= 2 ? (
-                <Text className="text-[11px] font-semibold text-green">Will be polled</Text>
-              ) : null}
+              {(() => {
+                const filled = destinations.filter((d) => d.name.trim()).length;
+                if (filled >= 2) return <Text className="text-[11px] font-semibold text-green">Will be polled</Text>;
+                if (filled === 1) return <Text className="text-[11px] font-semibold text-green">Decided</Text>;
+                return <Text className="text-[11px] font-semibold text-[#737373]">Group decides</Text>;
+              })()}
             </View>
             {destinations.map((d, i) => (
               <View key={i} className="flex-row items-center gap-2">
@@ -692,9 +717,11 @@ export default function EditTripScreen() {
               <Text style={FORM_LABEL_STYLE}>How long?</Text>
               {durations.length >= 2 ? (
                 <Text className="text-[11px] font-semibold text-green">Will be polled</Text>
-              ) : durations.length === 0 ? (
+              ) : durations.length === 1 ? (
+                <Text className="text-[11px] font-semibold text-green">Decided</Text>
+              ) : (
                 <Text className="text-[11px] font-semibold text-[#737373]">Group decides</Text>
-              ) : null}
+              )}
             </View>
             <Text style={{ fontSize: 13, color: '#737373', marginTop: -2 }}>
               Pick durations to vote on, or skip to let your group tell you how many nights.
@@ -795,10 +822,16 @@ export default function EditTripScreen() {
           {/* Trip dates */}
           <View className="gap-2">
             <View className="flex-row items-baseline justify-between">
-              <Text style={FORM_LABEL_STYLE}>Trip dates</Text>
-              {dateRanges.length >= 2 ? (
+              <Text style={FORM_LABEL_STYLE}>
+                {decidedDateRange ? 'Trip dates' : 'Trip dates window'}
+              </Text>
+              {decidedDateRange ? (
+                <Text className="text-[11px] font-semibold text-green">Decided</Text>
+              ) : dateRanges.length >= 1 ? (
                 <Text className="text-[11px] font-semibold text-green">Will be polled</Text>
-              ) : null}
+              ) : (
+                <Text className="text-[11px] font-semibold text-[#737373]">Group decides</Text>
+              )}
             </View>
             <TouchableOpacity
               className="flex-row items-center gap-2.5 border-[1.5px] border-line rounded-xl bg-card px-3.5 py-[13px]"
@@ -871,7 +904,11 @@ export default function EditTripScreen() {
               </View>
               {budgets.length >= 2 ? (
                 <Text className="text-[11px] font-semibold text-green">Will be polled</Text>
-              ) : null}
+              ) : budgets.length === 1 ? (
+                <Text className="text-[11px] font-semibold text-green">Decided</Text>
+              ) : (
+                <Text className="text-[11px] font-semibold text-[#737373]">Group decides</Text>
+              )}
             </View>
             <View className="flex-row flex-wrap gap-2">
               {BUDGET_OPTIONS.map((opt) => {

@@ -41,12 +41,11 @@ import type { GroupSizeBucket } from '@/types/database';
 const BUDGET_OPTIONS = ['Under $500', '$500–$1k', '$1k–$2.5k', 'Above $2.5k'];
 
 // Pre-set duration chips. Labels are nights (industry-standard for lodging).
-// Friendly modifiers help respondents recognize the shape of each option.
 const DURATION_OPTIONS = [
-  '2 nights (weekend)',
-  '3 nights (long weekend)',
+  '2 nights',
+  '3 nights',
   '5 nights',
-  '7 nights (1 week)',
+  '7 nights',
   '10 nights',
 ];
 
@@ -92,8 +91,7 @@ function formatDateRangeLabel(start: string, end: string | null): string {
  * Parse the leading night-count from a duration string. Returns null if
  * the string doesn't start with a number followed by "night"/"nights".
  *
- * "2 nights (weekend)" → 2
- * "7 nights (1 week)" → 7
+ * "2 nights"          → 2
  * "5 nights"          → 5
  * "4 nights"          → 4 (custom)
  * "Group decides"     → null
@@ -518,9 +516,12 @@ export default function NewTripScreen() {
           <View className="gap-2" onLayout={onFieldLayout('destination')}>
             <View className="flex-row items-baseline justify-between">
               <Text style={FORM_LABEL_STYLE}>Destination</Text>
-              {destinations.filter((d) => d.name.trim()).length >= 2 ? (
-                <Text className="text-[11px] font-semibold text-green">Will be polled</Text>
-              ) : null}
+              {(() => {
+                const filled = destinations.filter((d) => d.name.trim()).length;
+                if (filled >= 2) return <Text className="text-[11px] font-semibold text-green">Will be polled</Text>;
+                if (filled === 1) return <Text className="text-[11px] font-semibold text-green">Decided</Text>;
+                return <Text className="text-[11px] font-semibold text-[#737373]">Group decides</Text>;
+              })()}
             </View>
             {destinations.map((d, i) => (
               <View key={i} className="flex-row items-center gap-2">
@@ -576,13 +577,13 @@ export default function NewTripScreen() {
           <View className="gap-2">
             <View className="flex-row items-baseline justify-between">
               <Text style={FORM_LABEL_STYLE}>How long?</Text>
-              {decidedDateRange ? (
-                <Text className="text-[11px] font-semibold text-green">Decided</Text>
-              ) : durations.length >= 2 ? (
+              {durations.length >= 2 ? (
                 <Text className="text-[11px] font-semibold text-green">Will be polled</Text>
-              ) : durations.length === 0 ? (
+              ) : durations.length === 1 ? (
+                <Text className="text-[11px] font-semibold text-green">Decided</Text>
+              ) : (
                 <Text className="text-[11px] font-semibold text-[#737373]">Group decides</Text>
-              ) : null}
+              )}
             </View>
             <Text style={{ fontSize: 13, color: '#737373', marginTop: -2 }}>
               Pick durations to vote on, or skip to let your group tell you how many nights.
@@ -693,8 +694,10 @@ export default function NewTripScreen() {
               {decidedDateRange ? (
                 <Text className="text-[11px] font-semibold text-green">Decided</Text>
               ) : dateRanges.length >= 1 ? (
-                <Text className="text-[11px] font-semibold text-green">Group picks days they're free</Text>
-              ) : null}
+                <Text className="text-[11px] font-semibold text-green">Will be polled</Text>
+              ) : (
+                <Text className="text-[11px] font-semibold text-[#737373]">Group decides</Text>
+              )}
             </View>
             <Text style={{ fontSize: 13, color: '#737373', marginTop: -2 }}>
               {decidedDateRange
@@ -772,7 +775,11 @@ export default function NewTripScreen() {
               <Text style={FORM_LABEL_STYLE}>Spend per person</Text>
               {budgets.length >= 2 ? (
                 <Text className="text-[11px] font-semibold text-green">Will be polled</Text>
-              ) : null}
+              ) : budgets.length === 1 ? (
+                <Text className="text-[11px] font-semibold text-green">Decided</Text>
+              ) : (
+                <Text className="text-[11px] font-semibold text-[#737373]">Group decides</Text>
+              )}
             </View>
             <Text style={{ fontSize: 13, color: '#737373', marginTop: -2 }}>Travel + lodging only</Text>
             <View className="flex-row flex-wrap gap-2">

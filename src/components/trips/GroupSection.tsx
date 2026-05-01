@@ -36,6 +36,7 @@ import {
 } from '@/hooks/useTripSession';
 import { useAddTripMember, useRemoveTripMember } from '@/hooks/useTripMembers';
 import { getProfilesForTripSession } from '@/lib/api/travelerProfiles';
+import { getRespondedRespondentIds } from '@/lib/api/responses';
 import { normalizePhone } from '@/lib/phone';
 import type { Respondent, TripSessionParticipant } from '@/types/database';
 
@@ -64,6 +65,11 @@ export function GroupSection({ tripId }: { tripId: string }) {
     queryKey: ['traveler_profiles_for_session', tripSession?.id ?? ''],
     queryFn: () => getProfilesForTripSession(tripSession!.id),
     enabled: Boolean(tripSession?.id),
+  });
+  const { data: respondedIds } = useQuery({
+    queryKey: ['responded_respondent_ids', tripId],
+    queryFn: () => getRespondedRespondentIds(tripId),
+    enabled: Boolean(tripId),
   });
   const addMember = useAddTripMember(tripId, tripSession?.id);
   const removeMember = useRemoveTripMember(tripId, tripSession?.id);
@@ -97,7 +103,11 @@ export function GroupSection({ tripId }: { tripId: string }) {
         phone: p.phone,
         isPlanner: p.is_planner,
         isActiveSms: p.status === 'active',
-        hasResponded: Boolean(matchingResp?.rsvp || matchingResp?.preferences),
+        hasResponded: Boolean(
+          matchingResp?.rsvp
+          || matchingResp?.preferences
+          || (matchingResp && respondedIds?.has(matchingResp.id))
+        ),
         hasProfile: profileByPhone.get(norm) === true,
       });
     }
@@ -111,7 +121,7 @@ export function GroupSection({ tripId }: { tripId: string }) {
         phone: r.phone ?? '',
         isPlanner: r.is_planner,
         isActiveSms: false,
-        hasResponded: Boolean(r.rsvp || r.preferences),
+        hasResponded: Boolean(r.rsvp || r.preferences || respondedIds?.has(r.id)),
         hasProfile: profileByPhone.get(norm) === true,
       });
     }
@@ -121,7 +131,7 @@ export function GroupSection({ tripId }: { tripId: string }) {
       return (a.name ?? a.phone).localeCompare(b.name ?? b.phone);
     });
     return rows;
-  }, [participants, respondents, profiles]);
+  }, [participants, respondents, profiles, respondedIds]);
 
   function handleSubmitAdd(opts: { firstName: string; lastName: string; phone: string }) {
     const composed = [opts.firstName.trim(), opts.lastName.trim()].filter(Boolean).join(' ');
