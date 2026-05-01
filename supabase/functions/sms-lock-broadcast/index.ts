@@ -79,15 +79,8 @@ function noun(pollType: string | null): string {
     : 'plan';
 }
 
-// TODO: restore the URL-bearing variants below once a custom domain
-// replaces netlify.app — carriers filter free-tier hosts (30005/30006).
-// Search `LINK_PLACEHOLDER` here and in templates.ts to find every spot.
-const LINK_PLACEHOLDER = '(plan summary coming soon)';
-const SURVEY_LINK_PLACEHOLDER = '(survey link coming soon)';
-
 function bodyForResponders(opts: { lockLabel: string; pollType: string | null; shareToken: string | null }): string {
-  // TODO: restore `${summaryUrl(opts.shareToken)}` once custom domain set up.
-  const link = opts.shareToken ? ` See the full plan: ${LINK_PLACEHOLDER}` : '';
+  const link = opts.shareToken ? ` See the full plan: ${summaryUrl(opts.shareToken)}` : '';
   return `Locked in: ${opts.lockLabel} for the ${noun(opts.pollType)}.${link} Reply to your planner with any questions.`;
 }
 
@@ -98,9 +91,8 @@ function bodyForHoldouts(opts: {
   plannerName: string | null;
 }): string {
   const planner = (opts.plannerName ?? '').trim().split(/\s+/)[0] || 'your planner';
-  // TODO: restore the real URLs once custom domain set up.
-  const link = opts.shareToken ? ` ${LINK_PLACEHOLDER}` : '';
-  const survey = opts.shareToken ? ` Tap to update your answers: ${SURVEY_LINK_PLACEHOLDER}` : '';
+  const link = opts.shareToken ? ` ${summaryUrl(opts.shareToken)}` : '';
+  const survey = opts.shareToken ? ` Tap to update your answers: ${surveyUrl(opts.shareToken)}` : '';
   return (
     `The group locked in ${opts.lockLabel} for the ${noun(opts.pollType)}.${link} ` +
     `Let ${planner} know if you're still in.${survey}`

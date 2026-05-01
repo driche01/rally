@@ -19,6 +19,7 @@ import { getAdmin } from '../_sms-shared/supabase.ts';
 import { sendDm } from '../_sms-shared/dm-sender.ts';
 import { normalizePhone } from '../_sms-shared/phone.ts';
 import { formatShortDate } from '../_sms-shared/templates.ts';
+import { pushToPlanner } from '../_sms-shared/planner-notify.ts';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -86,9 +87,10 @@ Deno.serve(async (req: Request) => {
 
     // Look up the active session for this trip so the confirmation row
     // is filed under the right thread (powers the dashboard timeline).
+    // planner_user_id is needed for the opt-out push notification below.
     const { data: session } = await admin
       .from('trip_sessions')
-      .select('id')
+      .select('id, planner_user_id')
       .eq('trip_id', tripId)
       .in('status', ['ACTIVE', 'PAUSED', 'RE_ENGAGEMENT_PENDING'])
       .order('created_at', { ascending: false })
@@ -104,7 +106,7 @@ Deno.serve(async (req: Request) => {
     const surveyUrl = `${surveyBase}/respond/${trip.share_token}`;
     const body = rsvp === 'out'
       ? `Thanks for letting us know. ${planner} has been notified you can't make the trip${dest}. No more nudges from me.`
-      : `Thanks — your survey for ${planner}'s trip${dest} is in.${finalizeBy} You won't get any more nudges from me. To update, tap the poll link anytime: ${surveyUrl}`;
+      : `Thanks — your survey for ${planner}'s trip${dest} is in.${finalizeBy} You'll receive updates on group progress. To update, tap the poll link anytime: ${surveyUrl}`;
 
     // Per-day idempotency key prevents double-send when the survey is
     // re-submitted in quick succession.
@@ -121,10 +123,16 @@ Deno.serve(async (req: Request) => {
     // also filters at fire time via hasResponded(), but skipping now keeps
     // the planner's CadenceCard accurate — no ghost "next nudge" entries
     // for a member who's already done.
+    //
+    // For 'out' submissions also flip is_attending=false. That's the single
+    // toggle the rest of the broadcast stack (synthesis, lock-broadcast,
+    // planner-authored sms-broadcast) reads to exclude someone — so flipping
+    // it here is what actually stops their downstream SMS, beyond just the
+    // nudge cadence.
     if (session?.id) {
       const { data: participant } = await admin
         .from('trip_session_participants')
-        .select('id')
+        .select('id, display_name')
         .eq('trip_session_id', session.id)
         .eq('phone', phone)
         .maybeSingle();
@@ -135,6 +143,33 @@ Deno.serve(async (req: Request) => {
           .eq('participant_id', participant.id)
           .is('sent_at', null)
           .is('skipped_at', null);
+
+        // Symmetric flip — sets is_attending to match the rsvp. The 'in'
+        // case re-enables anyone who previously opted out via the survey
+        // and is changing their mind. Idempotent for already-attending
+        // participants (rsvp='in' is the common path).
+        await admin
+          .from('trip_session_participants')
+          .update({ is_attending: rsvp === 'in' })
+          .eq('id', participant.id);
+
+        // Phase 4.5a — push the planner when someone opts out via the
+        // survey. Best-effort, never throws. Only fires on the 'out' edge:
+        // 'in' submissions are the common case and don't warrant a push.
+        if (rsvp === 'out' && session.planner_user_id) {
+          const senderName = (participant.display_name ?? '').trim().split(/\s+/)[0] || 'Someone';
+          const tripPhrase = trip.destination ? `the ${trip.destination} trip` : 'your trip';
+          await pushToPlanner(admin, session.planner_user_id, {
+            title: `${senderName} can't make it`,
+            body: `${senderName} just opted out of ${tripPhrase} via the survey.`,
+            data: {
+              type: 'opt_out',
+              trip_id: tripId,
+              trip_session_id: session.id,
+              participant_id: participant.id,
+            },
+          }).catch(() => {});
+        }
       }
     }
 

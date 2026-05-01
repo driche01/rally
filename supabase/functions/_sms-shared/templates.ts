@@ -99,6 +99,62 @@ export interface NudgeBodyOpts {
   daysUntilBookBy?: number | null;
   /** Internal response deadline (ISO 'YYYY-MM-DD'). Drives the "by [date]" framing. */
   responsesDueDate?: string | null;
+  /**
+   * Social proof — first names of responders so far (excludes the recipient
+   * and the planner). Caller decides ordering; we slice the first 3 here.
+   */
+  responderNames?: string[];
+  /** Total non-planner participants who have meaningfully responded. */
+  respondedCount?: number;
+  /** Total non-planner participants on the trip (the denominator). */
+  totalCount?: number;
+}
+
+/**
+ * Social-proof clause with names. Format B (per product):
+ *   "Alex has answered, 4 left."
+ *   "Alex and Sam have answered, 3 left."
+ *   "Alex, Sam, and Jordan have answered, 2 left."
+ *   "Alex, Sam, Jordan, and 2 others have answered, 3 left."
+ *
+ * Returns '' when there's no proof to share (zero responders or zero total).
+ * The "X left" tail is dropped if everyone's already in.
+ */
+export function socialProofWithNames(
+  names: string[],
+  respondedCount: number,
+  totalCount: number,
+): string {
+  if (respondedCount <= 0 || names.length === 0 || totalCount <= 0) return '';
+  const visible = names.slice(0, 3);
+  const overflow = Math.max(0, respondedCount - visible.length);
+  const remaining = Math.max(0, totalCount - respondedCount);
+
+  let phrase: string;
+  if (overflow > 0) {
+    // 3 visible + N others
+    const otherWord = overflow === 1 ? 'other' : 'others';
+    phrase = `${visible[0]}, ${visible[1]}, ${visible[2]}, and ${overflow} ${otherWord} have answered`;
+  } else if (visible.length === 1) {
+    phrase = `${visible[0]} has answered`;
+  } else if (visible.length === 2) {
+    phrase = `${visible[0]} and ${visible[1]} have answered`;
+  } else {
+    phrase = `${visible[0]}, ${visible[1]}, and ${visible[2]} have answered`;
+  }
+  return remaining > 0 ? `${phrase}, ${remaining} left.` : `${phrase}.`;
+}
+
+/**
+ * Count-only social proof, used on rd_minus_2 / rd_minus_1 where the names
+ * list might be long and the deadline framing is doing the urgency lift.
+ *   "4 of 7 in, 3 still left."
+ */
+export function socialProofCountOnly(respondedCount: number, totalCount: number): string {
+  if (totalCount <= 0) return '';
+  const remaining = Math.max(0, totalCount - respondedCount);
+  if (remaining <= 0) return '';
+  return `${respondedCount} of ${totalCount} in, ${remaining} still left.`;
 }
 
 export function formatShortDate(iso: string): string {
@@ -119,31 +175,43 @@ function firstName(n: string | null): string | null {
 
 export function initialOutreachSms(opts: NudgeBodyOpts): string {
   const planner = firstName(opts.plannerName) ?? 'A friend';
-  const dest = opts.destination ? ` to ${opts.destination}` : '';
+  const tripPhrase = opts.destination ? `a ${opts.destination} trip` : 'a trip';
   const recipient = firstName(opts.recipientName);
   const greet = recipient ? `Hey ${recipient} ` : '';
   const byDate = opts.responsesDueDate ? ` by ${formatShortDate(opts.responsesDueDate)}` : '';
   return (
-    `${greet}\u2014 ${planner} is planning a trip${dest} and wants your input${byDate}. ` +
-    `Quick survey (no login): ${opts.surveyUrl}`
+    `${greet}\u2014 ${planner}'s planning ${tripPhrase} and wants your picks${byDate}. ` +
+    `Quick survey, no login: ${opts.surveyUrl}`
   );
 }
 
 export function nudgeBody(kind: 'd1' | 'd3' | 'heartbeat' | 'rd_minus_2' | 'rd_minus_1', opts: NudgeBodyOpts): string {
-  const planner = firstName(opts.plannerName) ?? 'your friend';
-  const dest = opts.destination ? ` (${opts.destination})` : '';
+  const tripWord = opts.destination ? `${opts.destination} trip` : 'trip';
   const link = opts.surveyUrl;
+
+  const namesProof = socialProofWithNames(
+    opts.responderNames ?? [],
+    opts.respondedCount ?? 0,
+    opts.totalCount ?? 0,
+  );
+  const countProof = socialProofCountOnly(
+    opts.respondedCount ?? 0,
+    opts.totalCount ?? 0,
+  );
+  const namesClause = namesProof ? ` ${namesProof}` : '';
+  const countClause = countProof ? ` ${countProof}` : '';
+
   switch (kind) {
     case 'd1':
-      return `Quick reminder: ${planner}'s trip survey${dest} is open. Takes 2 min: ${link}`;
+      return `Hey \u2014 your ${tripWord} survey is open.${namesClause} 2 mins, no login: ${link}`;
     case 'd3':
-      return `Still gathering responses for ${planner}'s trip${dest}. Tap when you have a sec: ${link}`;
+      return `Your ${tripWord} is shaping up.${namesClause} Toss in your picks: ${link}`;
     case 'heartbeat':
-      return `${planner}'s trip survey${dest} is still open. Pop in when you're ready: ${link}`;
+      return `Your ${tripWord} survey is still hanging out, ready when you are.${namesClause} ${link}`;
     case 'rd_minus_2':
-      return `${planner} needs everyone's answers in 2 days. Quick survey: ${link}`;
+      return `Heads up \u2014 2 days to weigh in on your ${tripWord}.${countClause} Quick survey: ${link}`;
     case 'rd_minus_1':
-      return `Last call \u2014 ${planner} is locking in trip plans tomorrow. ${link}`;
+      return `Last call \u2014 your ${tripWord} locks in tomorrow.${countClause} ${link}`;
   }
 }
 
@@ -159,8 +227,21 @@ export interface SynthBodyOpts {
   resultsUrl: string;
   respondedCount: number;
   totalCount: number;
-  /** Top option per poll, e.g. ['Cancun', 'Jun 12-19']. Optional. */
+  /**
+   * Generic top-option labels for half / pre_due milestones (e.g. ['Cancun', 'Jun 12-19']).
+   * Synthesized from whatever polls have at least one vote.
+   */
   leaders?: string[];
+  /**
+   * Structured leaders for the full milestone \u2014 one per canonical poll type.
+   * Any subset can be present; missing keys are dropped from the body.
+   */
+  fullLeaders?: {
+    destination?: string | null;
+    dates?: string | null;
+    duration?: string | null;
+    budget?: string | null;
+  };
 }
 
 function leaderClause(opts: SynthBodyOpts): string {
@@ -169,28 +250,42 @@ function leaderClause(opts: SynthBodyOpts): string {
   return ` Leading: ${list}.`;
 }
 
+function fullLeaderClause(opts: SynthBodyOpts): string {
+  const fl = opts.fullLeaders;
+  if (!fl) return '';
+  const parts: string[] = [];
+  // Order matches the format the planner sees in the dashboard:
+  // destination \u00b7 dates \u00b7 duration \u00b7 budget.
+  if (fl.destination) parts.push(fl.destination);
+  if (fl.dates) parts.push(fl.dates);
+  if (fl.duration) parts.push(fl.duration);
+  if (fl.budget) parts.push(fl.budget);
+  if (parts.length === 0) return '';
+  return ` Leading: ${parts.join(' \u00b7 ')}.`;
+}
+
 export function synthHalfSms(opts: SynthBodyOpts): string {
-  const planner = firstName(opts.plannerName) ?? 'Your planner';
-  const dest = opts.destination ? ` to ${opts.destination}` : '';
+  const tripWord = opts.destination ? `${opts.destination} trip` : 'trip';
   return (
-    `Halfway there \u2014 ${opts.respondedCount} of ${opts.totalCount} have responded ` +
-    `for ${planner}'s trip${dest}.${leaderClause(opts)} See live results: ${opts.resultsUrl}`
+    `Halfway there \u2014 ${opts.respondedCount} of ${opts.totalCount} in on your ${tripWord}.${leaderClause(opts)} ` +
+    `See live results: ${opts.resultsUrl}`
   );
 }
 
 export function synthFullSms(opts: SynthBodyOpts): string {
-  const planner = firstName(opts.plannerName) ?? 'Your planner';
+  const planner = firstName(opts.plannerName) ?? 'your planner';
+  const tripWord = opts.destination ? `${opts.destination} trip` : 'trip';
   return (
-    `Everyone's in for ${planner}'s trip \u2014 ${opts.totalCount} of ${opts.totalCount}. ` +
-    `${planner} will lock in plans next.${leaderClause(opts)} ${opts.resultsUrl}`
+    `Everyone's in on your ${tripWord} \u2014 ${opts.totalCount} of ${opts.totalCount}. ` +
+    `${planner} will lock in plans next.${fullLeaderClause(opts)} ${opts.resultsUrl}`
   );
 }
 
 export function synthPreDueSms(opts: SynthBodyOpts): string {
-  const planner = firstName(opts.plannerName) ?? 'Your planner';
+  const tripWord = opts.destination ? `${opts.destination} trip` : 'trip';
   const missing = opts.totalCount - opts.respondedCount;
   return (
-    `Heads up \u2014 ${planner} is locking in plans tomorrow. ` +
+    `Heads up \u2014 your ${tripWord} locks in tomorrow. ` +
     `${missing} ${missing === 1 ? 'person hasn\'t' : 'people haven\'t'} responded yet.${leaderClause(opts)} ` +
     `${opts.resultsUrl}`
   );

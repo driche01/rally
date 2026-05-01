@@ -38,9 +38,7 @@ import { CustomPollsSection, cleanCustomPoll } from '@/components/trips/CustomPo
 import { FormSectionHeader } from '@/components/trips/FormSectionHeader';
 import { BookByPicker } from '@/components/trips/BookByPicker';
 import { GroupSection } from '@/components/trips/GroupSection';
-import { useProfile } from '@/hooks/useProfile';
 import type { CustomPoll } from '@/types/polls';
-import { useAuthStore } from '@/stores/authStore';
 import { useTrip, useUpdateTrip } from '@/hooks/useTrips';
 import { usePolls } from '@/hooks/usePolls';
 import { broadcastToSession, getActiveTripSession } from '@/lib/api/dashboard';
@@ -131,10 +129,6 @@ export default function EditTripScreen() {
   const { data: trip, isLoading: tripLoading } = useTrip(id);
   const { data: polls = [], isLoading: pollsLoading } = usePolls(id);
   const updateTrip = useUpdateTrip();
-
-  const currentUser = useAuthStore((s) => s.user);
-  const { data: plannerProfile } = useProfile(currentUser?.id);
-  const plannerFirstName = (plannerProfile?.name ?? '').split(/\s+/)[0] || null;
 
   const [name, setName] = useState('');
   const [destinations, setDestinations] = useState<Array<{ name: string; address: string }>>([{ name: '', address: '' }]);
@@ -395,10 +389,9 @@ export default function EditTripScreen() {
   }, [destChanged, datesChanged, budgetsChanged, responseCounts, polls, customPolls, removedCustomPolls, initialSnapshot]);
 
   // Default follow-up SMS body — used until the planner edits it.
-  // `[Their name]` stays as a literal placeholder; per-recipient
-  // substitution happens server-side at broadcast time.
+  // The bracketed tokens ([Name], [Planner]) stay as literals here;
+  // per-recipient substitution happens server-side at broadcast time.
   const defaultFollowup = useMemo(() => {
-    const planner = plannerFirstName ?? 'Your planner';
     const changedFields: string[] = [];
     if (destChanged) {
       const n = destinations.filter((d) => d.name.trim()).length;
@@ -426,10 +419,9 @@ export default function EditTripScreen() {
             ? `${changedFields[0]} and ${changedFields[1]}`
             : `${changedFields.slice(0, -1).join(', ')}, and ${changedFields[changedFields.length - 1]}`;
     const url = trip ? `https://rallysurveys.netlify.app/respond/${trip.share_token}` : '';
-    return `Hey [Name] — ${planner} made some updates to ${summary} for the trip. Update your responses here: ${url}`;
+    return `Hey [Name] — [Planner] made some updates to ${summary} for the trip. Update your responses here: ${url}`;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    plannerFirstName,
     destChanged,
     datesChanged,
     budgetsChanged,
@@ -1072,7 +1064,12 @@ export default function EditTripScreen() {
                 }}
                 maxLength={320}
               />
-              <Text className="text-[11px] text-[#888] text-right">{followupSms.length} / 320</Text>
+              <View className="flex-row justify-between">
+                <Text className="text-[11px] text-[#737373] flex-1">
+                  Use [Name], [Planner], [Destination], or [Trip] — each invitee gets their own values filled in.
+                </Text>
+                <Text className="text-[11px] text-[#888]">{followupSms.length} / 320</Text>
+              </View>
             </View>
           ) : null}
 

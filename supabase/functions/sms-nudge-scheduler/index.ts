@@ -59,12 +59,14 @@ interface ActiveSession {
 
 interface Trip {
   id: string;
+  name: string | null;
   share_token: string;
   destination: string | null;
   book_by_date: string | null;
   responses_due_date: string | null;
   custom_intro_sms: string | null;
   finalize_prompt_sent_at?: string | null;
+  stuck_alert_sent_at?: string | null;
 }
 
 interface Participant {
@@ -235,12 +237,49 @@ async function seedSession(
   return { inserted, skipped };
 }
 
+interface Roster {
+  respondedNames: string[];
+  respondedCount: number;
+  totalCount: number;
+}
+
+/**
+ * Compute the social-proof roster for a session at fire time. Excludes the
+ * planner. Names are first-name-only; sorted alphabetically for stability
+ * across re-fires within a tick.
+ *
+ * Eligible denominator = active, attending, non-planner participants.
+ * Numerator = those whose `hasResponded` is true (same definition the
+ * scheduler uses to skip already-responded recipients).
+ */
+async function getRoster(
+  admin: SupabaseClient,
+  tripId: string,
+  participants: Participant[],
+): Promise<Roster> {
+  const eligible = participants.filter(
+    (p) => !p.is_planner && p.is_attending && p.status === 'active',
+  );
+  const respondedNames: string[] = [];
+  let respondedCount = 0;
+  for (const p of eligible) {
+    if (await hasResponded(admin, tripId, p.phone)) {
+      respondedCount++;
+      const first = (p.display_name ?? '').trim().split(/\s+/)[0];
+      if (first) respondedNames.push(first);
+    }
+  }
+  respondedNames.sort((a, b) => a.localeCompare(b));
+  return { respondedNames, respondedCount, totalCount: eligible.length };
+}
+
 /** Build the SMS body for a due nudge row. */
 function buildSmsBody(
   kind: string,
   trip: Trip,
   participant: Participant,
   plannerName: string | null,
+  roster: Roster | null,
 ): string {
   const opts: NudgeBodyOpts = {
     recipientName: participant.display_name,
@@ -248,14 +287,24 @@ function buildSmsBody(
     destination: trip.destination,
     surveyUrl: surveyUrl(trip.share_token),
     responsesDueDate: trip.responses_due_date,
+    responderNames: roster?.respondedNames,
+    respondedCount: roster?.respondedCount,
+    totalCount: roster?.totalCount,
   };
   if (kind === 'initial') {
     const customSms = trip.custom_intro_sms?.trim();
     // The default `initialOutreachSms` already weaves recipient name in
     // server-side. The custom override is whatever the planner typed —
-    // resolve any `[Their name]` placeholder so the literal string
-    // doesn't go out.
-    if (customSms) return personalizeBody(customSms, participant.display_name);
+    // resolve all four supported placeholders so literal tokens never
+    // go out as SMS body text.
+    if (customSms) {
+      return personalizeBody(customSms, {
+        recipientName: participant.display_name,
+        plannerName,
+        destination: trip.destination,
+        tripName: trip.name,
+      });
+    }
     return initialOutreachSms(opts);
   }
   if (kind === 'd1' || kind === 'd3' || kind === 'heartbeat'
@@ -289,7 +338,10 @@ async function fireDueNudges(admin: SupabaseClient): Promise<{ sent: number; ski
   if (dueRows.length === 0) return { sent: 0, skipped: 0, errors: 0 };
 
   // Cache trip + participant lookups across rows in this tick.
-  const tripBySession = new Map<string, { trip: Trip; plannerName: string | null }>();
+  const tripBySession = new Map<
+    string,
+    { trip: Trip; plannerName: string | null; sessionParticipants: Participant[]; roster: Roster | null }
+  >();
   const participantById = new Map<string, Participant>();
 
   let sent = 0;
@@ -309,7 +361,7 @@ async function fireDueNudges(admin: SupabaseClient): Promise<{ sent: number; ski
         if (!ses) { skipped++; await skip(admin, row.id, 'session_missing'); continue; }
         const { data: trip } = await admin
           .from('trips')
-          .select('id, share_token, destination, book_by_date, responses_due_date, custom_intro_sms')
+          .select('id, name, share_token, destination, book_by_date, responses_due_date, custom_intro_sms')
           .eq('id', ses.trip_id)
           .maybeSingle();
         if (!trip) { skipped++; await skip(admin, row.id, 'trip_missing'); continue; }
@@ -322,7 +374,16 @@ async function fireDueNudges(admin: SupabaseClient): Promise<{ sent: number; ski
             .maybeSingle();
           plannerName = pu?.display_name ?? null;
         }
-        ctx = { trip: trip as Trip, plannerName };
+        // Load all participants for this session once — used both for the
+        // social-proof roster and as a free cache for the per-row participant
+        // lookup that follows.
+        const { data: allParticipants } = await admin
+          .from('trip_session_participants')
+          .select('id, trip_session_id, user_id, phone, display_name, status, is_attending, is_planner, joined_at')
+          .eq('trip_session_id', row.trip_session_id);
+        const sessionParticipants = (allParticipants ?? []) as Participant[];
+        for (const p of sessionParticipants) participantById.set(p.id, p);
+        ctx = { trip: trip as Trip, plannerName, sessionParticipants, roster: null };
         tripBySession.set(row.trip_session_id, ctx);
       }
 
@@ -351,7 +412,19 @@ async function fireDueNudges(admin: SupabaseClient): Promise<{ sent: number; ski
         skipped++; await skip(admin, row.id, 'already_responded'); continue;
       }
 
-      const body = buildSmsBody(row.nudge_type, ctx.trip, participant, ctx.plannerName);
+      // Lazily compute the social-proof roster the first time a nudge in
+      // this session needs it, then reuse for the rest of the tick.
+      const needsRoster =
+        row.nudge_type === 'd1' ||
+        row.nudge_type === 'd3' ||
+        row.nudge_type === 'heartbeat' ||
+        row.nudge_type === 'rd_minus_2' ||
+        row.nudge_type === 'rd_minus_1';
+      if (needsRoster && !ctx.roster) {
+        ctx.roster = await getRoster(admin, ctx.trip.id, ctx.sessionParticipants);
+      }
+
+      const body = buildSmsBody(row.nudge_type, ctx.trip, participant, ctx.plannerName, ctx.roster);
       const idem = `nudge:${row.id}`;
       const result = await sendDm(admin, participant.phone, body, {
         tripSessionId: row.trip_session_id,
@@ -409,23 +482,35 @@ interface SynthContext {
   participants: Participant[];
 }
 
-async function topLeaderLabels(admin: SupabaseClient, tripId: string): Promise<string[]> {
+interface LeadersByType {
+  destination?: string | null;
+  dates?: string | null;
+  duration?: string | null;
+  budget?: string | null;
+}
+
+/**
+ * Top option per canonical poll type for the trip. Used by synthesis bodies:
+ * the half / pre_due milestones use a flattened list (any 2 leaders), while
+ * the full milestone uses the structured shape so each category has a slot.
+ */
+async function topLeadersByType(admin: SupabaseClient, tripId: string): Promise<LeadersByType> {
+  const out: LeadersByType = {};
   const { data: polls } = await admin
     .from('polls')
     .select('id, type, title')
     .eq('trip_id', tripId)
     .in('status', ['live', 'decided'])
-    .in('type', ['destination', 'dates']);
-  if (!polls || polls.length === 0) return [];
+    .in('type', ['destination', 'dates', 'duration', 'budget']);
+  if (!polls || polls.length === 0) return out;
 
-  const labels: string[] = [];
-  for (const p of polls as { id: string; type: string }[]) {
-    const { data: top } = await admin
+  for (const p of polls as { id: string; type: 'destination' | 'dates' | 'duration' | 'budget' }[]) {
+    const { data: rows } = await admin
       .from('poll_responses')
       .select('option_id')
       .eq('poll_id', p.id);
     const counts = new Map<string, number>();
-    for (const r of (top ?? []) as { option_id: string }[]) {
+    for (const r of (rows ?? []) as { option_id: string }[]) {
       counts.set(r.option_id, (counts.get(r.option_id) ?? 0) + 1);
     }
     const winner = Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0];
@@ -435,9 +520,24 @@ async function topLeaderLabels(admin: SupabaseClient, tripId: string): Promise<s
       .select('label')
       .eq('id', winner[0])
       .maybeSingle();
-    if (opt?.label) labels.push(opt.label);
+    if (opt?.label) out[p.type] = opt.label;
   }
-  return labels;
+  return out;
+}
+
+/**
+ * Flat label list for half / pre_due milestones — picks at most 2 leaders
+ * in a stable order. Reuses topLeadersByType so we only query once when both
+ * shapes are needed.
+ */
+function leadersToFlatList(byType: LeadersByType): string[] {
+  const order: (keyof LeadersByType)[] = ['destination', 'dates', 'duration', 'budget'];
+  const out: string[] = [];
+  for (const k of order) {
+    const v = byType[k];
+    if (v) out.push(v);
+  }
+  return out;
 }
 
 async function maybeSendSynthesis(
@@ -452,9 +552,16 @@ async function maybeSendSynthesis(
   if (eligible.length === 0) return { sent: false };
 
   // Count responded against the same definition the FIRE pass uses.
+  // Track phones too so we can fan out only to responders (per product:
+  // synthesis is a progress-update reward for those who chimed in; the
+  // non-responders are already getting nudges).
   let respondedCount = 0;
+  const respondedPhones: string[] = [];
   for (const p of eligible) {
-    if (await hasResponded(admin, trip.id, p.phone)) respondedCount++;
+    if (await hasResponded(admin, trip.id, p.phone)) {
+      respondedCount++;
+      respondedPhones.push(p.phone);
+    }
   }
 
   const pct = respondedCount / eligible.length;
@@ -479,27 +586,30 @@ async function maybeSendSynthesis(
     return { sent: false };
   }
 
-  const leaders = await topLeaderLabels(admin, trip.id);
+  const leadersByType = await topLeadersByType(admin, trip.id);
   const synthOpts: SynthBodyOpts = {
     plannerName,
     destination: trip.destination,
     resultsUrl: resultsUrl(trip.share_token),
     respondedCount,
     totalCount: eligible.length,
-    leaders,
+    leaders: leadersToFlatList(leadersByType),
+    fullLeaders: leadersByType,
   };
   const body =
     candidate === 'full'    ? synthFullSms(synthOpts)
     : candidate === 'pre_due' ? synthPreDueSms(synthOpts)
     :                         synthHalfSms(synthOpts);
 
-  // Fan out to ALL active+attending participants (including responders —
-  // they want the progress update too). Idempotency key keeps a re-tick
-  // from re-sending if the DB write below failed mid-flight.
+  // Fan out to responders only. The full milestone happens to include
+  // everyone (100% by definition) — but routing through the same allowlist
+  // keeps the audience consistent and idempotency keys stable.
+  if (respondedPhones.length === 0) return { sent: false };
   await broadcast(admin, session.id, body, {
     idempotencyKey: `synth:${session.id}:${candidate}`,
     senderRole: 'rally_synth',
     attendingOnly: true,
+    phoneAllowlist: respondedPhones,
   });
 
   await admin
@@ -563,7 +673,7 @@ async function seedAllActive(admin: SupabaseClient): Promise<{
   for (const ses of (sessions ?? []) as ActiveSession[]) {
     const { data: trip } = await admin
       .from('trips')
-      .select('id, share_token, destination, book_by_date, responses_due_date, custom_intro_sms, finalize_prompt_sent_at')
+      .select('id, name, share_token, destination, book_by_date, responses_due_date, custom_intro_sms, finalize_prompt_sent_at, stuck_alert_sent_at')
       .eq('id', ses.trip_id)
       .maybeSingle();
     if (!trip || !trip.book_by_date || !trip.responses_due_date) continue;
@@ -638,6 +748,38 @@ async function seedAllActive(admin: SupabaseClient): Promise<{
       recsCreated += created;
       // Past the deadline — no more nudges. Skip seeding.
       continue;
+    }
+
+    // Stuck-trip planner alert (Phase 6.2). Fires once per trip when the
+    // session has been live ≥5 days and fewer than 50% of attending
+    // non-planner participants have responded. trips.stuck_alert_sent_at
+    // is the idempotency guard.
+    if (!trip.stuck_alert_sent_at) {
+      const launchAt = new Date(ses.created_at).getTime();
+      const fiveDaysMs = 5 * 24 * 60 * 60 * 1000;
+      const launchedLongEnough = Date.now() - launchAt >= fiveDaysMs;
+      if (launchedLongEnough) {
+        const eligibleForCount = ((participants ?? []) as Participant[]).filter(
+          (p) => p.status === 'active' && p.is_attending && !p.is_planner,
+        );
+        if (eligibleForCount.length > 0) {
+          let respondedCount = 0;
+          for (const p of eligibleForCount) {
+            if (await hasResponded(admin, trip.id, p.phone)) respondedCount++;
+          }
+          const pct = respondedCount / eligibleForCount.length;
+          if (pct < 0.5) {
+            await fireStuckAlert(trip.id, respondedCount, eligibleForCount.length);
+            track('stuck_alert_fired', {
+              distinct_id: trip.id,
+              trip_id: trip.id,
+              responded_count: respondedCount,
+              total_count: eligibleForCount.length,
+              trip_model: '1to1',
+            }).catch(() => {});
+          }
+        }
+      }
     }
 
     const result = await seedSession(admin, ses, trip as Trip, (participants ?? []) as Participant[]);
@@ -786,6 +928,35 @@ async function fireFinalizePrompt(tripId: string): Promise<boolean> {
     return res.ok;
   } catch (err) {
     console.error('[scheduler] finalize prompt invoke failed:', err);
+    return false;
+  }
+}
+
+/**
+ * Calls sms-stuck-trip-alert to text the planner. The downstream function
+ * double-checks stuck_alert_sent_at server-side and stamps it on success,
+ * so this call is safe to retry.
+ */
+async function fireStuckAlert(
+  tripId: string,
+  respondedCount: number,
+  totalCount: number,
+): Promise<boolean> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+  const serviceRoleKey = getServiceRoleKey();
+  if (!supabaseUrl || !serviceRoleKey) return false;
+  try {
+    const res = await fetch(`${supabaseUrl}/functions/v1/sms-stuck-trip-alert`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${serviceRoleKey}`,
+      },
+      body: JSON.stringify({ trip_id: tripId, responded_count: respondedCount, total_count: totalCount }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.error('[scheduler] stuck alert invoke failed:', err);
     return false;
   }
 }

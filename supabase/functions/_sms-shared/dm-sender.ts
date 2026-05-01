@@ -151,6 +151,12 @@ export interface BroadcastOptions {
   excludeSenderPhone?: string | null;
   /** Only broadcast to participants with is_attending = true (default true). */
   attendingOnly?: boolean;
+  /**
+   * Restrict the audience to phones in this list. Useful for synthesis
+   * milestones, which target responders only. When undefined, all eligible
+   * participants get the message.
+   */
+  phoneAllowlist?: string[];
   /** Stable seed for idempotency. Per-participant key = `${seed}:${phone}`. */
   idempotencyKey?: string;
   /** sender_role tag for the logged outbound rows (default 'rally'). */
@@ -184,6 +190,38 @@ export async function broadcast(
   const attendingOnly = opts.attendingOnly !== false;
   const seed = opts.idempotencyKey ?? `bcast:${tripSessionId}:${await shortHash(body)}`;
 
+  // Pull trip + planner context once so personalizeBody can resolve all
+  // four placeholder tokens ([Name]/[Their name], [Planner], [Destination],
+  // [Trip]) for every recipient. Best-effort — any missing piece falls
+  // back gracefully inside personalizeBody.
+  let plannerName: string | null = null;
+  let destination: string | null = null;
+  let tripName: string | null = null;
+  {
+    const { data: ses } = await admin
+      .from('trip_sessions')
+      .select('trip_id, planner_user_id')
+      .eq('id', tripSessionId)
+      .maybeSingle();
+    if (ses?.trip_id) {
+      const { data: trip } = await admin
+        .from('trips')
+        .select('name, destination')
+        .eq('id', ses.trip_id)
+        .maybeSingle();
+      destination = trip?.destination ?? null;
+      tripName = trip?.name ?? null;
+    }
+    if (ses?.planner_user_id) {
+      const { data: planner } = await admin
+        .from('users')
+        .select('display_name')
+        .eq('id', ses.planner_user_id)
+        .maybeSingle();
+      plannerName = planner?.display_name ?? null;
+    }
+  }
+
   let query = admin
     .from('trip_session_participants')
     .select('user_id, phone, display_name')
@@ -197,6 +235,7 @@ export async function broadcast(
     return { sent: 0, skipped: 0, failed: [] };
   }
 
+  const allowSet = opts.phoneAllowlist ? new Set(opts.phoneAllowlist) : null;
   const result: BroadcastResult = { sent: 0, skipped: 0, failed: [] };
   for (const row of rows) {
     if (opts.excludeUserId && row.user_id === opts.excludeUserId) {
@@ -207,10 +246,19 @@ export async function broadcast(
       result.skipped += 1;
       continue;
     }
-    // Per-recipient placeholder substitution. The body the planner
-    // typed contains `[Their name]` etc.; we resolve those here so
-    // each phone gets a personalized variant instead of the literal.
-    const personalized = personalizeBody(body, row.display_name);
+    if (allowSet && !allowSet.has(row.phone)) {
+      result.skipped += 1;
+      continue;
+    }
+    // Per-recipient placeholder substitution. Resolves [Name]/[Their name],
+    // [Planner], [Destination], [Trip] so each phone gets a personalized
+    // variant rather than the literal token.
+    const personalized = personalizeBody(body, {
+      recipientName: row.display_name,
+      plannerName,
+      destination,
+      tripName,
+    });
     const sendResult = await sendDm(admin, row.phone, personalized, {
       tripSessionId,
       idempotencyKey: `${seed}:${row.phone}`,

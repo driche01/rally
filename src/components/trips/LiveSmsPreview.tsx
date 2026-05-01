@@ -13,9 +13,9 @@
  *     overrides their text.
  *   - Tap "Reset" (only visible when custom) to revert to default.
  *
- * `[Their name]` stays as a literal placeholder — server-side
- * substitution lives in `_sms-shared/personalize.ts` and replaces it
- * with the recipient's first name at send time.
+ * Bracketed tokens ([Name], [Planner], [Destination], [Trip]) stay as
+ * literals here — server-side substitution lives in
+ * `_sms-shared/personalize.ts` and resolves them per-recipient at send time.
  */
 import React from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
@@ -134,9 +134,12 @@ export function LiveSmsPreview({
       </View>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
         <Text style={{ fontSize: 11, color: '#737373', flex: 1 }}>
-          Each invitee sees their own first name where{' '}
-          <Text style={{ color: '#404040' }}>{RECIPIENT_PLACEHOLDER}</Text>
-          {' '}appears.
+          Use{' '}
+          <Text style={{ color: '#404040' }}>[Name]</Text>,{' '}
+          <Text style={{ color: '#404040' }}>[Planner]</Text>,{' '}
+          <Text style={{ color: '#404040' }}>[Destination]</Text>, or{' '}
+          <Text style={{ color: '#404040' }}>[Trip]</Text>{' '}
+          — each invitee gets their own values filled in.
         </Text>
         <Text style={{ fontSize: 11, color: '#888' }}>{value.length}/{MAX_LENGTH}</Text>
       </View>

@@ -450,6 +450,28 @@ export async function saveRespondentRsvpAndPreferences(
   if (error) throw error;
 }
 
+/**
+ * Mark a respondent as opted-out (rsvp='out') and fire the post-submit
+ * confirmation SMS — used by the survey screen when someone answers "no"
+ * to the "can you make this trip?" question. Does NOT submit poll
+ * responses (the no-path skips polls entirely).
+ *
+ * Server-side, the survey-confirmation edge function flips
+ * `trip_session_participants.is_attending = false` for the matching phone,
+ * which excludes them from synthesis broadcasts, lock-broadcasts, and
+ * the seeded nudge cadence — without globally opting them out (STOP-style).
+ *
+ * Best-effort on the SMS — survey state is the source of truth.
+ */
+export async function optOutFromTrip(
+  respondentId: string,
+  tripId: string,
+  phone: string | null,
+): Promise<void> {
+  await saveRespondentRsvpAndPreferences(respondentId, 'out');
+  await sendSurveyConfirmationSms(tripId, phone, 'out');
+}
+
 // ─── Planner designation ──────────────────────────────────────────────────────
 
 /**

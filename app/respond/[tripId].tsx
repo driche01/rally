@@ -38,6 +38,7 @@ import {
   submitPollResponses,
   clearTripSession,
   sendSurveyConfirmationSms,
+  optOutFromTrip,
 } from '@/lib/api/respondents';
 import { daysUntil, formatCadenceDate } from '@/lib/cadence';
 import { getTripStage } from '@/lib/tripStage';
@@ -1174,7 +1175,7 @@ function formatTripDates(start: string | null, end: string | null): string | nul
 
 // ─── Main screen ───────────────────────────────────────────────────────────────
 
-type Step = 'name' | 'polls' | 'profile' | 'done';
+type Step = 'name' | 'rsvp' | 'polls' | 'profile' | 'done' | 'declined';
 
 export default function RespondScreen() {
   const { tripId: shareToken } = useLocalSearchParams<{ tripId: string }>();
@@ -1382,10 +1383,43 @@ export default function RespondScreen() {
       setNumericResponses({});
     }
 
-    // Trip-creation + polling are unified — every respondent answers
-    // the polls. Completing them is the implicit "I'm in"; there's no
-    // separate yes/no RSVP step.
+    // Phase 4: ask "can you make this trip?" before showing the polls.
+    // Yes-path drops them into the existing polls flow; No-path skips
+    // straight to a goodbye terminal screen and fires the opt-out
+    // confirmation SMS server-side.
+    setStep('rsvp');
+  }
+
+  // ─── RSVP step handlers (Phase 4 opt-out flow) ─────────────────────────────
+  const [optOutSubmitting, setOptOutSubmitting] = useState(false);
+
+  async function handleRsvpYes() {
     setStep('polls');
+  }
+
+  async function handleRsvpNo() {
+    if (!trip || optOutSubmitting) return;
+    setOptOutSubmitting(true);
+    try {
+      const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+      const respondent = await getOrCreateRespondent(
+        trip.id,
+        fullName,
+        email.trim() || null,
+        phone.trim() || null,
+      );
+      setRespondentId(respondent.id);
+      await optOutFromTrip(respondent.id, trip.id, phone.trim() || null);
+      capture(Events.RESPONDENT_SUBMITTED, { trip_id: trip.id, poll_count: 0, rsvp: 'out' });
+      setStep('declined');
+    } catch (err) {
+      console.error('[respond] opt-out failed:', err);
+      // Surface a soft error and let them retry. The screen stays on the rsvp
+      // step with both buttons re-enabled.
+      setOptOutSubmitting(false);
+      return;
+    }
+    setOptOutSubmitting(false);
   }
 
   // ─── Respond as someone else (clears stored session for this trip) ─────────
@@ -1800,6 +1834,120 @@ export default function RespondScreen() {
       >
         {nameForm}
       </KeyboardAvoidingView>
+    );
+  }
+
+  // ─── RSVP step (Phase 4) ───────────────────────────────────────────────────
+  // Asks "can you make this trip?" before exposing the polls. Yes path
+  // continues to the polls. No path skips polls entirely, marks the
+  // respondent rsvp='out', flips trip_session_participants.is_attending
+  // to false (server-side, in sms-survey-confirmation), and fires the
+  // out-confirmation SMS.
+  if (step === 'rsvp') {
+    const tripPhrase = trip.destination ? `the ${trip.destination} trip` : 'this trip';
+    return (
+      <WebPageShell cardStyle={IS_WEB ? { maxHeight: '95vh' } : {}}>
+        <View
+          style={{
+            paddingTop: IS_WEB ? 36 : insets.top + 24,
+            paddingBottom: IS_WEB ? 36 : insets.bottom + 24,
+            paddingHorizontal: IS_WEB ? 36 : 24,
+            ...(IS_WEB ? {} : { flex: 1, justifyContent: 'center' as const }),
+          }}
+        >
+          <Text className="text-3xl font-bold text-green">rally</Text>
+          <Text className="mt-8 text-3xl font-bold text-ink">Can you make {tripPhrase}?</Text>
+          <Text className="mt-3 text-base text-muted">
+            Quick yes-or-no first — if you're in, we'll show you the survey.
+          </Text>
+
+          <View className="mt-10 gap-3">
+            <Pressable
+              onPress={handleRsvpYes}
+              disabled={optOutSubmitting}
+              accessibilityRole="button"
+              accessibilityLabel="Yes, I'm in"
+              style={({ pressed }) => ({
+                backgroundColor: pressed ? '#0B3324' : '#0F3F2E',
+                opacity: optOutSubmitting ? 0.6 : 1,
+                borderRadius: 16,
+                paddingVertical: 18,
+                paddingHorizontal: 20,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 10,
+              })}
+            >
+              <Ionicons name="checkmark-circle" size={22} color="white" />
+              <Text style={{ color: 'white', fontSize: 17, fontWeight: '600' }}>Yes, I'm in</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={handleRsvpNo}
+              disabled={optOutSubmitting}
+              accessibilityRole="button"
+              accessibilityLabel="Sorry, can't make it"
+              style={({ pressed }) => ({
+                backgroundColor: pressed ? '#EFEBE3' : 'white',
+                opacity: optOutSubmitting ? 0.6 : 1,
+                borderRadius: 16,
+                paddingVertical: 18,
+                paddingHorizontal: 20,
+                borderWidth: 1,
+                borderColor: '#D9CCB6',
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 10,
+              })}
+            >
+              <Text style={{ color: '#5F685F', fontSize: 17, fontWeight: '600' }}>
+                {optOutSubmitting ? 'Letting them know…' : "Sorry, can't make it"}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </WebPageShell>
+    );
+  }
+
+  // ─── Declined step (Phase 4 — terminal goodbye after No) ──────────────────
+  if (step === 'declined') {
+    return (
+      <WebPageShell cardStyle={IS_WEB ? { maxHeight: '95vh' } : {}}>
+        <View
+          style={{
+            paddingTop: IS_WEB ? 36 : insets.top + 24,
+            paddingBottom: IS_WEB ? 36 : insets.bottom + 24,
+            paddingHorizontal: IS_WEB ? 36 : 24,
+            ...(IS_WEB ? {} : { flex: 1, justifyContent: 'center' as const }),
+          }}
+        >
+          <Text className="text-3xl font-bold text-green">rally</Text>
+
+          <View className="mt-12 items-center">
+            <View
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: 32,
+                backgroundColor: '#F2EBDF',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Ionicons name="hand-right-outline" size={28} color="#5F685F" />
+            </View>
+            <Text className="mt-6 text-center text-2xl font-bold text-ink">
+              Thanks for letting us know
+            </Text>
+            <Text className="mt-3 text-center text-base text-muted">
+              We'll let the planner know you can't make it. No more reminders from Rally on this trip — have fun next time.
+            </Text>
+          </View>
+        </View>
+      </WebPageShell>
     );
   }
 
