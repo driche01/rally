@@ -32,6 +32,13 @@ interface Props {
   /** null = use the auto-generated default body. Non-null = planner override. */
   customIntroSms: string | null;
   onChange: (next: string | null) => void;
+  /**
+   * Real survey link substituted in for the literal `TKTK` placeholder
+   * in the default body. Populated for drafts (which have a permanent
+   * share_token from save) and falls back to "TKTK" for fresh
+   * not-yet-saved trips so the planner still sees a link-shaped slot.
+   */
+  surveyUrl?: string | null;
 }
 
 function ordinal(n: number): string {
@@ -48,11 +55,12 @@ function formatShortDate(iso: string): string {
   return `${days[d.getUTCDay()]}, ${months[d.getUTCMonth()]} ${day}${ordinal(day)}`;
 }
 
-function buildDefaultBody(opts: Pick<Props, 'plannerFirstName' | 'destination' | 'responsesDueDate'>): string {
+function buildDefaultBody(opts: Pick<Props, 'plannerFirstName' | 'destination' | 'responsesDueDate' | 'surveyUrl'>): string {
   const planner = (opts.plannerFirstName?.trim() || PLANNER_FALLBACK).split(/\s+/)[0];
   const dest = opts.destination ? ` to ${opts.destination}` : '';
   const byDate = opts.responsesDueDate ? ` by ${formatShortDate(opts.responsesDueDate)}` : '';
-  return `Hey ${RECIPIENT_PLACEHOLDER} — ${planner} is planning a trip${dest} and wants your input${byDate}. Please complete a quick survey: TKTK`;
+  const link = opts.surveyUrl?.trim() || 'TKTK';
+  return `Hey ${RECIPIENT_PLACEHOLDER} — ${planner} is planning a trip${dest} and wants your input${byDate}. Please complete a quick survey: ${link}`;
 }
 
 export function LiveSmsPreview({
@@ -61,10 +69,19 @@ export function LiveSmsPreview({
   responsesDueDate,
   customIntroSms,
   onChange,
+  surveyUrl,
 }: Props) {
-  const defaultBody = buildDefaultBody({ plannerFirstName, destination, responsesDueDate });
+  const defaultBody = buildDefaultBody({ plannerFirstName, destination, responsesDueDate, surveyUrl });
   const isCustom = customIntroSms !== null;
-  const value = customIntroSms ?? defaultBody;
+  // For the custom (planner-edited) value, swap any literal "TKTK" left
+  // over from when the default was first edited so the preview matches
+  // what'll go out (server-side personalize.ts does the same swap on
+  // send). Falls back to the literal when no surveyUrl is on hand.
+  const customDisplay =
+    customIntroSms && surveyUrl?.trim()
+      ? customIntroSms.replace(/\bTKTK\b/g, surveyUrl.trim())
+      : customIntroSms;
+  const value = customDisplay ?? defaultBody;
 
   function handleChange(text: string) {
     // If they erase everything, revert to default. Otherwise commit

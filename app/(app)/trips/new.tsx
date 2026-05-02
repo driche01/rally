@@ -25,6 +25,7 @@ import { PollSectionHeader, SKIPPED_HINT_STYLE, computePollStatus } from '@/comp
 import { tapHaptic } from '@/lib/haptics';
 import type { CustomPoll } from '@/types/polls';
 import { useCreateTrip, usePromoteDraftToActive, useSaveDraftTrip, useTrip } from '@/hooks/useTrips';
+import { getShareUrl } from '@/lib/api/trips';
 import type { TripDraftFormState } from '@/types/database';
 import { useProfile } from '@/hooks/useProfile';
 import { useAuthStore } from '@/stores/authStore';
@@ -1092,6 +1093,7 @@ export default function NewTripScreen() {
             responsesDueDate={responsesDueDate}
             customIntroSms={customIntroSms}
             onChange={setCustomIntroSms}
+            surveyUrl={draftTrip?.share_token ? getShareUrl(draftTrip.share_token) : null}
           />
 
           <Button
