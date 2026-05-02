@@ -87,18 +87,17 @@ export default function AccountScreen() {
 
   async function pickAndUpload(source: 'library' | 'camera') {
     // Lazy-require expo-image-picker so older binaries (TestFlight builds /
-    // dev clients without the native module compiled in) don't crash on
-    // mount of this screen. The picker is only actually invoked when the
-    // user taps the avatar, so we can surface a clear "update the app"
-    // message at that moment instead of an uncaught native-module error.
+    // dev clients) that don't have the native module compiled in still let
+    // the rest of the screen render. We tell the user to update the app
+    // when either the JS package can't load OR the native module behind
+    // it is absent at call time (manifests as "Cannot read property
+    // 'request...PermissionsAsync' of undefined" because the package's
+    // proxy to the native module reads undefined).
     let ImagePicker: typeof import('expo-image-picker');
     try {
       ImagePicker = require('expo-image-picker') as typeof import('expo-image-picker');
     } catch {
-      Alert.alert(
-        'Update Rally to upload a photo',
-        'Profile photos require the latest app build. Update from TestFlight (or wait for the next release) and try again.',
-      );
+      promptUpdateApp();
       return;
     }
 
@@ -134,10 +133,30 @@ export default function AccountScreen() {
       await uploadMyAvatar(result.assets[0].uri);
       refetchProfile();
     } catch (err) {
-      Alert.alert('Could not update photo', err instanceof Error ? err.message : 'Try again.');
+      const msg = err instanceof Error ? err.message : '';
+      if (isNativeModuleMissingError(msg)) {
+        promptUpdateApp();
+        return;
+      }
+      Alert.alert('Could not update photo', msg || 'Try again.');
     } finally {
       setAvatarBusy(false);
     }
+  }
+
+  function isNativeModuleMissingError(msg: string): boolean {
+    // The expo-image-picker JS package proxies into a native module named
+    // `ExponentImagePicker`. When that module isn't in the binary, the
+    // proxy reads as undefined and any call surfaces as "Cannot read
+    // property '<fn>PermissionsAsync' of undefined" or similar.
+    return /undefined/i.test(msg) && /(Permissions?Async|Launch.+Async|ExponentImagePicker)/i.test(msg);
+  }
+
+  function promptUpdateApp() {
+    Alert.alert(
+      'Update Rally to upload a photo',
+      'Profile photos need the latest app build. Update from TestFlight (or wait for the next release) and try again.',
+    );
   }
 
   async function doRemoveAvatar() {
