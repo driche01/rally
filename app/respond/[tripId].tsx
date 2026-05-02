@@ -1938,9 +1938,11 @@ export default function RespondScreen() {
         >
           <BrandMark size="lg" />
           <Text className="mt-8 text-3xl font-bold text-ink">Can you make {tripPhrase}?</Text>
-          <Text className="mt-3 text-base text-muted">
-            Quick yes-or-no first — if you're in, we'll show you the survey.
-          </Text>
+          {IS_WEB ? null : (
+            <Text className="mt-3 text-base text-muted">
+              Quick yes-or-no first — if you're in, we'll show you the survey.
+            </Text>
+          )}
 
           {/* Optional comment, shared by both yes and no paths. The planner
               sees it under the member's name in the trip's "Who's invited"
