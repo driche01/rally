@@ -204,6 +204,35 @@ function isDateRangeLabel(label: string): boolean {
 
 // ─── Single poll response row ──────────────────────────────────────────────────
 
+/**
+ * Read-only display for a poll the planner has already locked in
+ * (`status === 'decided'`). Shows the title plus the chosen option as a
+ * green "planner pick" row so respondents can see what's already been
+ * decided without being able to vote on it.
+ */
+function LockedPollCard({ poll }: { poll: PollWithOptions }) {
+  const decided = poll.poll_options.find((o) => o.id === poll.decided_option_id) ?? null;
+  return (
+    <View className="mb-5">
+      <View className="mb-3 flex-row items-center justify-between">
+        <Text className="flex-1 pr-2 text-lg font-semibold text-ink">{surveyPollTitle(poll)}</Text>
+        <View className="rounded-full bg-green-soft px-2.5 py-0.5">
+          <Text className="text-[11px] font-semibold text-green">Locked in</Text>
+        </View>
+      </View>
+      <View className="flex-row items-center rounded-2xl border border-green bg-green-soft px-4 py-3.5 min-h-[52px]">
+        <View className="mr-3 h-5 w-5 items-center justify-center rounded-full bg-green">
+          <Ionicons name="checkmark" size={12} color="white" />
+        </View>
+        <Text className="flex-1 text-base font-medium text-ink">
+          {decided?.label ?? 'Locked in by planner'}
+        </Text>
+        <Text className="text-xs text-muted">planner pick</Text>
+      </View>
+    </View>
+  );
+}
+
 function PollResponseCard({
   poll,
   selectedOptions,
@@ -1509,6 +1538,9 @@ export default function RespondScreen() {
       setRespondentId(respondent.id);
       const polls = trip.polls ?? [];
       for (const poll of polls) {
+        // Decided polls aren't voteable — skip so we don't blow away
+        // any historical responses with an empty submit.
+        if (poll.status === 'decided') continue;
         let optionIds = responses[poll.id] ?? [];
         const numeric = numericResponses[poll.id] ?? null;
 
@@ -2140,14 +2172,17 @@ export default function RespondScreen() {
   // A poll counts as answered when the respondent has either picked at
   // least one option, submitted a positive numeric value (legacy
   // free-form duration), or queued a write-in label that will be
-  // materialized at submit time.
-  const answeredCount = polls.filter((p) => {
+  // materialized at submit time. Decided polls render as read-only and
+  // are excluded from both numerator and denominator — the progress bar
+  // tracks only the polls the respondent can actually answer.
+  const livePolls = polls.filter((p) => p.status === 'live');
+  const answeredCount = livePolls.filter((p) => {
     const optionPicks = (responses[p.id] ?? []).length > 0;
     const numericPick = (numericResponses[p.id] ?? 0) > 0;
     const writeInPick = (writeIns[p.id] ?? []).length > 0;
     return optionPicks || numericPick || writeInPick;
   }).length;
-  const allAnswered = polls.length > 0 && answeredCount === polls.length;
+  const allAnswered = livePolls.length > 0 && answeredCount === livePolls.length;
 
   return (
     <WebPageShell
@@ -2186,11 +2221,11 @@ export default function RespondScreen() {
           <View className="h-1.5 flex-1 overflow-hidden rounded-full bg-cream-warm">
             <View
               className="h-full rounded-full bg-green"
-              style={{ width: polls.length > 0 ? `${(answeredCount / polls.length) * 100}%` : '0%' }}
+              style={{ width: livePolls.length > 0 ? `${(answeredCount / livePolls.length) * 100}%` : '0%' }}
             />
           </View>
           <Text className="text-xs text-muted">
-            {answeredCount}/{polls.length} answered
+            {answeredCount}/{livePolls.length} answered
           </Text>
         </View>
       </View>
@@ -2207,6 +2242,11 @@ export default function RespondScreen() {
           </View>
         ) : (
           polls.map((poll) => {
+            // Decided polls render read-only — the planner has locked the
+            // pick in, so respondents see what was chosen but can't vote.
+            if (poll.status === 'decided') {
+              return <LockedPollCard key={poll.id} poll={poll} />;
+            }
             // Write-in polls take priority — they handle their own chip
             // rendering AND the "add an option" input. Used today by
             // blank-destination polls and duration polls.

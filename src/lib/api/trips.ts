@@ -474,11 +474,14 @@ export async function getTripByShareToken(token: string): Promise<TripWithPolls>
     .eq('status', 'active')
     .single();
   if (error) throw error;
-  // Filter to live polls only (done client-side so the trip is always returned
-  // even when no polls are live yet — server-side .in() on a nested resource
-  // acts as an inner join and would 404 the whole request)
+  // Filter to live + decided polls (done client-side so the trip is always
+  // returned even when no polls are live yet — server-side .in() on a
+  // nested resource acts as an inner join and would 404 the whole request).
+  // Decided polls render as read-only "locked in" cards so respondents can
+  // see what the planner has already locked down. Drafts and closed polls
+  // are still hidden — the former aren't ready, the latter are archived.
   data.polls = (data.polls ?? [])
-    .filter((p: { status: string }) => p.status === 'live')
+    .filter((p: { status: string }) => p.status === 'live' || p.status === 'decided')
     .sort((a: { position: number }, b: { position: number }) => a.position - b.position);
   data.polls.forEach((p: { poll_options: { position: number }[] }) => {
     p.poll_options.sort((a: { position: number }, b: { position: number }) => a.position - b.position);
