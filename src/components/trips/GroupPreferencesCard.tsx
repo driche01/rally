@@ -123,6 +123,23 @@ export function GroupPreferencesCard({ sessionId }: Props) {
     return aggregateProfiles(rows.map((r) => r.profile));
   }, [rows]);
 
+  // Set of values that surface in the group-level "Plan around" pill,
+  // bucketed by category. Used to flag the matching field on each
+  // IndividualProfile card so the planner can immediately see *who*
+  // each flagged need belongs to. Mirrors the filter rule NeedsRow uses
+  // to compose the parts list (drops zero-count "other" rows).
+  const flaggedNeedValues = useMemo(() => {
+    if (!agg) return null;
+    const dietary  = new Set(agg.needs.dietary
+      .filter((c) => c.value !== 'other' || c.count > 0)
+      .map((c) => c.value));
+    const physical = new Set(agg.needs.physical
+      .filter((c) => c.value !== 'other' || c.count > 0)
+      .map((c) => c.value));
+    const flights  = new Set(agg.needs.flightDealbreakers.map((c) => c.value));
+    return { dietary, physical, flights };
+  }, [agg]);
+
   if (!sessionId) return null;
 
   if (loading && !rows) {
@@ -274,7 +291,11 @@ export function GroupPreferencesCard({ sessionId }: Props) {
       {expanded && rows ? (
         <View style={styles.individualList}>
           {rows.map((r) => (
-            <IndividualProfile key={r.participant_id} row={r} />
+            <IndividualProfile
+              key={r.participant_id}
+              row={r}
+              flaggedNeeds={flaggedNeedValues}
+            />
           ))}
         </View>
       ) : null}
@@ -334,14 +355,26 @@ function NeedsRow({ agg }: { agg: ReturnType<typeof aggregateProfiles> }) {
 
   return (
     <View style={[styles.aggRow, styles.aggRowNeeds]}>
-      <Ionicons name="alert-circle-outline" size={13} color="#92400E" style={styles.aggIcon} />
+      <Ionicons name="alert-circle" size={13} color="#92400E" style={styles.aggIcon} />
       <Text style={[styles.aggLabel, { color: '#92400E' }]}>Plan around</Text>
       <Text style={[styles.aggValue, { color: '#78350F' }]}>{parts.join(' · ')}</Text>
     </View>
   );
 }
 
-function IndividualProfile({ row }: { row: ParticipantWithProfile }) {
+interface FlaggedNeedSets {
+  dietary: Set<string>;
+  physical: Set<string>;
+  flights: Set<string>;
+}
+
+function IndividualProfile({
+  row,
+  flaggedNeeds,
+}: {
+  row: ParticipantWithProfile;
+  flaggedNeeds: FlaggedNeedSets | null;
+}) {
   const [open, setOpen] = useState(false);
   const name = row.display_name || row.phone || 'Participant';
 
@@ -358,16 +391,38 @@ function IndividualProfile({ row }: { row: ParticipantWithProfile }) {
 
   const p = row.profile;
 
+  // Per-field flag: true when any of this person's values for that
+  // category appear in the group-level "Plan around" set. Lets us tint
+  // the field block amber so the planner can spot who's vegan / who
+  // can't do early-morning flights / etc. at a glance.
+  const dietFlagged     = !!flaggedNeeds && p.dietary_restrictions.some((v) => flaggedNeeds.dietary.has(v));
+  const physicalFlagged = !!flaggedNeeds && p.physical_limitations.some((v) => flaggedNeeds.physical.has(v));
+  const flightFlagged   = !!flaggedNeeds && p.flight_dealbreakers.some((v) => flaggedNeeds.flights.has(v));
+  const hasFlaggedNeed  = dietFlagged || physicalFlagged || flightFlagged;
+
   return (
-    <View style={styles.indCard}>
+    <View style={[styles.indCard, hasFlaggedNeed && styles.indCardFlagged]}>
       <Pressable
         onPress={() => setOpen((v) => !v)}
         style={styles.indHeader}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        accessibilityLabel={open ? `Collapse ${name}'s profile` : `Expand ${name}'s profile`}
+        accessibilityLabel={
+          open ? `Collapse ${name}'s profile` : `Expand ${name}'s profile`
+        }
       >
-        <Text style={styles.indName}>{name}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+          <Text style={styles.indName}>{name}</Text>
+          {/* Header-level "Plan around" pill — visible while collapsed so
+              the planner can scan the roster for flagged people without
+              expanding every card. */}
+          {hasFlaggedNeed ? (
+            <View style={styles.indNeedPill}>
+              <Ionicons name="alert-circle" size={11} color="#92400E" />
+              <Text style={styles.indNeedPillText}>Plan around</Text>
+            </View>
+          ) : null}
+        </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Text style={styles.indMeta}>Updated {relativeAgo(p.updated_at)}</Text>
           <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={14} color="#5F685F" />
@@ -382,6 +437,7 @@ function IndividualProfile({ row }: { row: ParticipantWithProfile }) {
             label="Flight dealbreakers"
             values={p.flight_dealbreakers.map((v) => labelFor(FLIGHT_DEALBREAKER_OPTIONS, v))}
             empty="Flexible"
+            flagged={flightFlagged}
           />
           <Field label="Sleep" value={labelFor(SLEEP_PREF_OPTIONS, p.sleep_pref)} />
           <Field label="Lodging" value={labelFor(LODGING_PREF_OPTIONS, p.lodging_pref)} />
@@ -390,6 +446,7 @@ function IndividualProfile({ row }: { row: ParticipantWithProfile }) {
             values={p.dietary_restrictions.map((v) => labelFor(DIETARY_OPTIONS, v))}
             empty="None"
             extra={p.dietary_specifics ?? undefined}
+            flagged={dietFlagged}
           />
           <Field label="Meals" value={labelFor(MEAL_PREF_OPTIONS, p.meal_pref)} />
           <Field label="Drinking" value={labelFor(DRINKING_PREF_OPTIONS, p.drinking_pref)} />
@@ -398,6 +455,7 @@ function IndividualProfile({ row }: { row: ParticipantWithProfile }) {
             values={p.physical_limitations.map((v) => labelFor(PHYSICAL_LIMITATION_OPTIONS, v))}
             empty="None"
             extra={p.physical_specifics ?? undefined}
+            flagged={physicalFlagged}
           />
           <Field
             label="Pace"
@@ -439,19 +497,32 @@ function FieldList({
   values,
   empty,
   extra,
+  flagged,
 }: {
   label: string;
   values: string[];
   empty?: string;
   extra?: string;
+  /** True when one of `values` is in the group-level "Plan around" set.
+   *  Tints the field amber so it stands out as the planner's reason for
+   *  the parent card showing the "Plan around" header pill. */
+  flagged?: boolean;
 }) {
   const cleaned = values.map((v) => v.replace(/ \(specify\)$/, '')).filter(Boolean);
   if (cleaned.length === 0 && !empty) return null;
   return (
-    <View style={styles.field}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <Text style={styles.fieldValue}>{cleaned.length === 0 ? empty : cleaned.join(', ')}</Text>
-      {extra ? <Text style={styles.fieldExtra}>{extra}</Text> : null}
+    <View style={[styles.field, flagged && styles.fieldFlagged]}>
+      <Text style={[styles.fieldLabel, flagged && styles.fieldLabelFlagged]}>
+        {label}
+      </Text>
+      <Text style={[styles.fieldValue, flagged && styles.fieldValueFlagged]}>
+        {cleaned.length === 0 ? empty : cleaned.join(', ')}
+      </Text>
+      {extra ? (
+        <Text style={[styles.fieldExtra, flagged && styles.fieldValueFlagged]}>
+          {extra}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -507,6 +578,13 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 8,
   },
+  // Subtle amber border bump on the whole card when the participant
+  // has at least one flagged need — keeps the card scannable in a
+  // long roster.
+  indCardFlagged: {
+    borderColor: '#FDE68A',
+    borderWidth: 1.5,
+  },
   indHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   indName: { fontSize: 14, fontWeight: '700', color: '#163026' },
   indMeta: { fontSize: 11, color: '#737373' },
@@ -514,6 +592,25 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#737373',
     fontStyle: 'italic',
+  },
+  // Header pill — visible while the card is collapsed so the planner
+  // can spot "who's the vegan" without expanding everyone. Mirrors the
+  // amber palette used by the group-level "Plan around" row.
+  indNeedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  indNeedPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#92400E',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   indGrid: {
     flexDirection: 'row',
@@ -524,6 +621,17 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingRight: 10,
   },
+  // Field-level highlight for entries that match the group "Plan around"
+  // set. Same amber palette as the group row — tells the planner exactly
+  // *which* answer triggered the flag for this person.
+  fieldFlagged: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginVertical: 2,
+    marginRight: 4,
+  },
   fieldLabel: {
     fontSize: 10,
     color: '#888',
@@ -531,6 +639,8 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
+  fieldLabelFlagged: { color: '#92400E' },
   fieldValue: { fontSize: 12, color: '#163026', marginTop: 2, lineHeight: 16 },
+  fieldValueFlagged: { color: '#78350F' },
   fieldExtra: { fontSize: 11, color: '#5F685F', marginTop: 2, fontStyle: 'italic' },
 });
