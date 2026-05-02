@@ -59,7 +59,12 @@ function buildDefaultBody(opts: Pick<Props, 'plannerFirstName' | 'destination' |
   const planner = (opts.plannerFirstName?.trim() || PLANNER_FALLBACK).split(/\s+/)[0];
   const dest = opts.destination ? ` to ${opts.destination}` : '';
   const byDate = opts.responsesDueDate ? ` by ${formatShortDate(opts.responsesDueDate)}` : '';
-  const link = opts.surveyUrl?.trim() || 'TKTK';
+  // Drafts already have a permanent share_token so the real link goes
+  // straight into the preview. Fresh New-Rally trips fall back to the
+  // [Survey link] token, which the server resolves at send time —
+  // matches the [Name] / [Planner] / [Destination] / [Trip] style the
+  // help text already advertises.
+  const link = opts.surveyUrl?.trim() || '[Survey link]';
   return `Hey ${RECIPIENT_PLACEHOLDER} — ${planner} is planning a trip${dest} and wants your input${byDate}. Please complete a quick survey: ${link}`;
 }
 
@@ -73,13 +78,16 @@ export function LiveSmsPreview({
 }: Props) {
   const defaultBody = buildDefaultBody({ plannerFirstName, destination, responsesDueDate, surveyUrl });
   const isCustom = customIntroSms !== null;
-  // For the custom (planner-edited) value, swap any literal "TKTK" left
-  // over from when the default was first edited so the preview matches
-  // what'll go out (server-side personalize.ts does the same swap on
-  // send). Falls back to the literal when no surveyUrl is on hand.
+  // For the custom (planner-edited) value, swap any leftover survey-link
+  // tokens with the real URL so the preview matches what'll go out
+  // (server-side personalize.ts does the same swap on send). Both
+  // tokens are honored — TKTK is the legacy form, [Survey link] is the
+  // bracketed style the help text now advertises.
   const customDisplay =
     customIntroSms && surveyUrl?.trim()
-      ? customIntroSms.replace(/\bTKTK\b/g, surveyUrl.trim())
+      ? customIntroSms
+          .replace(/\bTKTK\b/g, surveyUrl.trim())
+          .replace(/\[survey link\]/gi, surveyUrl.trim())
       : customIntroSms;
   const value = customDisplay ?? defaultBody;
 
@@ -161,8 +169,9 @@ export function LiveSmsPreview({
           Use{' '}
           <Text style={{ color: '#404040' }}>[Name]</Text>,{' '}
           <Text style={{ color: '#404040' }}>[Planner]</Text>,{' '}
-          <Text style={{ color: '#404040' }}>[Destination]</Text>, or{' '}
-          <Text style={{ color: '#404040' }}>[Trip]</Text>
+          <Text style={{ color: '#404040' }}>[Destination]</Text>,{' '}
+          <Text style={{ color: '#404040' }}>[Trip]</Text>, or{' '}
+          <Text style={{ color: '#404040' }}>[Survey link]</Text>
         </Text>
         <Text style={{ fontSize: 11, color: '#888' }}>{value.length}/{MAX_LENGTH}</Text>
       </View>

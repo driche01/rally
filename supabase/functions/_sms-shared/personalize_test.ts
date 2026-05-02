@@ -195,3 +195,35 @@ Deno.test('personalizeBody — TKTK runs alongside other tokens', () => {
     'Hey Alex — Maya needs your input: https://x',
   );
 });
+
+// ─── [Survey link] (modern bracketed) ─────────────────────────────────────
+
+Deno.test('personalizeBody — [Survey link] swapped for surveyUrl', () => {
+  assertEquals(
+    personalizeBody('Quick survey: [Survey link]', {
+      surveyUrl: 'https://rallysurveys.netlify.app/respond/abc',
+    }),
+    'Quick survey: https://rallysurveys.netlify.app/respond/abc',
+  );
+});
+
+Deno.test('personalizeBody — [Survey link] is case-insensitive', () => {
+  assertEquals(
+    personalizeBody('try [survey link] and [SURVEY LINK]', { surveyUrl: 'https://x' }),
+    'try https://x and https://x',
+  );
+});
+
+Deno.test('personalizeBody — [Survey link] left literal when no surveyUrl', () => {
+  assertEquals(
+    personalizeBody('Quick: [Survey link]', { recipientName: 'Alex' }),
+    'Quick: [Survey link]',
+  );
+});
+
+Deno.test('personalizeBody — TKTK and [Survey link] both substituted in one body', () => {
+  assertEquals(
+    personalizeBody('Old: TKTK · New: [Survey link]', { surveyUrl: 'https://x' }),
+    'Old: https://x · New: https://x',
+  );
+});
