@@ -44,6 +44,11 @@ interface Props {
   minDate?: string;
   /** Cap the latest selectable day. ISO 'YYYY-MM-DD'. */
   maxDate?: string;
+  /** Month the calendar should open on. ISO 'YYYY-MM-DD'. Without this
+   *  the underlying Calendar lands on the current month, which forces
+   *  the user to page forward when the trip window starts months out.
+   *  Falls back to today when omitted. */
+  initialMonth?: string;
   /** Inline mode: render the calendar in place without a Modal wrapper,
    *  Cancel/Confirm UI, or open-button affordance. The picker becomes a
    *  controlled component — `value` is the source of truth and every
@@ -244,6 +249,7 @@ export function MultiDatePicker({
   allowPastDates = false,
   minDate: minDateProp,
   maxDate,
+  initialMonth,
   inline = false,
 }: Props) {
   const insets = useSafeAreaInsets();
@@ -411,6 +417,7 @@ export function MultiDatePicker({
           onDayPress={handleDayPress}
           minDate={effectiveMin}
           maxDate={maxDate}
+          current={initialMonth}
           theme={{
             calendarBackground: '#FFFCF6',
             textSectionTitleColor: '#5F685F',
@@ -490,6 +497,7 @@ export function MultiDatePicker({
           onDayPress={handleDayPress}
           minDate={effectiveMin}
           maxDate={maxDate}
+          current={initialMonth}
           theme={{
             calendarBackground: '#FFFCF6',
             textSectionTitleColor: '#5F685F',

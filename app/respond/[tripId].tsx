@@ -644,6 +644,7 @@ function DatesPollCard({
           confirmLabel="Confirm availability"
           minDate={minIso}
           maxDate={maxIso}
+          initialMonth={minIso}
           allowPastDates
         />
       ) : (
@@ -697,6 +698,7 @@ function DatesPollCard({
           confirmLabel="Confirm availability"
           minDate={minIso}
           maxDate={maxIso}
+          initialMonth={minIso}
           allowPastDates
         />
       ) : null}
