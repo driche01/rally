@@ -75,6 +75,13 @@
           "contactsPermission": "Rally uses your contacts so you can pick who's coming on a trip without typing out phone numbers."
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Rally uses your photo library so you can set a profile picture for your account.",
+          "cameraPermission": "Rally uses your camera so you can take a profile picture for your account."
+        }
+      ],
       "expo-secure-store",
       "expo-iap",
       "expo-web-browser"

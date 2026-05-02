@@ -23,6 +23,7 @@ export interface Profile {
   last_name: string | null;
   email: string;
   phone: string | null;
+  avatar_url: string | null;
   created_at: string;
 }
 

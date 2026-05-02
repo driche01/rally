@@ -4,14 +4,16 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSignOut } from '@/hooks/useAuth';
 import { useMyProfile, profileKeys } from '@/hooks/useProfile';
 import { useAuthStore } from '@/stores/authStore';
 import { supabase } from '@/lib/supabase';
+import { removeMyAvatar, uploadMyAvatar } from '@/lib/api/profile';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   EditNameModal,
@@ -67,6 +69,7 @@ export default function AccountScreen() {
 
   const name = user?.user_metadata?.name as string | undefined;
   const email = user?.email;
+  const avatarUrl = (profile as { avatar_url?: string | null } | null)?.avatar_url ?? null;
 
   // Build initials from name if available, otherwise fall back to first letter of email
   const initials = name
@@ -77,6 +80,75 @@ export default function AccountScreen() {
         .toUpperCase()
         .slice(0, 2)
     : (email?.[0]?.toUpperCase() ?? '?');
+
+  // ─── Avatar upload / remove ─────────────────────────────────────────────
+  // Tap the circle → action sheet. Photo library + camera both go through
+  // expo-image-picker's permission flow; "Remove" only shown when one is set.
+  const [avatarBusy, setAvatarBusy] = useState(false);
+
+  async function pickAndUpload(source: 'library' | 'camera') {
+    try {
+      const perm = source === 'camera'
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert(
+          source === 'camera' ? 'Camera permission needed' : 'Photo access needed',
+          source === 'camera'
+            ? 'Enable camera access in Settings to take a profile picture.'
+            : 'Enable photo access in Settings to choose a profile picture.',
+        );
+        return;
+      }
+      const result = source === 'camera'
+        ? await ImagePicker.launchCameraAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.85,
+          })
+        : await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.85,
+          });
+      if (result.canceled || !result.assets?.[0]?.uri) return;
+
+      setAvatarBusy(true);
+      await uploadMyAvatar(result.assets[0].uri);
+      refetchProfile();
+    } catch (err) {
+      Alert.alert('Could not update photo', err instanceof Error ? err.message : 'Try again.');
+    } finally {
+      setAvatarBusy(false);
+    }
+  }
+
+  async function doRemoveAvatar() {
+    try {
+      setAvatarBusy(true);
+      await removeMyAvatar();
+      refetchProfile();
+    } catch (err) {
+      Alert.alert('Could not remove photo', err instanceof Error ? err.message : 'Try again.');
+    } finally {
+      setAvatarBusy(false);
+    }
+  }
+
+  function handleAvatarPress() {
+    if (avatarBusy) return;
+    const buttons: Array<{ text: string; style?: 'cancel' | 'destructive'; onPress?: () => void }> = [
+      { text: 'Choose from Library', onPress: () => pickAndUpload('library') },
+      { text: 'Take Photo', onPress: () => pickAndUpload('camera') },
+    ];
+    if (avatarUrl) {
+      buttons.push({ text: 'Remove Photo', style: 'destructive', onPress: doRemoveAvatar });
+    }
+    buttons.push({ text: 'Cancel', style: 'cancel' });
+    Alert.alert('Profile photo', undefined, buttons);
+  }
 
   function handleSignOut() {
     Alert.alert('Sign out?', "You'll need to sign back in to access your trips.", [
@@ -160,11 +232,18 @@ export default function AccountScreen() {
         showsVerticalScrollIndicator={false}
       >
 
-        {/* Avatar + info */}
+        {/* Avatar + info — tap the circle to upload, replace, or remove. */}
         <View className="items-center py-10 gap-3">
-          <View
-            className="h-20 w-20 items-center justify-center rounded-full bg-green"
+          <Pressable
+            onPress={handleAvatarPress}
+            disabled={avatarBusy}
+            accessibilityRole="button"
+            accessibilityLabel={avatarUrl ? 'Change profile photo' : 'Add profile photo'}
+            accessibilityState={{ busy: avatarBusy }}
             style={{
+              width: 96,
+              height: 96,
+              borderRadius: 48,
               shadowColor: '#0F3F2E',
               shadowOffset: { width: 0, height: 4 },
               shadowOpacity: 0.25,
@@ -172,8 +251,58 @@ export default function AccountScreen() {
               elevation: 6,
             }}
           >
-            <Text className="text-2xl font-bold text-white">{initials}</Text>
-          </View>
+            <View
+              style={{
+                width: 96,
+                height: 96,
+                borderRadius: 48,
+                overflow: 'hidden',
+                backgroundColor: '#0F3F2E',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {avatarUrl ? (
+                <Image
+                  source={{ uri: avatarUrl }}
+                  style={{ width: 96, height: 96 }}
+                />
+              ) : (
+                <Text className="text-2xl font-bold text-white">{initials}</Text>
+              )}
+              {avatarBusy ? (
+                <View
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    backgroundColor: 'rgba(0,0,0,0.35)',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <ActivityIndicator color="#FFFFFF" />
+                </View>
+              ) : null}
+            </View>
+            {/* Camera badge — small affordance so the circle reads as tappable. */}
+            <View
+              style={{
+                position: 'absolute',
+                right: -2,
+                bottom: -2,
+                width: 30,
+                height: 30,
+                borderRadius: 15,
+                backgroundColor: '#FFFFFF',
+                borderWidth: 2,
+                borderColor: '#FBF7EF',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Ionicons name="camera" size={16} color="#0F3F2E" />
+            </View>
+          </Pressable>
           {name ? (
             <Text className="text-xl font-semibold text-ink">{name}</Text>
           ) : null}
