@@ -5,13 +5,16 @@ import { Alert, FlatList, ImageBackground, Pressable, RefreshControl, StyleSheet
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQueryClient } from '@tanstack/react-query';
 import { PreciseGroupSizeModal } from '@/components/PreciseGroupSizeModal';
 import { useDeleteTrip, useTripsWithRespondentCounts, useUpdateTrip } from '@/hooks/useTrips';
 import { useAuthStore } from '@/stores/authStore';
 import type { TripWithRespondentCount } from '@/lib/api/trips';
 import { getTripStage, STAGES, STAGE_LABEL } from '@/lib/tripStage';
+import { prefetchTripDetail } from '@/lib/prefetchTripDetail';
 import { T } from '@/theme';
-import { EmptyState } from '@/components/ui';
+import { FirstTimeEmptyState } from '@/components/trips/FirstTimeEmptyState';
+import { BrandMark } from '@/components/ui';
 
 const SEASON_ICON: Record<string, React.ComponentProps<typeof Ionicons>['name']> = {
   Winter: 'snow-outline',
@@ -46,8 +49,18 @@ function TripCard({
   currentUserId: string | null;
 }) {
   const router = useRouter();
+  const qc = useQueryClient();
   const [preciseModalVisible, setPreciseModalVisible] = useState(false);
   const isPlanner = !!currentUserId && trip.created_by === currentUserId;
+
+  // Warm the dashboard's per-card queries (cadence, live results, group
+  // preferences) in parallel with the screen transition so they render
+  // populated instead of flashing their own loading states. Best-effort —
+  // each card still owns the real fetch as a fallback.
+  function openTrip() {
+    void prefetchTripDetail(qc, trip.id);
+    router.push(`/(app)/trips/${trip.id}`);
+  }
 
   const stage = getTripStage(trip);
   const stageIndex = STAGES.indexOf(stage);
@@ -98,7 +111,7 @@ function TripCard({
           {/* TouchableOpacity from RNGH integrates with the swipe gesture,
               preventing onPress from firing during horizontal swipes */}
           <TouchableOpacity
-            onPress={() => router.push(`/(app)/trips/${trip.id}`)}
+            onPress={openTrip}
             activeOpacity={0.85}
             style={styles.cardLeft}
             accessibilityRole="button"
@@ -197,14 +210,10 @@ export default function HomeScreen() {
       style={{ flex: 1, paddingTop: insets.top }}
       resizeMode="cover"
     >
-      {/* Header */}
+      {/* Header — canonical "● RALLY" mark. White variant carries its
+          own dark text shadow for legibility on the photo background. */}
       <View className="flex-row items-center px-6 pb-5 pt-4">
-        <Text
-          className="text-3xl font-bold text-white"
-          style={{ textShadowColor: 'rgba(0,0,0,0.45)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 }}
-        >
-          rally
-        </Text>
+        <BrandMark size="lg" variant="white" />
       </View>
 
       {/* Trip list on frosted sheet */}
@@ -212,19 +221,19 @@ export default function HomeScreen() {
         <FlatList
           data={trips ?? []}
           keyExtractor={(t) => t.id}
-          contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24 }}
+          contentContainerStyle={{
+            paddingHorizontal: 24,
+            paddingTop: 20,
+            paddingBottom: 24,
+            // flexGrow lets the empty state stretch to fill the frosted
+            // sheet so its plane track can use the full vertical space.
+            // Harmless when there are trips — content just stacks as usual.
+            flexGrow: 1,
+          }}
           refreshControl={
             <RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor="#0F3F2E" />
           }
-          ListEmptyComponent={
-            !isLoading ? (
-              <EmptyState
-                icon="airplane-outline"
-                title="No trips yet"
-                body="Tap + below to start your first trip."
-              />
-            ) : null
-          }
+          ListEmptyComponent={!isLoading ? <FirstTimeEmptyState /> : null}
           renderItem={({ item }) => (
             <TripCard trip={item} onDelete={handleDelete} onUpdatePrecise={handleUpdatePrecise} currentUserId={currentUserId} />
           )}

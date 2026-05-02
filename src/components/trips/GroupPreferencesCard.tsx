@@ -12,9 +12,10 @@
  * gave. Phones with no profile yet render as a light "hasn't filled
  * out their profile yet" row.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useQuery } from '@tanstack/react-query';
 import { getProfilesForTripSession, type ParticipantWithProfile } from '@/lib/api/travelerProfiles';
 import { aggregateProfiles } from '@/lib/aggregateProfiles';
 import {
@@ -36,6 +37,10 @@ interface Props {
   /** Trip-session id to scope the profile fetch. Renders nothing when null. */
   sessionId: string | undefined;
 }
+
+/** React Query key for the group-profiles fetch. Exported so the trip-card
+ *  prefetch can warm the cache before the dashboard mounts. */
+export const groupProfilesKey = (sessionId: string) => ['group_profiles', sessionId] as const;
 
 function labelFor<T extends string>(options: Array<[T, string]>, value: T | null | undefined): string {
   if (!value) return '';
@@ -94,29 +99,18 @@ function relativeAgo(iso: string | undefined | null): string {
 }
 
 export function GroupPreferencesCard({ sessionId }: Props) {
-  const [rows, setRows] = useState<ParticipantWithProfile[] | null>(null);
-  const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    if (!sessionId) {
-      console.log('[GroupPreferencesCard] no sessionId, skipping fetch');
-      setRows([]);
-      return;
-    }
-    setLoading(true);
-    getProfilesForTripSession(sessionId)
-      .then((data) => {
-        if (!cancelled) setRows(data);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionId]);
+  // React Query so this can be prefetched on trip-card tap (see
+  // prefetchTripDetail in src/lib/prefetch.ts) — eliminates the
+  // "Loading profiles…" flash on the planner's trip dashboard.
+  const { data: rows = null, isPending } = useQuery<ParticipantWithProfile[]>({
+    queryKey: groupProfilesKey(sessionId ?? ''),
+    queryFn: () => getProfilesForTripSession(sessionId!),
+    enabled: Boolean(sessionId),
+  });
+
+  const loading = Boolean(sessionId) && isPending && !rows;
 
   const agg = useMemo(() => {
     if (!rows) return null;
