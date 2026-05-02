@@ -2185,6 +2185,11 @@ export default function RespondScreen() {
     return optionPicks || numericPick || writeInPick;
   }).length;
   const allAnswered = livePolls.length > 0 && answeredCount === livePolls.length;
+  // The trip has polls but every one is decided — there's nothing for
+  // the respondent to vote on, so the header swaps to a celebratory
+  // "polls are locked in" message and the progress bar / submit bar
+  // collapse out of view.
+  const allLocked = polls.length > 0 && livePolls.length === 0;
 
   return (
     <WebPageShell
@@ -2210,26 +2215,32 @@ export default function RespondScreen() {
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
           <Text className="text-lg font-bold text-ink">
-            {hasExistingResponses ? `Hey ${firstName}, update your picks` : `Hey ${firstName}, weigh in`}
+            {allLocked
+              ? `Hey ${firstName}, the polls are locked in!`
+              : hasExistingResponses
+                ? `Hey ${firstName}, update your picks`
+                : `Hey ${firstName}, weigh in`}
           </Text>
-          <Ionicons name="arrow-down" size={18} color="#0F3F2E" />
+          {allLocked ? null : <Ionicons name="arrow-down" size={18} color="#0F3F2E" />}
         </View>
-        {hasExistingResponses ? (
+        {hasExistingResponses && !allLocked ? (
           <Text className="mt-0.5 text-xs text-muted">
             Your previous responses are pre-loaded — update anything below.
           </Text>
         ) : null}
-        <View className="mt-2 flex-row items-center gap-2">
-          <View className="h-1.5 flex-1 overflow-hidden rounded-full bg-cream-warm">
-            <View
-              className="h-full rounded-full bg-green"
-              style={{ width: livePolls.length > 0 ? `${(answeredCount / livePolls.length) * 100}%` : '0%' }}
-            />
+        {allLocked ? null : (
+          <View className="mt-2 flex-row items-center gap-2">
+            <View className="h-1.5 flex-1 overflow-hidden rounded-full bg-cream-warm">
+              <View
+                className="h-full rounded-full bg-green"
+                style={{ width: livePolls.length > 0 ? `${(answeredCount / livePolls.length) * 100}%` : '0%' }}
+              />
+            </View>
+            <Text className="text-xs text-muted">
+              {answeredCount}/{livePolls.length} answered
+            </Text>
           </View>
-          <Text className="text-xs text-muted">
-            {answeredCount}/{livePolls.length} answered
-          </Text>
-        </View>
+        )}
       </View>
 
       <ScrollView
@@ -2317,15 +2328,16 @@ export default function RespondScreen() {
         )}
       </ScrollView>
 
-      {/* Submit bar */}
-      {polls.length > 0 ? (
+      {/* Submit bar — hidden when every poll is locked, since there's
+          nothing for the respondent to send. */}
+      {livePolls.length > 0 ? (
         <View
           className="border-t border-line bg-card px-6 pt-3"
           style={{ paddingBottom: IS_WEB ? 16 : insets.bottom + 12 }}
         >
           {!allAnswered ? (
             <Text className="mb-2 text-center text-xs text-muted">
-              Answer all {polls.length} poll{polls.length !== 1 ? 's' : ''} to submit
+              Answer all {livePolls.length} poll{livePolls.length !== 1 ? 's' : ''} to submit
             </Text>
           ) : null}
           <Button
