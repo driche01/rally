@@ -4,6 +4,8 @@
 
 export { Avatar } from './Avatar';
 export { Badge } from './Badge';
+export { BrandMark } from './BrandMark';
+export type { BrandMarkSize, BrandMarkVariant } from './BrandMark';
 export { Button } from './Button';
 export { Card, PressableCard } from './Card';
 export { CelebrationBurst, useCelebration } from './CelebrationBurst';

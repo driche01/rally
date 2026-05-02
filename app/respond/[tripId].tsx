@@ -24,7 +24,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, useCelebration } from '@/components/ui';
+import { BrandMark, Button, useCelebration } from '@/components/ui';
 import { getTripByShareToken } from '@/lib/api/trips';
 import { enrollRespondentAsMember } from '@/lib/api/members';
 import { normalizePhone } from '@/lib/phone';
@@ -1675,8 +1675,10 @@ export default function RespondScreen() {
           ...(IS_WEB ? {} : { flex: 1, justifyContent: 'center' as const }),
         }}
       >
-          {/* Rally wordmark */}
-          <Text className="mb-1 text-3xl font-bold text-green">rally</Text>
+          {/* Rally wordmark — canonical "● RALLY" mark. */}
+          <View className="mb-1">
+            <BrandMark size="lg" />
+          </View>
 
           {/* Trip header */}
           <Text className="text-2xl font-bold text-ink">{trip.name}</Text>
@@ -1855,7 +1857,7 @@ export default function RespondScreen() {
             ...(IS_WEB ? {} : { flex: 1, justifyContent: 'center' as const }),
           }}
         >
-          <Text className="text-3xl font-bold text-green">rally</Text>
+          <BrandMark size="lg" />
           <Text className="mt-8 text-3xl font-bold text-ink">Can you make {tripPhrase}?</Text>
           <Text className="mt-3 text-base text-muted">
             Quick yes-or-no first — if you're in, we'll show you the survey.
@@ -1924,7 +1926,7 @@ export default function RespondScreen() {
             ...(IS_WEB ? {} : { flex: 1, justifyContent: 'center' as const }),
           }}
         >
-          <Text className="text-3xl font-bold text-green">rally</Text>
+          <BrandMark size="lg" />
 
           <View className="mt-12 items-center">
             <View
@@ -1986,7 +1988,7 @@ export default function RespondScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        <Text className="text-3xl font-bold text-green">rally</Text>
+        <BrandMark size="lg" />
 
         <View className="mt-8 items-center">
           <View
@@ -2081,7 +2083,10 @@ export default function RespondScreen() {
         className="border-b border-line bg-card px-6 pb-4"
         style={{ paddingTop: IS_WEB ? 20 : insets.top + 16 }}
       >
-        <Text className="text-sm font-medium text-green">rally · {trip.name}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <BrandMark size="sm" />
+          <Text className="text-sm font-medium text-green">· {trip.name}</Text>
+        </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
           <Text className="text-lg font-bold text-ink">
             {hasExistingResponses ? `Hey ${firstName}, update your picks` : `Hey ${firstName}, weigh in`}

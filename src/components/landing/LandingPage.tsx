@@ -184,19 +184,28 @@ function Nav({
           paddingVertical: 24,
         }}
       >
-        <Text
-          style={{
-            fontFamily: HEADLINE_FONT,
-            fontSize: isMobile ? 36 : 44,
-            fontStyle: 'italic',
-            fontWeight: '700',
-            lineHeight: isMobile ? 36 : 44,
-            color: C.green,
-            letterSpacing: -2,
-          }}
-        >
-          Rally
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: isMobile ? 8 : 10 }}>
+          <View
+            style={{
+              width: isMobile ? 14 : 16,
+              height: isMobile ? 14 : 16,
+              borderRadius: isMobile ? 7 : 8,
+              backgroundColor: C.green,
+            }}
+          />
+          <Text
+            style={{
+              fontFamily: HEADLINE_FONT,
+              fontSize: isMobile ? 30 : 36,
+              fontWeight: '700',
+              lineHeight: isMobile ? 30 : 36,
+              color: C.green,
+              letterSpacing: 1,
+            }}
+          >
+            RALLY
+          </Text>
+        </View>
 
         {!isMobile ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 32 }}>
