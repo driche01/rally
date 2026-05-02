@@ -262,7 +262,7 @@ export async function getOrCreateRespondent(
       is_planner:    false,
       rsvp:          null,
       preferences:   null,
-      decline_reason: null,
+      note: null,
       created_at:    new Date().toISOString(),
     };
   }
@@ -288,7 +288,7 @@ export async function getOrCreateRespondent(
     is_planner: false,
     rsvp: null,
     preferences: null,
-    decline_reason: null,
+    note: null,
     created_at: new Date().toISOString(),
   };
 }
@@ -522,21 +522,36 @@ export async function optOutFromTrip(
   respondentId: string,
   tripId: string,
   phone: string | null,
-  declineReason?: string | null,
+  note?: string | null,
 ): Promise<void> {
-  // Inline update so we can write the decline_reason in the same round-trip.
+  // Inline update so we can write the note in the same round-trip.
   // (saveRespondentRsvpAndPreferences only handles rsvp + preferences.)
-  const trimmed = declineReason?.trim();
+  const trimmed = note?.trim();
   const { error } = await supabase
     .from('respondents')
     .update({
       rsvp: 'out',
       preferences: null,
-      decline_reason: trimmed && trimmed.length > 0 ? trimmed.slice(0, 280) : null,
+      note: trimmed && trimmed.length > 0 ? trimmed.slice(0, 280) : null,
     })
     .eq('id', respondentId);
   if (error) throw error;
   await sendSurveyConfirmationSms(tripId, phone, 'out');
+}
+
+/**
+ * Persist an optional free-text note from the respondent. Used by the
+ * yes-path on the RSVP screen — the note travels independently from polls
+ * (a respondent can leave a note even if they never finish the survey).
+ * Empty / whitespace-only notes are stored as null.
+ */
+export async function saveRespondentNote(respondentId: string, note: string | null): Promise<void> {
+  const trimmed = note?.trim();
+  const { error } = await supabase
+    .from('respondents')
+    .update({ note: trimmed && trimmed.length > 0 ? trimmed.slice(0, 280) : null })
+    .eq('id', respondentId);
+  if (error) throw error;
 }
 
 // ─── Planner designation ──────────────────────────────────────────────────────

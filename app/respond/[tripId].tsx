@@ -39,6 +39,7 @@ import {
   clearTripSession,
   sendSurveyConfirmationSms,
   optOutFromTrip,
+  saveRespondentNote,
 } from '@/lib/api/respondents';
 import { daysUntil, formatCadenceDate } from '@/lib/cadence';
 import { getTripStage } from '@/lib/tripStage';
@@ -1175,7 +1176,7 @@ function formatTripDates(start: string | null, end: string | null): string | nul
 
 // ─── Main screen ───────────────────────────────────────────────────────────────
 
-type Step = 'name' | 'rsvp' | 'decline-reason' | 'polls' | 'profile' | 'done' | 'declined';
+type Step = 'name' | 'rsvp' | 'polls' | 'profile' | 'done' | 'declined';
 
 export default function RespondScreen() {
   const { tripId: shareToken } = useLocalSearchParams<{ tripId: string }>();
@@ -1392,26 +1393,44 @@ export default function RespondScreen() {
 
   // ─── RSVP step handlers (Phase 4 opt-out flow) ─────────────────────────────
   const [optOutSubmitting, setOptOutSubmitting] = useState(false);
-  // Free-text the respondent leaves on the decline-reason step. Optional —
-  // empty string is sent as null so the planner UI can distinguish "didn't
-  // share" from "shared an empty string".
-  const [declineReason, setDeclineReason] = useState('');
+  // Optional free-text shown on the RSVP screen — captured for both yes
+  // and no. Empty / whitespace-only is stored as null so the planner UI
+  // can distinguish "didn't share" from "shared an empty string".
+  const [note, setNote] = useState('');
 
   async function handleRsvpYes() {
+    if (optOutSubmitting) return;
+    const trimmed = note.trim();
+    // If the respondent left a note, persist it now (eagerly creating
+    // the respondent row) so the planner sees it even if they bail
+    // before finishing the polls. No note → keep the legacy lazy-create
+    // path; the polls submit will create the row.
+    if (trimmed.length > 0) {
+      setOptOutSubmitting(true);
+      try {
+        const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+        const respondent = await getOrCreateRespondent(
+          trip!.id,
+          fullName,
+          email.trim() || null,
+          phone.trim() || null,
+        );
+        setRespondentId(respondent.id);
+        await saveRespondentNote(respondent.id, trimmed);
+      } catch (err) {
+        console.error('[respond] save note (yes) failed:', err);
+        setOptOutSubmitting(false);
+        return;
+      }
+      setOptOutSubmitting(false);
+    }
     setStep('polls');
   }
 
-  function handleRsvpNo() {
-    // Defer the actual opt-out write until the decline-reason step so the
-    // free-text input can ride along in the same round-trip. Both "Send"
-    // and "Skip" on that step call submitDecline().
-    if (optOutSubmitting) return;
-    setStep('decline-reason');
-  }
-
-  async function submitDecline(reason: string | null) {
+  async function handleRsvpNo() {
     if (!trip || optOutSubmitting) return;
     setOptOutSubmitting(true);
+    const trimmed = note.trim();
     try {
       const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
       const respondent = await getOrCreateRespondent(
@@ -1421,18 +1440,16 @@ export default function RespondScreen() {
         phone.trim() || null,
       );
       setRespondentId(respondent.id);
-      await optOutFromTrip(respondent.id, trip.id, phone.trim() || null, reason);
+      await optOutFromTrip(respondent.id, trip.id, phone.trim() || null, trimmed.length > 0 ? trimmed : null);
       capture(Events.RESPONDENT_SUBMITTED, {
         trip_id: trip.id,
         poll_count: 0,
         rsvp: 'out',
-        with_reason: Boolean(reason && reason.trim()),
+        with_note: trimmed.length > 0,
       });
       setStep('declined');
     } catch (err) {
       console.error('[respond] opt-out failed:', err);
-      // Surface a soft error and let them retry. The screen stays on the
-      // decline-reason step with the buttons re-enabled.
       setOptOutSubmitting(false);
       return;
     }
@@ -1880,7 +1897,44 @@ export default function RespondScreen() {
             Quick yes-or-no first — if you're in, we'll show you the survey.
           </Text>
 
-          <View className="mt-10 gap-3">
+          {/* Optional comment, shared by both yes and no paths. The planner
+              sees it under the member's name in the trip's "Who's invited"
+              list. Capped client-side at 280; the DB also enforces the cap. */}
+          <View
+            style={{
+              marginTop: 24,
+              borderWidth: 1,
+              borderColor: '#D9CCB6',
+              borderRadius: 16,
+              backgroundColor: 'white',
+              padding: 14,
+            }}
+          >
+            <TextInput
+              value={note}
+              onChangeText={(t) => { if (t.length <= 280) setNote(t); }}
+              placeholder="Add a note for the planner (optional)"
+              placeholderTextColor="#A3A3A3"
+              multiline
+              maxLength={280}
+              editable={!optOutSubmitting}
+              style={{
+                fontSize: 15,
+                color: '#163026',
+                lineHeight: 22,
+                minHeight: 72,
+                textAlignVertical: 'top',
+                padding: 0,
+                margin: 0,
+              }}
+              accessibilityLabel="Optional note for the planner"
+            />
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 6 }}>
+              <Text style={{ fontSize: 11, color: '#888' }}>{note.length}/280</Text>
+            </View>
+          </View>
+
+          <View className="mt-6 gap-3">
             <Pressable
               onPress={handleRsvpYes}
               disabled={optOutSubmitting}
@@ -1925,114 +1979,6 @@ export default function RespondScreen() {
                 {optOutSubmitting ? 'Letting them know…' : "Sorry, can't make it"}
               </Text>
             </Pressable>
-          </View>
-        </View>
-      </WebPageShell>
-    );
-  }
-
-  // ─── Decline-reason step (optional context after "Sorry, can't make it") ─
-  // Show a small free-text input so the planner can see *why* someone's
-  // out. Both buttons commit the opt-out; "Skip" sends with no reason,
-  // "Send" sends with the typed text. The actual DB write happens in
-  // submitDecline() — this screen is purely the input collector.
-  if (step === 'decline-reason') {
-    const trimmed = declineReason.trim();
-    return (
-      <WebPageShell cardStyle={IS_WEB ? { maxHeight: '95vh' } : {}}>
-        <View
-          style={{
-            paddingTop: IS_WEB ? 36 : insets.top + 24,
-            paddingBottom: IS_WEB ? 36 : insets.bottom + 24,
-            paddingHorizontal: IS_WEB ? 36 : 24,
-            ...(IS_WEB ? {} : { flex: 1, justifyContent: 'center' as const }),
-          }}
-        >
-          <BrandMark size="lg" />
-          <Text className="mt-8 text-3xl font-bold text-ink">Mind sharing why?</Text>
-          <Text className="mt-3 text-base text-muted">
-            Optional — it helps the planner know what's up.
-          </Text>
-
-          <View
-            style={{
-              marginTop: 24,
-              borderWidth: 1,
-              borderColor: '#D9CCB6',
-              borderRadius: 16,
-              backgroundColor: 'white',
-              padding: 14,
-            }}
-          >
-            <TextInput
-              value={declineReason}
-              onChangeText={(t) => { if (t.length <= 280) setDeclineReason(t); }}
-              placeholder="e.g. away that weekend, conflict with another trip…"
-              placeholderTextColor="#A3A3A3"
-              multiline
-              maxLength={280}
-              editable={!optOutSubmitting}
-              style={{
-                fontSize: 15,
-                color: '#163026',
-                lineHeight: 22,
-                minHeight: 96,
-                textAlignVertical: 'top',
-                padding: 0,
-                margin: 0,
-              }}
-              accessibilityLabel="Reason for declining (optional)"
-            />
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 6 }}>
-              <Text style={{ fontSize: 11, color: '#888' }}>{declineReason.length}/280</Text>
-            </View>
-          </View>
-
-          <View className="mt-6 gap-3">
-            <Pressable
-              onPress={() => submitDecline(trimmed.length > 0 ? trimmed : null)}
-              disabled={optOutSubmitting}
-              accessibilityRole="button"
-              accessibilityLabel={trimmed.length > 0 ? 'Send and decline' : 'Decline without a reason'}
-              style={({ pressed }) => ({
-                backgroundColor: pressed ? '#0B3324' : '#0F3F2E',
-                opacity: optOutSubmitting ? 0.6 : 1,
-                borderRadius: 16,
-                paddingVertical: 18,
-                paddingHorizontal: 20,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 10,
-              })}
-            >
-              <Text style={{ color: 'white', fontSize: 17, fontWeight: '600' }}>
-                {optOutSubmitting
-                  ? 'Letting them know…'
-                  : trimmed.length > 0
-                    ? 'Send'
-                    : 'Decline without a reason'}
-              </Text>
-            </Pressable>
-
-            {trimmed.length > 0 ? (
-              <Pressable
-                onPress={() => submitDecline(null)}
-                disabled={optOutSubmitting}
-                accessibilityRole="button"
-                accessibilityLabel="Skip and decline without sharing"
-                style={({ pressed }) => ({
-                  backgroundColor: pressed ? '#EFEBE3' : 'transparent',
-                  opacity: optOutSubmitting ? 0.6 : 1,
-                  borderRadius: 16,
-                  paddingVertical: 14,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                })}
-              >
-                <Text style={{ color: '#5F685F', fontSize: 15, fontWeight: '600' }}>Skip</Text>
-              </Pressable>
-            ) : null}
           </View>
         </View>
       </WebPageShell>

@@ -145,8 +145,8 @@ export interface Respondent {
   is_planner: boolean;
   rsvp: 'in' | 'out' | null;
   preferences: RespondentPreferences | null;
-  /** Optional free-text the respondent leaves when declining. Capped at 280 chars by the DB. */
-  decline_reason: string | null;
+  /** Optional free-text the respondent leaves on the RSVP screen — works for both yes and no. Capped at 280 chars by the DB. */
+  note: string | null;
   created_at: string;
 }
 
