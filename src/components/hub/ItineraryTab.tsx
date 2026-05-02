@@ -17,8 +17,11 @@ import {
 import { Swipeable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { useTrip, useUpdateTrip } from '@/hooks/useTrips';
+import { useGoogleSignIn } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabase';
+import { exportItineraryToGoogleCalendar } from '@/lib/api/gcalExport';
+import { usePolls } from '@/hooks/usePolls';
 import {
   useItineraryBlocks,
   useDayRsvps,
@@ -33,6 +36,7 @@ import {
   formatTime,
   generateIcal,
 } from '@/lib/api/itinerary';
+import { parseDateRangeLabel } from '@/lib/pollFormUtils';
 import { getShareUrl } from '@/lib/api/trips';
 import { lookupRestaurantDetails, type RestaurantDetails } from '@/lib/api/restaurantDetails';
 import { useAuthStore } from '@/stores/authStore';
@@ -41,7 +45,11 @@ import type { CreateBlockInput } from '@/lib/api/itinerary';
 import { Button, EmptyState, FormField, Input, Pill, Sheet, Spinner } from '@/components/ui';
 import { DateRangePicker } from '@/components/DateRangePicker';
 import { BlockAlternativesSheet } from '@/components/hub/BlockAlternativesSheet';
-import { useAiItineraryDraft, useGenerateAiItinerary } from '@/hooks/useAiItinerary';
+import {
+  useAiItineraryDraft,
+  useGenerateAiItinerary,
+  useApplyAiItineraryOption,
+} from '@/hooks/useAiItinerary';
 import type { AiBlockAlternative } from '@/types/database';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -87,12 +95,6 @@ const LOADING_MESSAGES = [
   'Almost ready…',
 ];
 
-const AI_OPTION_STYLES: Record<string, { accent: string; badge: string }> = {
-  Packed:   { accent: '#0F3F2E', badge: '#DDE8D8' },
-  Balanced: { accent: '#235C38', badge: '#DDE8D8' },
-  Relaxed:  { accent: '#7A4C1E', badge: '#F2E5D8' },
-};
-
 // ─── Time Picker ──────────────────────────────────────────────────────────────
 
 const TP_ITEM_H = 52;
@@ -104,6 +106,12 @@ const TP_MINUTES = Array.from({ length: 12 }, (_, i) => i * 5);
 
 function pad2(n: number): string {
   return String(n).padStart(2, '0');
+}
+
+/** Local-date → 'YYYY-MM-DD'. Mirrors the trips-table format so derived
+ *  itinerary dates use the same string shape as canonical trip.start_date. */
+function toIsoDay(d: Date): string {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
 function parseTimeToIndices(time: string): { hi: number; mi: number } {
@@ -765,25 +773,76 @@ function BlockEditorModal({
 
 // ─── AI Itinerary Banner ──────────────────────────────────────────────────────
 
+/**
+ * AI itinerary auto-pilot. Replaces the previous "generate → pick one of 3"
+ * flow with a single auto-applied itinerary the planner can re-roll with
+ * an optional steering prompt.
+ *
+ * Behavior:
+ *   - First time the planner opens the itinerary tab on a trip with dates
+ *     and no blocks, generation kicks off automatically.
+ *   - When the draft becomes ready, the Balanced option (index 1, the
+ *     middle of the spectrum the prompt asks for) is applied immediately.
+ *   - The banner stays mounted as a control surface: the planner can type
+ *     a steering prompt ("more food, less hiking") and tap Regenerate to
+ *     re-roll. Regenerate overwrites existing blocks via the same delete-
+ *     then-insert path applyAiItineraryOption already uses.
+ */
 function AiItineraryBanner({
   tripId,
   blocksEmpty,
+  hasDates,
   isPlanner,
 }: {
   tripId: string;
   blocksEmpty: boolean;
+  hasDates: boolean;
   isPlanner: boolean;
 }) {
-  const router = useRouter();
   const { data: draft } = useAiItineraryDraft(tripId);
   const generate = useGenerateAiItinerary(tripId);
+  const apply = useApplyAiItineraryOption(tripId);
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
-
-  if (!isPlanner) return null;
+  const [promptDraft, setPromptDraft] = useState('');
+  const autoTriggeredFor = useRef<string | null>(null);
+  const autoAppliedFor = useRef<string | null>(null);
 
   const isGenerating = draft?.status === 'generating' || generate.isPending;
-  const hasReadyOptions = draft?.status === 'ready' && (draft.options?.length ?? 0) > 0 && !draft.applied_at;
+  const isApplying = apply.isPending;
+  const isError = draft?.status === 'error';
   const wasApplied = Boolean(draft?.applied_at);
+
+  // Auto-trigger generation once per trip when the planner lands on an
+  // empty itinerary that has dates set. Skipped if a draft already exists
+  // (planner is just revisiting), if blocks have been added manually, or
+  // if dates aren't decided yet.
+  useEffect(() => {
+    if (!isPlanner || !hasDates || !blocksEmpty) return;
+    if (autoTriggeredFor.current === tripId) return;
+    if (draft) return; // either generating, ready, applied, or errored — let the user drive
+    autoTriggeredFor.current = tripId;
+    generate.mutate({});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tripId, isPlanner, hasDates, blocksEmpty, draft]);
+
+  // Auto-apply Balanced when a fresh draft becomes ready. The prompt asks
+  // Gemini for [Packed, Balanced, Relaxed] in that order; Balanced (index
+  // 1) is the safest middle-ground default. The auto-applied ref keys on
+  // draft.id so a Regenerate produces a new draft and triggers another
+  // auto-apply pass.
+  useEffect(() => {
+    if (!draft) return;
+    if (draft.status !== 'ready') return;
+    if (draft.applied_at) return;
+    if (autoAppliedFor.current === draft.id) return;
+    if (apply.isPending) return;
+    const opts = draft.options ?? [];
+    if (opts.length === 0) return;
+    const balanced = opts.find((o) => o.label === 'Balanced') ?? opts[Math.min(1, opts.length - 1)];
+    autoAppliedFor.current = draft.id;
+    apply.mutate({ draftId: draft.id, option: balanced });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft]);
 
   useEffect(() => {
     if (!isGenerating) {
@@ -796,58 +855,16 @@ function AiItineraryBanner({
     return () => clearInterval(id);
   }, [isGenerating]);
 
-  // Post-apply: prominent banner showing applied option + regenerate link
-  if (wasApplied) {
-    const appliedLabel =
-      draft?.selected_index != null
-        ? (draft.options?.[draft.selected_index]?.label ?? 'Balanced')
-        : 'Balanced';
-    const appliedStyle = AI_OPTION_STYLES[appliedLabel] ?? AI_OPTION_STYLES.Balanced;
+  if (!isPlanner) return null;
+  if (!hasDates) return null;
 
-    return (
-      <Pressable
-        onPress={() => router.push(`/(app)/trips/${tripId}/ai-itinerary` as any)}
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 10,
-          backgroundColor: appliedStyle.badge,
-          borderRadius: 14,
-          paddingHorizontal: 14,
-          paddingVertical: 12,
-          marginBottom: 16,
-          borderWidth: 1,
-          borderColor: appliedStyle.accent + '30',
-        }}
-        accessibilityRole="button"
-      >
-        <Ionicons name="sparkles" size={16} color={appliedStyle.accent} />
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 13, fontWeight: '700', color: appliedStyle.accent }}>
-            {appliedLabel} itinerary applied
-          </Text>
-          <Text style={{ fontSize: 11, color: appliedStyle.accent, opacity: 0.75, marginTop: 1 }}>
-            AI-generated · tap any block to edit
-          </Text>
-        </View>
-        <View
-          style={{
-            backgroundColor: appliedStyle.accent + '18',
-            borderRadius: 8,
-            paddingHorizontal: 8,
-            paddingVertical: 4,
-          }}
-        >
-          <Text style={{ fontSize: 11, fontWeight: '600', color: appliedStyle.accent }}>
-            Regenerate
-          </Text>
-        </View>
-      </Pressable>
-    );
+  function handleRegenerate() {
+    const override = promptDraft.trim();
+    generate.mutate({ override: override.length > 0 ? override : undefined });
   }
 
-  // Generating spinner with animated messages
-  if (isGenerating) {
+  // Generating / applying — keep the spinner banner active.
+  if (isGenerating || isApplying) {
     return (
       <View style={{
         flexDirection: 'row',
@@ -864,7 +881,7 @@ function AiItineraryBanner({
         <Spinner />
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 14, fontWeight: '600', color: '#0F3F2E' }}>
-            {LOADING_MESSAGES[loadingMsgIdx]}
+            {isApplying ? 'Building your itinerary…' : LOADING_MESSAGES[loadingMsgIdx]}
           </Text>
           <Text style={{ fontSize: 12, color: '#4A6E8A', marginTop: 2 }}>
             About 15–30 seconds
@@ -874,41 +891,37 @@ function AiItineraryBanner({
     );
   }
 
-  // Options are ready — prompt the planner to review them
-  if (hasReadyOptions) {
+  // Generation failed — let the planner retry.
+  if (isError) {
     return (
-      <Pressable
-        onPress={() => router.push(`/(app)/trips/${tripId}/ai-itinerary` as any)}
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 12,
-          backgroundColor: '#EFE3D0',
-          borderRadius: 16,
-          paddingHorizontal: 16,
-          paddingVertical: 14,
-          marginBottom: 16,
-          borderWidth: 1,
-          borderColor: '#0F3F2E',
-        }}
-        accessibilityRole="button"
-      >
-        <Ionicons name="sparkles" size={20} color="#1A4060" />
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F3F2E' }}>
-            3 itinerary options ready
-          </Text>
-          <Text style={{ fontSize: 12, color: '#4A6E8A', marginTop: 2 }}>
-            Tap to pick one and apply it →
+      <View style={{
+        backgroundColor: '#FEF1EF',
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 16,
+        borderWidth: 1.5,
+        borderColor: '#F4C7BD',
+        gap: 10,
+      }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Ionicons name="alert-circle" size={18} color="#9A2A2A" />
+          <Text style={{ fontSize: 14, fontWeight: '700', color: '#9A2A2A' }}>
+            Couldn't generate itinerary
           </Text>
         </View>
-        <Ionicons name="chevron-forward" size={16} color="#1A4060" />
-      </Pressable>
+        {draft?.error_message ? (
+          <Text style={{ fontSize: 12, color: '#78350F' }}>{draft.error_message}</Text>
+        ) : null}
+        <Button variant="primary" onPress={handleRegenerate} fullWidth>
+          Try again
+        </Button>
+      </View>
     );
   }
 
-  // No draft yet + no blocks — show the generate CTA
-  if (blocksEmpty) {
+  // Auto-applied (or pre-existing) itinerary — show the regenerate
+  // surface so the planner can tailor + re-roll without leaving the tab.
+  if (wasApplied || !blocksEmpty) {
     return (
       <View style={{
         backgroundColor: '#EFE3D0',
@@ -920,26 +933,66 @@ function AiItineraryBanner({
         gap: 10,
       }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Ionicons name="sparkles-outline" size={18} color="#1A4060" />
-          <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F3F2E' }}>
-            Generate AI itinerary options
+          <Ionicons name="sparkles" size={16} color="#0F3F2E" />
+          <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F3F2E', flex: 1 }}>
+            {wasApplied ? 'Itinerary auto-generated for your group' : 'Tune your itinerary'}
           </Text>
         </View>
-        <Text style={{ fontSize: 13, color: '#4A6E8A', lineHeight: 18 }}>
-          Rally will create 3 tailored options based on your group's confirmed preferences and trip details.
+        <Text style={{ fontSize: 12, color: '#4A6E8A', lineHeight: 17 }}>
+          Tap any block to edit. Want a different vibe? Add a note and regenerate.
         </Text>
-        <Button
-          variant="primary"
-          onPress={() => generate.mutate({})}
-          fullWidth
-        >
-          Generate options
+        <TextInput
+          value={promptDraft}
+          onChangeText={setPromptDraft}
+          placeholder="e.g. more food tours, less hiking, slower mornings"
+          placeholderTextColor="#a3a3a3"
+          multiline
+          maxLength={280}
+          style={{
+            backgroundColor: 'white',
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: '#DDE8D8',
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            fontSize: 13,
+            color: '#163026',
+            minHeight: 60,
+            textAlignVertical: 'top',
+          }}
+        />
+        <Button variant="primary" onPress={handleRegenerate} fullWidth>
+          Regenerate
         </Button>
       </View>
     );
   }
 
-  return null;
+  // Idle (rare — auto-trigger should have fired). Manual fallback CTA.
+  return (
+    <View style={{
+      backgroundColor: '#EFE3D0',
+      borderRadius: 16,
+      padding: 16,
+      marginBottom: 16,
+      borderWidth: 1,
+      borderColor: '#DDE8D8',
+      gap: 10,
+    }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Ionicons name="sparkles-outline" size={18} color="#1A4060" />
+        <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F3F2E' }}>
+          Build your itinerary
+        </Text>
+      </View>
+      <Text style={{ fontSize: 13, color: '#4A6E8A', lineHeight: 18 }}>
+        Rally will draft a day-by-day plan from your group's polls and preferences.
+      </Text>
+      <Button variant="primary" onPress={handleRegenerate} fullWidth>
+        Generate itinerary
+      </Button>
+    </View>
+  );
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -951,6 +1004,9 @@ export function ItineraryTab({ tripId, isPlanner = true }: { tripId: string; isP
   const { data: trip } = useTrip(tripId);
   const { data: blocks = [] } = useItineraryBlocks(tripId);
   const { data: rsvps = [] } = useDayRsvps(tripId);
+  const { data: polls = [] } = usePolls(tripId);
+  const { data: respondents = [] } = useRespondents(tripId);
+  const googleSignIn = useGoogleSignIn();
 
   const updateTrip = useUpdateTrip();
   const createBlock = useCreateBlock(tripId);
@@ -963,11 +1019,32 @@ export function ItineraryTab({ tripId, isPlanner = true }: { tripId: string; isP
   const [altSheetBlock, setAltSheetBlock] = useState<ItineraryBlock | null>(null);
   const [applyingAlt, setApplyingAlt] = useState(false);
 
+  // Effective trip dates. Canonical source is trips.start_date / end_date,
+  // written by the trip-create flow and by approve_poll_recommendation_with_dates
+  // (the date-heatmap "Pick" path). When a planner approves a dates poll
+  // via the regular "Approve" button instead, the RPC currently only writes
+  // trip_duration — leaving start/end_date null even though the group
+  // decided. Fall back to the decided dates poll's option label so the
+  // itinerary tab inherits whatever the trip actually decided, instead of
+  // asking the planner to re-enter dates a second time.
+  const datesPollDecision = useMemo(() => {
+    const decided = polls.find((p) =>
+      p.type === 'dates' && p.status === 'decided' && p.decided_option_id,
+    );
+    if (!decided) return null;
+    const opt = decided.poll_options.find((o) => o.id === decided.decided_option_id);
+    if (!opt) return null;
+    return parseDateRangeLabel(opt.label);
+  }, [polls]);
+
+  const effectiveStartDate = trip?.start_date ?? (datesPollDecision ? toIsoDay(datesPollDecision.start) : null);
+  const effectiveEndDate   = trip?.end_date   ?? (datesPollDecision ? toIsoDay(datesPollDecision.end)   : null);
+
   // Build itinerary days
   const days = useMemo(() => {
-    if (!trip?.start_date || !trip?.end_date) return [];
-    return buildItineraryDays(trip.start_date, trip.end_date, blocks, rsvps);
-  }, [trip?.start_date, trip?.end_date, blocks, rsvps]);
+    if (!effectiveStartDate || !effectiveEndDate) return [];
+    return buildItineraryDays(effectiveStartDate, effectiveEndDate, blocks, rsvps);
+  }, [effectiveStartDate, effectiveEndDate, blocks, rsvps]);
 
   function openAddBlock(dayDate: string) {
     setEditor({
@@ -1108,10 +1185,10 @@ export function ItineraryTab({ tripId, isPlanner = true }: { tripId: string; isP
     // `days` is the memoized itinerary already built by the component
 
     // Header
-    const dateRange = trip.start_date && trip.end_date
+    const dateRange = effectiveStartDate && effectiveEndDate
       ? (() => {
-          const [sy, sm, sd] = trip.start_date.split('-').map(Number);
-          const [ey, em, ed] = trip.end_date.split('-').map(Number);
+          const [sy, sm, sd] = effectiveStartDate.split('-').map(Number);
+          const [ey, em, ed] = effectiveEndDate.split('-').map(Number);
           const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
           const start = `${months[sm - 1]} ${sd}`;
           const end = sm === em ? `${ed}` : `${months[em - 1]} ${ed}`;
@@ -1155,12 +1232,134 @@ export function ItineraryTab({ tripId, isPlanner = true }: { tripId: string; isP
     Alert.alert('Share itinerary', 'Choose how to send:', [
       { text: 'iMessage / SMS', onPress: () => Linking.openURL(Platform.OS === 'ios' ? `sms:&body=${encoded}` : `sms:?body=${encoded}`) },
       { text: 'WhatsApp', onPress: () => Linking.openURL(`whatsapp://send?text=${encoded}`) },
+      { text: 'Export to Google Calendar', onPress: handleExportToGoogleCalendar },
       { text: 'More options…', onPress: async () => { try { await Share.share({ message: msg }); } catch {} } },
       { text: 'Cancel', style: 'cancel' },
     ]);
   }
 
-  const hasDates = Boolean(trip?.start_date && trip?.end_date);
+  /**
+   * Export every itinerary block to the planner's Google Calendar and
+   * auto-invite trip members for whom we have an email. The Google
+   * access token lives on session.provider_token after a Google OAuth
+   * sign-in; if it's missing or expired (e.g. signed in via email/
+   * password, or the ~1h token elapsed) we trigger the OAuth flow so
+   * Supabase grants Calendar access, then continue.
+   */
+  async function handleExportToGoogleCalendar() {
+    if (!trip) return;
+
+    const exportableBlocks = blocks.filter((b) => Boolean(b.day_date));
+    if (exportableBlocks.length === 0) {
+      Alert.alert('Nothing to export', 'Add itinerary blocks first.');
+      return;
+    }
+
+    const attendeeEmails = Array.from(
+      new Set(
+        respondents
+          .map((r) => r.email?.trim().toLowerCase())
+          .filter((e): e is string => Boolean(e && /.+@.+\..+/.test(e))),
+      ),
+    );
+    const noEmailCount = respondents.filter((r) => !r.email).length;
+
+    const summaryParts = [
+      `Create ${exportableBlocks.length} ${exportableBlocks.length === 1 ? 'event' : 'events'} on your Google Calendar.`,
+      attendeeEmails.length > 0
+        ? `${attendeeEmails.length} ${attendeeEmails.length === 1 ? 'invite' : 'invites'} will go out via Google.`
+        : 'No member emails on file — no invites will be sent.',
+    ];
+    if (noEmailCount > 0) {
+      summaryParts.push(`${noEmailCount} ${noEmailCount === 1 ? 'member has' : 'members have'} no email; they won't be invited.`);
+    }
+
+    Alert.alert('Export to Google Calendar', summaryParts.join('\n\n'), [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Export',
+        onPress: () => runExport(exportableBlocks, attendeeEmails),
+      },
+    ]);
+  }
+
+  async function runExport(
+    exportableBlocks: ItineraryBlock[],
+    attendeeEmails: string[],
+  ) {
+    if (!trip) return;
+
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    const tripShareUrl = trip.share_token ? getShareUrl(trip.share_token) : null;
+
+    async function attempt(token: string) {
+      return exportItineraryToGoogleCalendar({
+        accessToken: token,
+        blocks: exportableBlocks,
+        attendeeEmails,
+        timeZone: tz,
+        tripName: trip?.name ?? null,
+        tripShareUrl,
+      });
+    }
+
+    try {
+      // First try with the live session's provider_token. Missing when
+      // the user signed in via email/password, or when the token has
+      // dropped off the session after an app restart.
+      const { data: { session } } = await supabase.auth.getSession();
+      let token = session?.provider_token ?? null;
+
+      let result = token ? await attempt(token) : null;
+
+      if (!result || result.authExpired || (result.failed.length > 0 && result.created === 0)) {
+        // Re-auth with Google to get a fresh Calendar-scoped token,
+        // then retry once.
+        const reauth = await googleSignIn({ withCalendarScope: true });
+        if (!reauth) return; // user cancelled the OAuth pop-up
+        const { data: { session: refreshed } } = await supabase.auth.getSession();
+        token = refreshed?.provider_token ?? null;
+        if (!token) {
+          Alert.alert(
+            'Could not connect to Google',
+            "Google didn't return a Calendar access token. Sign out and sign back in with Google, then try again.",
+          );
+          return;
+        }
+        result = await attempt(token);
+      }
+
+      if (result.created === 0 && result.failed.length > 0) {
+        Alert.alert(
+          'Export failed',
+          result.failed[0]?.reason ?? 'Try again.',
+        );
+        return;
+      }
+
+      const lines = [
+        `${result.created} ${result.created === 1 ? 'event' : 'events'} added to your Google Calendar.`,
+      ];
+      if (result.invited.length > 0) {
+        lines.push(`Google sent invites to ${result.invited.length} ${result.invited.length === 1 ? 'member' : 'members'}.`);
+      }
+      if (result.failed.length > 0) {
+        lines.push(`${result.failed.length} ${result.failed.length === 1 ? 'block' : 'blocks'} couldn't be exported (${result.failed[0].reason}).`);
+      }
+      Alert.alert('Exported to Google Calendar', lines.join('\n\n'));
+    } catch (err) {
+      Alert.alert(
+        'Export failed',
+        err instanceof Error ? err.message : 'Try again.',
+      );
+    }
+  }
+
+  const hasDates = Boolean(effectiveStartDate && effectiveEndDate);
+  // When dates aren't decided yet, point the planner to the source of
+  // truth (the dates poll) instead of asking them to type in dates here
+  // — that input would just get clobbered the moment the poll locks.
+  const liveDatesPoll = polls.find((p) => p.type === 'dates' && p.status === 'live');
 
   return (
     <View className="flex-1 bg-cream">
@@ -1177,12 +1376,11 @@ export function ItineraryTab({ tripId, isPlanner = true }: { tripId: string; isP
         <View className="flex-1 justify-center">
           <EmptyState
             icon="calendar-outline"
-            title="No trip dates yet"
-            body="Set your trip start and end dates to build a day-by-day itinerary."
-            action={
-              <Button variant="primary" onPress={() => setDateSheetVisible(true)}>
-                Set trip dates
-              </Button>
+            title={liveDatesPoll ? 'Dates still being decided' : 'No trip dates yet'}
+            body={
+              liveDatesPoll
+                ? 'The itinerary fills in automatically once the group locks the dates poll.'
+                : 'Trip dates flow in from the dates poll. You can also set them directly.'
             }
           />
         </View>
@@ -1195,6 +1393,7 @@ export function ItineraryTab({ tripId, isPlanner = true }: { tripId: string; isP
           <AiItineraryBanner
             tripId={tripId}
             blocksEmpty={blocks.length === 0}
+            hasDates={hasDates}
             isPlanner={isPlanner}
           />
           {days.map((day) => (
@@ -1252,8 +1451,8 @@ export function ItineraryTab({ tripId, isPlanner = true }: { tripId: string; isP
       {/* Date picker for setting trip start/end dates */}
       <DateRangePicker
         visible={dateSheetVisible}
-        startDate={trip?.start_date ?? null}
-        endDate={trip?.end_date ?? null}
+        startDate={effectiveStartDate}
+        endDate={effectiveEndDate}
         title="Trip dates"
         confirmLabel="Save dates"
         allowPastDates

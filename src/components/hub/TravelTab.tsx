@@ -790,8 +790,20 @@ function TravelSuggestionCard({
   // is no per-member cache yet. The trip-row read is what makes the Travel
   // tab open instantly, just like Itinerary's stored draft.
   const isGroupScope = !respondentPhone;
+
+  // Steering-note state mirrors lodging:
+  //  - `noteDraft` is the controlled textarea (changes on every keystroke).
+  //  - `committedNote` flows into the query key — only updates on Regenerate
+  //    so we don't fire one Gemini call per keystroke.
+  const [noteDraft, setNoteDraft] = useState('');
+  const [committedNote, setCommittedNote] = useState('');
+  const hasCommittedNote = committedNote.trim().length > 0;
+
+  // When the planner has committed a steering note we ignore the trip-row
+  // cache (it's the canonical no-note version) and let the query carry the
+  // note-tuned result.
   const tripCachedPayload: TravelSuggestion[] | null =
-    isGroupScope && Array.isArray(trip?.cached_travel_suggestions)
+    !hasCommittedNote && isGroupScope && Array.isArray(trip?.cached_travel_suggestions)
       ? (trip!.cached_travel_suggestions as TravelSuggestion[])
       : null;
   const expectedSignature =
@@ -806,16 +818,19 @@ function TravelSuggestionCard({
         })
       : null;
   const cacheIsStale =
+    !hasCommittedNote &&
     expectedSignature != null &&
     trip?.cached_travel_suggestions_signature !== expectedSignature;
 
-  // Fire the edge function only when:
+  // Fire the edge function when:
   //  - we're in member scope (no row cache exists), OR
   //  - the trip row has nothing cached (first-ever open / pre-trigger trips), OR
-  //  - the cache exists but the signature is stale (silent refresh).
+  //  - the cache exists but the signature is stale (silent refresh), OR
+  //  - the planner committed a steering note (cache is bypassed by design).
   const query = useTravelSuggestionsQuery(tripId, {
-    enabled: enabled && (!isGroupScope || !tripCachedPayload || cacheIsStale),
+    enabled: enabled && (!isGroupScope || !tripCachedPayload || cacheIsStale || hasCommittedNote),
     respondentPhone,
+    note: committedNote,
   });
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   // Prefer the freshly-fetched payload over the row cache so a successful
@@ -830,169 +845,209 @@ function TravelSuggestionCard({
     }
   }
 
-  // Loading state — true first-load only. Cache hit (row or query) skips this.
-  if (query.isLoading && suggestions.length === 0) {
+  function handleRegenerate() {
+    const next = noteDraft.trim();
+    if (next === committedNote.trim()) {
+      // Same note as last time — react-query won't auto-refetch on key
+      // equality, so nudge it manually.
+      void query.refetch();
+    } else {
+      setCommittedNote(next);
+    }
+    setSelectedIndex(null);
+  }
+
+  // Pre-stage state — destination/dates missing. Show a simple message
+  // without the Regenerate controls (no point steering an empty prompt).
+  if (!enabled && suggestions.length === 0) {
     return (
-      <View style={{ backgroundColor: '#EFE3D0', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#DDE8D8', gap: 10 }}>
+      <View style={{ backgroundColor: '#EFE3D0', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#DDE8D8', gap: 8 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Ionicons name="sparkles" size={16} color="#0F3F2E" />
           <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F3F2E', flex: 1 }}>{title}</Text>
         </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <Spinner />
-          <Text style={{ fontSize: 13, color: '#4A6E8A', flex: 1 }}>
-            {loadingMessage}
-          </Text>
-        </View>
+        <Text style={{ fontSize: 13, color: '#4A6E8A', lineHeight: 18 }}>
+          {respondentPhone
+            ? "Once the trip's destination and dates are locked in, route suggestions for you will appear here."
+            : "Once the destination and dates are locked in, Rally will suggest the best routes from your home airport."}
+        </Text>
       </View>
     );
   }
 
-  // Empty after fetch (or prerequisites missing) — actionable guidance + retry.
-  if (suggestions.length === 0) {
-    const message =
-      emptyReason === 'no_origin'
-        ? respondentPhone
-          ? "We don't have this traveler's home airport yet. Once they fill it in, route suggestions will appear here."
-          : 'Set your home airport in your traveler profile so Rally can suggest routes from where you actually fly.'
-        : enabled
-          ? 'No suggestions yet. Tap to retry.'
-          : 'Add a destination and dates to see suggested routes for your group.';
-    return (
-      <View style={{ backgroundColor: '#EFE3D0', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#DDE8D8', gap: 10 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Ionicons name="sparkles" size={16} color="#0F3F2E" />
-          <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F3F2E', flex: 1 }}>{title}</Text>
-        </View>
-        <Text style={{ fontSize: 13, color: '#4A6E8A', lineHeight: 18 }}>{message}</Text>
-        {enabled && emptyReason !== 'no_origin' ? (
-          <Button variant="primary" onPress={handleRetry} fullWidth>
-            Try again
-          </Button>
-        ) : null}
-      </View>
-    );
-  }
-
-  // Loaded — mirrors the Lodging hero: sparkle title, separate white-cream
-  // suggestion cards inside the warm sand surface, Selected → CTA at the
-  // bottom of the hero (no chevron toggle, no inline pros/cons clutter).
   const selected = selectedIndex != null
     ? suggestions.find((s) => s.index === selectedIndex) ?? null
     : null;
+  const isFirstFetch = query.isLoading && suggestions.length === 0;
+  const isRegenFetch = query.isFetching && suggestions.length > 0;
+  const showControls = isGroupScope && enabled;
 
   return (
-    <View style={{
-      backgroundColor: '#EFE3D0',
-      borderRadius: 16,
-      padding: 16,
-      marginBottom: 16,
-      borderWidth: 1,
-      borderColor: '#DDE8D8',
-      gap: 12,
-    }}>
-      {/* Header — sparkle + green title, mirrors itinerary + lodging */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Ionicons name="sparkles" size={16} color="#0F3F2E" />
-        <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F3F2E', flex: 1 }}>
-          {title}
-        </Text>
-        {query.isFetching ? <Spinner /> : null}
-      </View>
+    <View style={{ marginBottom: 16, gap: 12 }}>
+      {/* Cream tan controls sheet — mirrors lodging's split layout so both
+          Hub tabs read as the same product. The textarea + Regenerate live
+          here; suggestion cards render below on the page background. */}
+      {showControls ? (
+        <View style={{ backgroundColor: '#EFE3D0', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#DDE8D8', gap: 10 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name="sparkles" size={16} color="#0F3F2E" />
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F3F2E', flex: 1 }}>
+              {title}
+            </Text>
+            {isRegenFetch ? <Spinner /> : null}
+          </View>
+          <Text style={{ fontSize: 12, color: '#4A6E8A', lineHeight: 17 }}>
+            Tap an option below to add it. Want different vibes? Add a note and regenerate.
+          </Text>
+          <TextInput
+            value={noteDraft}
+            onChangeText={setNoteDraft}
+            placeholder="e.g. more direct flights, no red-eyes"
+            placeholderTextColor="#a3a3a3"
+            multiline
+            maxLength={280}
+            style={{
+              backgroundColor: 'white',
+              borderRadius: 10,
+              borderWidth: 1,
+              borderColor: '#DDE8D8',
+              paddingHorizontal: 12,
+              paddingVertical: 10,
+              fontSize: 13,
+              color: '#163026',
+              minHeight: 60,
+              textAlignVertical: 'top',
+            }}
+          />
+          <Button
+            variant="primary"
+            fullWidth
+            onPress={handleRegenerate}
+            disabled={query.isFetching}
+            loading={query.isFetching}
+          >
+            Regenerate
+          </Button>
+        </View>
+      ) : null}
 
-      {/* Suggestion cards — itinerary-style block cards on the sand surface */}
-      <View style={{ gap: 8 }}>
-        {suggestions.map((s: TravelSuggestion) => {
-          const isSelected = selectedIndex === s.index;
-          return (
+      {/* Below the sheet, on the page background. Loading / empty / cards. */}
+      {isFirstFetch ? (
+        <View style={{ paddingVertical: 24, alignItems: 'center', gap: 8 }}>
+          <Spinner />
+          <Text style={{ fontSize: 12, color: '#4A6E8A' }}>{loadingMessage}</Text>
+        </View>
+      ) : suggestions.length === 0 ? (
+        <View style={{ paddingVertical: 24, paddingHorizontal: 16, alignItems: 'center', gap: 10 }}>
+          <Text style={{ fontSize: 13, color: '#4A6E8A', lineHeight: 18, textAlign: 'center' }}>
+            {emptyReason === 'no_origin'
+              ? respondentPhone
+                ? "We don't have this traveler's home airport yet. Once they fill it in, route suggestions will appear here."
+                : 'Set your home airport in your traveler profile so Rally can suggest routes from where you actually fly.'
+              : 'No suggestions yet. Tap below to retry.'}
+          </Text>
+          {emptyReason !== 'no_origin' ? (
             <Pressable
-              key={s.index}
-              onPress={() => setSelectedIndex(isSelected ? null : s.index)}
-              style={{
-                backgroundColor: '#FFFCF6',
-                borderRadius: 16,
-                borderWidth: isSelected ? 2 : 1,
-                borderColor: isSelected ? '#0F3F2E' : '#DDE8D8',
-                padding: 12,
-                gap: 10,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.06,
-                shadowRadius: 6,
-                elevation: 2,
-              }}
-              accessibilityRole="button"
-              accessibilityLabel={`${s.label}, ${s.estimatedDuration}${s.estimatedCostPerPerson ? `, ${s.estimatedCostPerPerson}` : ''}`}
-              accessibilityState={{ selected: isSelected }}
+              onPress={handleRetry}
+              style={{ backgroundColor: '#0F3F2E', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 18 }}
             >
-              {/* Top row: icon + title/subtitle column + selected badge.
-                  Cost moves under the subtitle so the title doesn't get
-                  squeezed by a long price string on small phones. */}
-              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
-                <View style={{ width: 32, height: 32, borderRadius: 12, backgroundColor: MODE_ICON_BG[s.mode] ?? '#EFE3D0', alignItems: 'center', justifyContent: 'center', marginTop: 2 }}>
-                  <Ionicons name={MODE_ICON[s.mode] ?? 'navigate-outline'} size={16} color="#0F3F2E" />
-                </View>
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#163026' }}>
-                    {s.label}
-                  </Text>
-                  <Text style={{ fontSize: 12, color: '#9DA8A0', lineHeight: 16 }}>
-                    {MODE_CONFIG[s.mode]?.label ?? 'Travel'} · {s.estimatedDuration}
-                  </Text>
-                  {s.estimatedCostPerPerson ? (
-                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#0F3F2E', marginTop: 2 }}>
-                      {s.estimatedCostPerPerson}
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#FFFCF6' }}>Try again</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : (
+        <View style={{ gap: 8 }}>
+          {suggestions.map((s: TravelSuggestion) => {
+            const isSelected = selectedIndex === s.index;
+            return (
+              <Pressable
+                key={s.index}
+                onPress={() => setSelectedIndex(isSelected ? null : s.index)}
+                style={{
+                  backgroundColor: '#FFFCF6',
+                  borderRadius: 16,
+                  borderWidth: isSelected ? 2 : 1,
+                  borderColor: isSelected ? '#0F3F2E' : '#DDE8D8',
+                  padding: 12,
+                  gap: 10,
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 1 },
+                  shadowOpacity: 0.06,
+                  shadowRadius: 6,
+                  elevation: 2,
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`${s.label}, ${s.estimatedDuration}${s.estimatedCostPerPerson ? `, ${s.estimatedCostPerPerson}` : ''}`}
+                accessibilityState={{ selected: isSelected }}
+              >
+                {/* Top row: icon + title/subtitle column + selected badge.
+                    Cost moves under the subtitle so the title doesn't get
+                    squeezed by a long price string on small phones. */}
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                  <View style={{ width: 32, height: 32, borderRadius: 12, backgroundColor: MODE_ICON_BG[s.mode] ?? '#EFE3D0', alignItems: 'center', justifyContent: 'center', marginTop: 2 }}>
+                    <Ionicons name={MODE_ICON[s.mode] ?? 'navigate-outline'} size={16} color="#0F3F2E" />
+                  </View>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#163026' }}>
+                      {s.label}
                     </Text>
+                    <Text style={{ fontSize: 12, color: '#9DA8A0', lineHeight: 16 }}>
+                      {MODE_CONFIG[s.mode]?.label ?? 'Travel'} · {s.estimatedDuration}
+                    </Text>
+                    {s.estimatedCostPerPerson ? (
+                      <Text style={{ fontSize: 12, fontWeight: '600', color: '#0F3F2E', marginTop: 2 }}>
+                        {s.estimatedCostPerPerson}
+                      </Text>
+                    ) : null}
+                  </View>
+                  {isSelected ? (
+                    <View style={{ backgroundColor: '#0F3F2E', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, marginTop: 2 }}>
+                      <Text style={{ fontSize: 10, fontWeight: '700', color: 'white' }}>Selected</Text>
+                    </View>
                   ) : null}
                 </View>
-                {isSelected ? (
-                  <View style={{ backgroundColor: '#0F3F2E', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, marginTop: 2 }}>
-                    <Text style={{ fontSize: 10, fontWeight: '700', color: 'white' }}>Selected</Text>
-                  </View>
-                ) : null}
-              </View>
 
-              <Text style={{ fontSize: 13, color: '#3F4A45', lineHeight: 18 }}>
-                {s.description}
-              </Text>
+                <Text style={{ fontSize: 13, color: '#3F4A45', lineHeight: 18 }}>
+                  {s.description}
+                </Text>
 
-              {/* Google pill — soft Google-blue tint + Google blue text mirrors
-                  lodging's brand-tinted platform pills (Airbnb red, Booking.com
-                  slate). Tells the user where the search hand-off lands. */}
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                <Pressable
-                  onPress={(e) => { e.stopPropagation(); Linking.openURL(s.searchUrl); }}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 4,
-                    backgroundColor: '#E8F0FE',
-                    borderRadius: 999,
-                    paddingHorizontal: 10,
-                    paddingVertical: 4,
-                  }}
-                  accessibilityLabel={`Search ${s.label} on Google`}
-                >
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#1A73E8' }}>Google</Text>
-                  <Ionicons name="open-outline" size={10} color="#1A73E8" />
-                </Pressable>
-              </View>
-            </Pressable>
-          );
-        })}
-      </View>
+                {/* Google pill — soft Google-blue tint + Google blue text mirrors
+                    lodging's brand-tinted platform pills. */}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                  <Pressable
+                    onPress={(e) => { e.stopPropagation(); Linking.openURL(s.searchUrl); }}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 4,
+                      backgroundColor: '#E8F0FE',
+                      borderRadius: 999,
+                      paddingHorizontal: 10,
+                      paddingVertical: 4,
+                    }}
+                    accessibilityLabel={`Search ${s.label} on Google`}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#1A73E8' }}>Google</Text>
+                    <Ionicons name="open-outline" size={10} color="#1A73E8" />
+                  </Pressable>
+                </View>
+              </Pressable>
+            );
+          })}
 
-      {selected ? (
-        <Button
-          variant="primary"
-          fullWidth
-          onPress={() => {
-            if (onApply) { onApply(selected); setSelectedIndex(null); }
-          }}
-        >
-          {`Add "${selected.label}" as travel leg`}
-        </Button>
-      ) : null}
+          {selected ? (
+            <Button
+              variant="primary"
+              fullWidth
+              onPress={() => {
+                if (onApply) { onApply(selected); setSelectedIndex(null); }
+              }}
+            >
+              {`Add "${selected.label}" as travel leg`}
+            </Button>
+          ) : null}
+        </View>
+      )}
     </View>
   );
 }
@@ -1021,12 +1076,24 @@ function MemberRouteRow({
   const noAirport = !member.home_airport;
 
   return (
-    <View style={{ borderRadius: 12, borderWidth: 1, borderColor: '#EBEBEB', padding: 12, gap: 10, backgroundColor: '#fff' }}>
+    <View style={{
+      backgroundColor: '#FFFCF6',
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: '#DDE8D8',
+      padding: 12,
+      gap: 10,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.06,
+      shadowRadius: 6,
+      elevation: 2,
+    }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
         <Avatar name={member.name} size="sm" />
         <View style={{ flex: 1, gap: 1 }}>
           <Text style={{ fontSize: 14, fontWeight: '700', color: '#163026' }}>{member.name}</Text>
-          <Text style={{ fontSize: 12, color: noAirport ? '#A8A8A8' : '#5F685F' }}>
+          <Text style={{ fontSize: 12, color: noAirport ? '#9DA8A0' : '#5F685F' }}>
             {noAirport ? 'No home airport saved' : `From ${member.home_airport}`}
           </Text>
         </View>
@@ -1045,7 +1112,7 @@ function MemberRouteRow({
       {requested && query.isPending ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Spinner />
-          <Text style={{ fontSize: 12, color: '#888' }}>Finding routes from {member.home_airport}…</Text>
+          <Text style={{ fontSize: 12, color: '#9DA8A0' }}>Finding routes from {member.home_airport}…</Text>
         </View>
       ) : null}
 
@@ -1064,7 +1131,7 @@ function MemberRouteRow({
             <Pressable
               key={s.index}
               onPress={() => onApply?.(s, member)}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 8, borderRadius: 10, backgroundColor: '#F8F8F8' }}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: 12, backgroundColor: '#EFE3D0' }}
               accessibilityRole="button"
               accessibilityLabel={`Apply ${s.label} for ${member.name}`}
             >
@@ -1073,12 +1140,12 @@ function MemberRouteRow({
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 13, fontWeight: '700', color: '#163026' }}>{s.label}</Text>
-                <Text style={{ fontSize: 11, color: '#888' }}>
+                <Text style={{ fontSize: 11, color: '#5F685F' }}>
                   {s.estimatedDuration}
                   {s.estimatedCostPerPerson ? ` · ${s.estimatedCostPerPerson}` : ''}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={14} color="#A3A3A3" />
+              <Ionicons name="chevron-forward" size={14} color="#0F3F2E" />
             </Pressable>
           ))}
         </View>
@@ -1102,34 +1169,37 @@ function PerMemberRoutesSection({
   const withAirport = members.filter((m) => m.home_airport).length;
 
   return (
-    <View
-      style={{
-        marginBottom: 12,
-        borderRadius: 16,
-        backgroundColor: 'white',
-        borderWidth: 1,
-        borderColor: '#DDE8D8',
-        overflow: 'hidden',
-      }}
-    >
+    <View style={{ marginBottom: 16, gap: 12 }}>
+      {/* Sand sheet — header + collapsed-state hint mirrors the main
+          suggestion card's controls sheet. Member rows render below on
+          the page background as separate white-cream cards. */}
       <Pressable
         onPress={() => setExpanded((p) => !p)}
-        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14 }}
+        style={{
+          backgroundColor: '#EFE3D0',
+          borderRadius: 16,
+          padding: 16,
+          borderWidth: 1,
+          borderColor: '#DDE8D8',
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
+        }}
         accessibilityRole="button"
         accessibilityLabel="Toggle per-member travel routes"
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Ionicons name="people-outline" size={15} color="#1A4060" />
-          <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F3F2E' }}>Per-member routes</Text>
-          <Text style={{ fontSize: 11, color: '#888' }}>
-            {withAirport}/{members.length} with airport
+        <Ionicons name="people" size={16} color="#0F3F2E" />
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F3F2E' }}>Routes by traveler</Text>
+          <Text style={{ fontSize: 12, color: '#4A6E8A', marginTop: 2 }}>
+            {withAirport}/{members.length} {members.length === 1 ? 'has' : 'have'} a home airport saved
           </Text>
         </View>
-        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={15} color="#A3A3A3" />
+        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color="#0F3F2E" />
       </Pressable>
 
       {expanded ? (
-        <View style={{ paddingHorizontal: 14, paddingBottom: 14, gap: 10 }}>
+        <View style={{ gap: 8 }}>
           {members.map((m) => (
             <MemberRouteRow key={m.id} tripId={tripId} member={m} onApply={onApply} />
           ))}
