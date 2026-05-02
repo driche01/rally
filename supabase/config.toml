@@ -30,3 +30,13 @@ verify_jwt = false
 
 [functions.verify-phone-change-otp]
 verify_jwt = false
+
+# Survey-side anonymous fan-out: called from app/respond/[tripId].tsx
+# when a respondent submits or declines. The handler uses the service
+# role for all writes (no user auth needed) — its job is to flip
+# is_attending and fire the confirmation SMS. Without verify_jwt=false
+# the gateway 401s every call from the survey because the new
+# sb_publishable_* anon key isn't JWT-format, leaving is_attending stuck
+# at true after a decline (planner roster never shows DECLINED).
+[functions.sms-survey-confirmation]
+verify_jwt = false
