@@ -22,13 +22,29 @@ import { CadenceCard } from './CadenceCard';
 import { AggregateResultsCard } from './AggregateResultsCard';
 import { GroupPreferencesCard } from './GroupPreferencesCard';
 import { useAutoGenerateRecommendations } from '@/hooks/useRecommendations';
+import type { TripStage } from '@/lib/tripStage';
 
 interface Props {
   tripId: string;
   sessionId: string | undefined;
+  /** Computed by the parent. Drives stage-gated cards (currently CadenceCard). */
+  stage: TripStage;
 }
 
-export function TripDashboardCards({ tripId, sessionId }: Props) {
+// Past planning, poll-completion nudges are stale: the trip is happening,
+// over, or being reconciled. The scheduler skips them at fire time
+// (reason='trip_started'); this hide makes the dashboard reflect that
+// without waiting for each scheduled time to arrive.
+const STAGES_HIDING_CADENCE: Record<TripStage, boolean> = {
+  deciding: false,
+  confirmed: false,
+  planning: false,
+  experiencing: true,
+  reconciling: true,
+  done: true,
+};
+
+export function TripDashboardCards({ tripId, sessionId, stage }: Props) {
   // Fire request_poll_recommendation for every live poll without a pending
   // rec on dashboard mount. RPC is idempotent so this is a no-op when recs
   // are already there; closes the gap between the cron's 15-min cadence
@@ -39,7 +55,9 @@ export function TripDashboardCards({ tripId, sessionId }: Props) {
     <View>
       <ResponsesDueCard tripId={tripId} sessionId={sessionId} />
       <DecisionQueueCard tripId={tripId} />
-      <CadenceCard sessionId={sessionId} hideWhenEmpty />
+      {STAGES_HIDING_CADENCE[stage] ? null : (
+        <CadenceCard sessionId={sessionId} hideWhenEmpty />
+      )}
       <AggregateResultsCard tripId={tripId} />
       <GroupPreferencesCard sessionId={sessionId} />
     </View>

@@ -15,6 +15,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
 import {
+  ActionSheetIOS,
   Alert,
   KeyboardAvoidingView,
   Modal,
@@ -32,7 +33,7 @@ import { Avatar } from '@/components/ui';
 import { usePermissions } from '@/hooks/usePermissions';
 import {
   useRespondents,
-  useSetRespondentPlanner,
+  useSetPlannerForPhone,
 } from '@/hooks/useRespondents';
 import {
   useTripSession,
@@ -53,9 +54,12 @@ interface MemberRow {
   phone: string;
   /** Captured during poll response — null until they answer. */
   email: string | null;
-  /** Set when there's a matching respondent row — required to flip
-   *  planner access (the SMS participant table doesn't carry it). */
+  /** Set when there's a matching respondent row. Informational only —
+   *  the planner toggle keys on phone (migration 094), not respondent id. */
   respondentId: string | null;
+  /** Trip creator (trips.created_by). Always shown as planner; can't be
+   *  demoted or removed. */
+  isCreator: boolean;
   /** Marker so we can show a different chip / disable removal. */
   isPlanner: boolean;
   /** Already participating in the SMS thread. */
@@ -88,8 +92,14 @@ export function GroupSection({ tripId }: { tripId: string }) {
   });
   const addMember = useAddTripMember(tripId, tripSession?.id);
   const removeMember = useRemoveTripMember(tripId, tripSession?.id);
-  const setPlanner = useSetRespondentPlanner(tripId);
+  const setPlanner = useSetPlannerForPhone(tripId, tripSession?.id);
   const { canDesignatePlanners } = usePermissions(tripId);
+
+  // The trip creator's SMS-side identity is stored on the session as
+  // planner_user_id (= users.id, not auth.uid). Matching participants by
+  // user_id surfaces the creator's row regardless of whether
+  // app_create_sms_session set is_planner=true on it.
+  const creatorUserId = tripSession?.planner_user_id ?? null;
 
   const [addModalVisible, setAddModalVisible] = useState(false);
 
@@ -122,13 +132,18 @@ export function GroupSection({ tripId }: { tripId: string }) {
           : !p.is_attending && matchingResp?.rsvp === 'out'
             ? 'declined'
             : 'in';
+      const isCreator = Boolean(creatorUserId && p.user_id === creatorUserId);
       rows.push({
         key: `p:${p.id}`,
         name: p.display_name ?? matchingResp?.name ?? null,
         phone: p.phone,
         email: matchingResp?.email ?? null,
         respondentId: matchingResp?.id ?? null,
-        isPlanner: p.is_planner,
+        isCreator,
+        // Creator is always a planner — keeps the pill correct even when
+        // app_create_sms_session never got to flip is_planner=true (e.g.
+        // creator's profile phone was empty at trip-create time).
+        isPlanner: isCreator || p.is_planner,
         isActiveSms: p.status === 'active',
         hasResponded: Boolean(
           matchingResp?.rsvp
@@ -149,6 +164,7 @@ export function GroupSection({ tripId }: { tripId: string }) {
         phone: r.phone ?? '',
         email: r.email,
         respondentId: r.id,
+        isCreator: false,
         isPlanner: r.is_planner,
         isActiveSms: false,
         hasResponded: Boolean(r.rsvp || r.preferences || respondedIds?.has(r.id)),
@@ -156,13 +172,14 @@ export function GroupSection({ tripId }: { tripId: string }) {
         attendance: r.rsvp === 'out' ? 'declined' : 'in',
       });
     }
-    // Planner first, then by name.
+    // Creator first, then other planners, then by name.
     rows.sort((a, b) => {
+      if (a.isCreator !== b.isCreator) return a.isCreator ? -1 : 1;
       if (a.isPlanner !== b.isPlanner) return a.isPlanner ? -1 : 1;
       return (a.name ?? a.phone).localeCompare(b.name ?? b.phone);
     });
     return rows;
-  }, [participants, respondents, profiles, respondedIds]);
+  }, [participants, respondents, profiles, respondedIds, creatorUserId]);
 
   function handleSubmitAdd(opts: { firstName: string; lastName: string; phone: string }) {
     const composed = [opts.firstName.trim(), opts.lastName.trim()].filter(Boolean).join(' ');
@@ -239,46 +256,84 @@ export function GroupSection({ tripId }: { tripId: string }) {
     proceed();
   }
 
-  function handleTogglePlanner(row: MemberRow) {
-    if (!canDesignatePlanners) return;
-    if (!row.respondentId) {
-      Alert.alert(
-        row.name ?? row.phone,
-        "Planner access turns on once they've responded to the poll.",
-      );
-      return;
-    }
+  // Direct mutation — the ActionSheet itself acts as the confirm prompt,
+  // so we skip the second Alert that the old icon-only flow needed.
+  function togglePlanner(row: MemberRow, nextIsPlanner: boolean) {
+    if (!canDesignatePlanners || row.isCreator || !row.phone) return;
+    setPlanner.mutate(
+      { phone: row.phone, isPlanner: nextIsPlanner },
+      {
+        onSuccess: (result) => {
+          if (result.ok) return;
+          const message =
+            result.reason === 'phone_not_on_trip'      ? "They aren't on this trip yet." :
+            result.reason === 'cannot_demote_creator'  ? "The trip creator is always a planner." :
+            result.reason === 'forbidden'              ? 'Only the planner can do that.' :
+            'Could not update planner status.';
+          Alert.alert('Error', message);
+        },
+        onError: () => Alert.alert('Error', 'Could not update planner status.'),
+      },
+    );
+  }
+
+  /**
+   * Trailing-overflow action sheet for a member row. Replaces the prior
+   * "two inline icons" pattern — labels are clearer, layout is consistent
+   * regardless of state, and the sheet itself doubles as the confirm
+   * prompt for promote/demote (remove still gets its own destructive
+   * confirm because it sends a "you've been removed" SMS).
+   *
+   * - Creator rows have no menu (no actions are valid).
+   * - Planner rows expose only "Remove planner access" — they must be
+   *   demoted before they can be removed (mirrors member-remove's
+   *   server-side `cannot_remove_planner` guard).
+   * - Non-planner rows expose "Make planner" + the destructive
+   *   "Remove from trip".
+   *
+   * iOS uses the native ActionSheetIOS; Android falls back to Alert.alert
+   * with the same option set so we don't pull in a new dep.
+   */
+  function openMemberMenu(row: MemberRow) {
+    if (!canDesignatePlanners || row.isCreator) return;
+    if (!row.phone) return;
+    const who = row.name ?? row.phone;
+
+    type Opt = { label: string; destructive?: boolean; run: () => void };
+    const opts: Opt[] = [];
     if (row.isPlanner) {
-      Alert.alert(
-        row.name ?? row.phone,
-        "Remove planner access? They'll no longer be able to edit polls and trip details.",
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Remove planner',
-            style: 'destructive',
-            onPress: () => setPlanner.mutate(
-              { respondentId: row.respondentId!, isPlanner: false },
-              { onError: () => Alert.alert('Error', 'Could not update planner status.') },
-            ),
-          },
-        ],
+      opts.push({ label: 'Remove planner access', run: () => togglePlanner(row, false) });
+    } else {
+      opts.push({ label: 'Make planner', run: () => togglePlanner(row, true) });
+      opts.push({ label: 'Remove from trip', destructive: true, run: () => handleRemove(row) });
+    }
+
+    if (Platform.OS === 'ios') {
+      const labels = [...opts.map((o) => o.label), 'Cancel'];
+      const cancelIdx = labels.length - 1;
+      const destructiveIdx = opts.findIndex((o) => o.destructive);
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title: who,
+          options: labels,
+          cancelButtonIndex: cancelIdx,
+          destructiveButtonIndex: destructiveIdx >= 0 ? destructiveIdx : undefined,
+          userInterfaceStyle: 'light',
+        },
+        (i) => {
+          if (i === cancelIdx || i === undefined) return;
+          opts[i]?.run();
+        },
       );
     } else {
-      Alert.alert(
-        `Make ${row.name ?? row.phone} a planner?`,
-        "They'll be able to edit polls and trip details.",
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Make planner',
-            onPress: () => setPlanner.mutate(
-              { respondentId: row.respondentId!, isPlanner: true },
-              { onError: () => Alert.alert('Error', 'Could not update planner status.') },
-            ),
-          },
-        ],
-      );
+      Alert.alert(who, undefined, [
+        ...opts.map((o) => ({
+          text: o.label,
+          style: (o.destructive ? 'destructive' : 'default') as 'destructive' | 'default',
+          onPress: o.run,
+        })),
+        { text: 'Cancel', style: 'cancel' as const },
+      ]);
     }
   }
 
@@ -361,43 +416,30 @@ export function GroupSection({ tripId }: { tripId: string }) {
                 <StatusPill done={row.hasProfile} label="Travel preferences" />
               </View>
             </View>
-            <View className="flex-row items-center gap-3">
-              {canDesignatePlanners ? (
-                <Pressable
-                  onPress={() => handleTogglePlanner(row)}
-                  hitSlop={10}
-                  accessibilityRole="button"
-                  accessibilityLabel={row.isPlanner ? `Remove planner access from ${row.name ?? row.phone}` : `Make ${row.name ?? row.phone} a planner`}
-                  accessibilityState={{ selected: row.isPlanner }}
-                  disabled={setPlanner.isPending}
-                >
-                  <Ionicons
-                    name={row.isPlanner ? 'ribbon' : 'ribbon-outline'}
-                    size={20}
-                    color={
-                      setPlanner.isPending ? '#D4D4D4'
-                      : row.isPlanner ? '#D97706'
-                      : '#A0A0A0'
-                    }
-                  />
-                </Pressable>
-              ) : null}
-              {!row.isPlanner ? (
-                <Pressable
-                  onPress={() => handleRemove(row)}
-                  hitSlop={10}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Remove ${row.name ?? row.phone}`}
-                  disabled={removeMember.isPending}
-                >
-                  <Ionicons
-                    name="person-remove-outline"
-                    size={18}
-                    color={removeMember.isPending ? '#D4D4D4' : '#A0A0A0'}
-                  />
-                </Pressable>
-              ) : null}
-            </View>
+            {/* Single trailing overflow control. Tapping opens an
+                ActionSheet (iOS) / Alert fallback (Android) with named
+                options — replaces the prior two-icon row that was
+                cramped and ambiguous. Hidden on the creator's row since
+                no actions are valid for them. */}
+            {canDesignatePlanners && !row.isCreator ? (
+              <Pressable
+                onPress={() => openMemberMenu(row)}
+                accessibilityRole="button"
+                accessibilityLabel={`Actions for ${row.name ?? row.phone}`}
+                disabled={setPlanner.isPending || removeMember.isPending}
+                style={{ padding: 10 }}
+                hitSlop={6}
+              >
+                <Ionicons
+                  name="ellipsis-horizontal"
+                  size={20}
+                  color={
+                    (setPlanner.isPending || removeMember.isPending)
+                      ? '#D4D4D4' : '#5F685F'
+                  }
+                />
+              </Pressable>
+            ) : null}
           </View>
         ))}
 

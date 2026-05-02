@@ -9,21 +9,24 @@
  * flow where it lands as a contextual greeting. Account-tab edit gets
  * a neutral "Travel preferences" header.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import {
   getMyTravelerProfile,
   upsertMyTravelerProfile,
 } from '@/lib/api/travelerProfiles';
 import { TravelerProfileForm } from '@/components/respond/TravelerProfileForm';
-import type { TravelerProfile } from '@/types/profile';
+import { tripKeys } from '@/hooks/useTrips';
+import type { TravelerProfile, TravelerProfileDraft } from '@/types/profile';
 
 export default function ProfilePrefsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const qc = useQueryClient();
   const [loading, setLoading] = useState(true);
   const [initial, setInitial] = useState<TravelerProfile | null>(null);
 
@@ -40,6 +43,23 @@ export default function ProfilePrefsScreen() {
       cancelled = true;
     };
   }, []);
+
+  // Migration 104 NULLs `cached_travel_suggestions` on every trip the user
+  // is on when home_airport / flight_dealbreakers / travel_pref change. The
+  // server-side bust is fine but the client's react-query cache for trip
+  // rows is still warm — without this, opening Travel after a save would
+  // serve the stale (now-NULLed-on-server but cached-on-client) suggestions
+  // until refetchOnWindowFocus catches up.
+  const handleSave = useCallback(
+    async (draft: TravelerProfileDraft) => {
+      const result = await upsertMyTravelerProfile(draft);
+      if (result.ok) {
+        qc.invalidateQueries({ queryKey: tripKeys.all });
+      }
+      return result;
+    },
+    [qc],
+  );
 
   if (loading) {
     return (
@@ -81,7 +101,7 @@ export default function ProfilePrefsScreen() {
         <TravelerProfileForm
           phone=""
           initialProfile={initial}
-          onSave={upsertMyTravelerProfile}
+          onSave={handleSave}
           onComplete={() => router.back()}
           introTitleOverride="Travel preferences"
           introSubtitleOverride={

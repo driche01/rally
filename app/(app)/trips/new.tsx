@@ -200,8 +200,10 @@ export default function NewTripScreen() {
   const [customBudgetOpen, setCustomBudgetOpen] = useState(false);
   // Duration: optional. Same 0/1/2+ semantics as other fields, with one
   // twist — 0 still creates a free-form duration poll so respondents can
-  // tell the planner how many nights they prefer.
-  const [durations, setDurations] = useState<string[]>([]);
+  // tell the planner how many nights they prefer. Default: all four
+  // standard chips pre-selected (same pattern as budget) so the form is
+  // submittable on minimum effort.
+  const [durations, setDurations] = useState<string[]>([...DURATION_OPTIONS]);
   const [customDurations, setCustomDurations] = useState<string[]>([]);
   const [customDurationInput, setCustomDurationInput] = useState('');
   const [customDurationOpen, setCustomDurationOpen] = useState(false);
@@ -453,7 +455,7 @@ export default function NewTripScreen() {
       value={selectedDays}
       onConfirm={(next) => setSelectedDays(next)}
       onClose={() => setDatePickerVisible(false)}
-      title="Pick the days you’re considering"
+      title="Pick possible travel windows"
     />
     <KeyboardAvoidingView
       className="flex-1 bg-cream"
@@ -514,11 +516,11 @@ export default function NewTripScreen() {
           {/* Destination — option list. 0 = skip, 1 = decided, 2+ = poll. */}
           <View className="gap-2" onLayout={onFieldLayout('destination')}>
             <View className="flex-row items-baseline justify-between">
-              <Text style={FORM_LABEL_STYLE}>Destination</Text>
+              <Text style={FORM_LABEL_STYLE}>Where to?</Text>
               {(() => {
                 const filled = destinations.filter((d) => d.name.trim()).length;
                 if (filled >= 2) return <Text className="text-[11px] font-semibold text-green">Will be polled</Text>;
-                if (filled === 1) return <Text className="text-[11px] font-semibold text-green">Decided</Text>;
+                if (filled === 1) return <Text className="text-[11px] font-semibold text-green">Locked in</Text>;
                 return <Text className="text-[11px] font-semibold text-[#737373]">Group decides</Text>;
               })()}
             </View>
@@ -579,13 +581,13 @@ export default function NewTripScreen() {
               {durations.length >= 2 ? (
                 <Text className="text-[11px] font-semibold text-green">Will be polled</Text>
               ) : durations.length === 1 ? (
-                <Text className="text-[11px] font-semibold text-green">Decided</Text>
+                <Text className="text-[11px] font-semibold text-green">Locked in</Text>
               ) : (
                 <Text className="text-[11px] font-semibold text-[#737373]">Group decides</Text>
               )}
             </View>
             <Text style={{ fontSize: 13, color: '#737373', marginTop: -2 }}>
-              Pick durations to vote on, or skip to let your group tell you how many nights.
+              Pick durations to vote on.
             </Text>
             <View className="flex-row flex-wrap gap-2">
               {DURATION_OPTIONS.map((opt) => {
@@ -687,11 +689,9 @@ export default function NewTripScreen() {
               planner picks actual trip dates from the heat map later. */}
           <View className="gap-2" onLayout={onFieldLayout('dates')}>
             <View className="flex-row items-baseline justify-between">
-              <Text style={FORM_LABEL_STYLE}>
-                {decidedDateRange ? 'Trip dates' : 'Trip dates window'}
-              </Text>
+              <Text style={FORM_LABEL_STYLE}>When?</Text>
               {decidedDateRange ? (
-                <Text className="text-[11px] font-semibold text-green">Decided</Text>
+                <Text className="text-[11px] font-semibold text-green">Locked in</Text>
               ) : dateRanges.length >= 1 ? (
                 <Text className="text-[11px] font-semibold text-green">Will be polled</Text>
               ) : (
@@ -701,7 +701,7 @@ export default function NewTripScreen() {
             <Text style={{ fontSize: 13, color: '#737373', marginTop: -2 }}>
               {decidedDateRange
                 ? 'Duration matches — these dates are locked in.'
-                : 'Pick the window — your group will tell you which days they work.'}
+                : 'Pick travel windows to collect group availability.'}
             </Text>
             <TouchableOpacity
               className="flex-row items-center gap-2.5 border-[1.5px] border-line rounded-xl bg-card px-3.5 py-[13px]"
@@ -711,7 +711,7 @@ export default function NewTripScreen() {
               <Ionicons name="calendar-outline" size={18} color="#737373" />
               <Text className="flex-1 text-sm font-medium text-[#262626]">
                 {selectedDays.length === 0
-                  ? 'Pick trip dates'
+                  ? 'Pick travel windows'
                   : `${selectedDays.length} day${selectedDays.length === 1 ? '' : 's'} · ${dateRanges.length} ${dateRanges.length === 1 ? 'option' : 'options'}`}
               </Text>
               <Text className="text-[12px] text-[#737373]">
@@ -771,16 +771,16 @@ export default function NewTripScreen() {
           {/* Spend per person — multi-select. 0 = skip, 1 = decided, 2+ = poll. */}
           <View className="gap-2" onLayout={onFieldLayout('budget')}>
             <View className="flex-row items-baseline justify-between">
-              <Text style={FORM_LABEL_STYLE}>Spend per person</Text>
+              <Text style={FORM_LABEL_STYLE}>Spend per person?</Text>
               {budgets.length >= 2 ? (
                 <Text className="text-[11px] font-semibold text-green">Will be polled</Text>
               ) : budgets.length === 1 ? (
-                <Text className="text-[11px] font-semibold text-green">Decided</Text>
+                <Text className="text-[11px] font-semibold text-green">Locked in</Text>
               ) : (
                 <Text className="text-[11px] font-semibold text-[#737373]">Group decides</Text>
               )}
             </View>
-            <Text style={{ fontSize: 13, color: '#737373', marginTop: -2 }}>Travel + lodging only</Text>
+            <Text style={{ fontSize: 13, color: '#737373', marginTop: -2 }}>Travel + lodging only.</Text>
             <View className="flex-row flex-wrap gap-2">
               {BUDGET_OPTIONS.map((opt) => {
                 const sel = budgets.includes(opt);
@@ -907,14 +907,14 @@ export default function NewTripScreen() {
             {cadencePreview.length > 0 && !showShortNoticeWarning && (
               <View className="mt-1 px-3 py-2.5 rounded-xl bg-green-soft border border-[#C8D8B5]">
                 <Text className="text-[12px] font-medium text-green">
-                  Rally will text non-responders on
+                  Rally will send text nudges on:
                 </Text>
                 <Text className="text-[12px] text-[#235C38] mt-1 leading-[18px]">
                   {cadencePreview.map((it) => formatCadenceDate(it.scheduledFor)).join(' · ')}
                 </Text>
                 {responsesDueDate && (
                   <Text className="text-[11px] text-[#5F685F] mt-1.5">
-                    Responses due {formatCadenceDate(responsesDueDate)} (3 days before book-by) · {nudgeKindLabel('rd_minus_1').toLowerCase()} on {formatCadenceDate(cadencePreview[cadencePreview.length - 1].scheduledFor)}
+                    {nudgeKindLabel('rd_minus_1')} on {formatCadenceDate(cadencePreview[cadencePreview.length - 1].scheduledFor)}
                   </Text>
                 )}
               </View>

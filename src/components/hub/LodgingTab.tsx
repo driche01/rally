@@ -14,7 +14,7 @@ import {
   View,
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
-import { PlacesAutocompleteInput, FormField, Input, Pill, Sheet, Spinner } from '@/components/ui';
+import { EmptyState, FormField, Input, Pill, Sheet, Spinner } from '@/components/ui';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTrip } from '@/hooks/useTrips';
@@ -25,16 +25,18 @@ import {
   useDeleteLodgingOption,
   useConfirmLodgingBooking,
 } from '@/hooks/useLodging';
+import { parseLodgingUrl, formatCents } from '@/lib/api/lodging';
 import {
-  buildAirbnbUrl,
-  buildVrboUrl,
-  buildBookingUrl,
-  parseLodgingUrl,
-  formatCents,
-  type LodgingSearchParams,
-} from '@/lib/api/lodging';
-import { useGetLodgingSuggestions } from '@/hooks/useAiSuggestions';
-import type { LodgingSuggestion } from '@/lib/api/aiSuggestions';
+  useGetLodgingSuggestions,
+  useGroupLodgingPrefSummary,
+  type LodgingSuggestionsKeyDeps,
+} from '@/hooks/useAiSuggestions';
+import type {
+  LodgingSuggestion,
+  LodgingSuggestionsResult,
+  RecommendedPlatform,
+} from '@/lib/api/aiSuggestions';
+import { computeLodgingSignature } from '@/lib/lodgingSignature';
 import { useCreateBlock, useDeleteBlocksByType } from '@/hooks/useItinerary';
 import type { LodgingOptionWithVotes, LodgingPlatform } from '@/types/database';
 import { GROUP_SIZE_MIDPOINTS } from '@/types/database';
@@ -50,8 +52,6 @@ const PLATFORM_COLORS: Record<LodgingPlatform, { bg: string; text: string; label
   booking: { bg: '#E0E8F0', text: '#1E3A5F', label: 'Booking' },
   manual: { bg: '#F3F4F6', text: '#6B7280', label: 'Manual' },
 };
-
-const MIN_BEDROOMS_OPTIONS = [1, 2, 3, 4, 5];
 
 // ─── Booking confirmation sheet ───────────────────────────────────────────────
 
@@ -539,157 +539,365 @@ function PropertyCard({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 // ─── AI Lodging Suggestion Card ───────────────────────────────────────────────
+//
+// Visual language mirrors `ItineraryTab`'s AI card so both Hub tabs read as
+// the same product. Outer card uses the warm cream surface (#EFE3D0) and
+// deep-green title (#0F3F2E). Suggestion rows use the same white-with-shadow
+// `BlockCard` pattern from itinerary, with a leading 32×32 colored icon to
+// give visual continuity. Platform pills keep their brand colors (Airbnb red,
+// VRBO blue, Booking.com slate) — those identities matter when handing off.
+
+const SHEET_BG          = '#EFE3D0'; // warm cream — itinerary AI card surface
+const SHEET_BORDER      = '#DDE8D8'; // subtle green-gray hairline
+const TITLE_GREEN       = '#0F3F2E'; // deep green — primary brand
+const BODY_MUTED        = '#4A6E8A'; // muted body copy (matches itinerary)
+const INK               = '#163026';
+const ICON_BG_GREEN     = '#DFE8D2'; // bg-green-soft — rentals/homes
+const ICON_BG_GOLD      = '#F1E2A8'; // bg-gold/40 — hotels (warm "rest")
+
+const PLATFORM_STYLE: Record<'airbnb' | 'vrbo' | 'booking', { bg: string; text: string; label: string }> = {
+  airbnb:  { bg: '#FEF2F2', text: '#DC2626', label: 'Airbnb' },
+  vrbo:    { bg: '#EFF6FF', text: '#2563EB', label: 'VRBO' },
+  booking: { bg: '#F8FAFC', text: '#475569', label: 'Booking.com' },
+};
+
+function recommendedLabel(p: RecommendedPlatform): string {
+  if (p === 'airbnb')  return 'Airbnb / VRBO';
+  if (p === 'vrbo')    return 'VRBO / Airbnb';
+  if (p === 'booking') return 'Booking.com';
+  return 'Across Airbnb, VRBO & Booking.com';
+}
+
+function recommendedReason(p: RecommendedPlatform): string {
+  if (p === 'airbnb' || p === 'vrbo') return 'Your group leans toward sharing a house.';
+  if (p === 'booking')                return 'Your group leans toward their own hotel rooms.';
+  return 'Your group is mixed — showing options across all three.';
+}
+
+/** Map a free-form propertyType ("villa", "Boutique Hotel", "B&B") to a leading
+ *  icon + tile color, matching the itinerary's BlockCard pattern. */
+function propertyVisual(propertyType: string): { icon: React.ComponentProps<typeof Ionicons>['name']; bg: string } {
+  const t = propertyType.toLowerCase();
+  if (/(hotel|motel|hostel|b&b|bed.?and.?breakfast|inn)/i.test(t)) {
+    return { icon: 'bed-outline', bg: ICON_BG_GOLD };
+  }
+  if (/(apartment|condo|loft|studio)/i.test(t)) {
+    return { icon: 'business-outline', bg: ICON_BG_GREEN };
+  }
+  // Default: villas, cottages, cabins, entire homes, treehouses, etc.
+  return { icon: 'home-outline', bg: ICON_BG_GREEN };
+}
 
 function LodgingAiSuggestionCard({
   tripId,
+  trip,
   onSelect,
 }: {
   tripId: string;
+  trip: ReturnType<typeof useTrip>['data'];
   onSelect: (s: LodgingSuggestion) => void;
 }) {
-  const getSuggestions = useGetLodgingSuggestions(tripId);
-  const [expanded, setExpanded] = useState(false);
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-  const suggestions = getSuggestions.data ?? [];
+  // Destination + dates are the only inputs the suggestions actually need.
+  // Once the destination/dates polls land, those fields populate on the trip,
+  // so this is effectively "polls decided." Don't gate on budget/trip_type —
+  // those aren't required for sensible recommendations and the trip may have
+  // skipped those screens.
+  const stageReady = !!trip?.destination && !!trip?.start_date && !!trip?.end_date;
 
-  function handleGenerate() {
-    if (suggestions.length > 0) {
-      setExpanded((p) => !p);
-      return;
+  const { data: prefSummary } = useGroupLodgingPrefSummary(tripId);
+
+  const groupSize = trip?.group_size_precise
+    ?? GROUP_SIZE_MIDPOINTS[trip?.group_size_bucket ?? '5-8'];
+
+  // Two pieces of state for the regenerate flow:
+  //  - `noteDraft` is the controlled textarea value (changes on every keystroke).
+  //  - `committedNote` flows into the query key — only updates on Regenerate
+  //    tap so we don't fire one Gemini call per keystroke.
+  const [noteDraft, setNoteDraft] = useState('');
+  const [committedNote, setCommittedNote] = useState('');
+
+  const deps: LodgingSuggestionsKeyDeps = {
+    destination: trip?.destination ?? null,
+    startDate: trip?.start_date ?? null,
+    endDate: trip?.end_date ?? null,
+    groupSize,
+    budgetPerPerson: trip?.budget_per_person ?? null,
+    estimatedFlightCostPerPerson: trip?.estimated_flight_cost_per_person ?? null,
+    prefSummary: prefSummary ?? null,
+    note: committedNote,
+  };
+
+  // ── Server cache check (stale-while-revalidate) ────────────────────────
+  // The trip row carries the suggestion payload (populated by the
+  // `trip_warm_lodging_cache` trigger as soon as details lock in). We
+  // render whatever is on the row IMMEDIATELY — no waiting on prefSummary
+  // or any other query — so opening the tab is as instant as itinerary.
+  //
+  // In the background, once prefSummary lands, we verify the signature.
+  // If it matches, nothing happens. If it mismatches (e.g. a late
+  // respondent flipped their lodging_pref), we kick the edge function
+  // for a silent refresh; React Query swaps the new data in when ready.
+  //
+  // The trip-row cache is the canonical NO-NOTE result — when the planner
+  // has committed a steering note we ignore it (the result we want is the
+  // note-tuned one in react-query's in-memory cache).
+  const hasCommittedNote = committedNote.trim().length > 0;
+  const tripCachedPayload: LodgingSuggestionsResult | null =
+    !hasCommittedNote && trip?.cached_lodging_suggestions
+      ? (trip.cached_lodging_suggestions as LodgingSuggestionsResult)
+      : null;
+
+  const expectedSignature = stageReady && prefSummary
+    ? computeLodgingSignature({
+        destination: trip?.destination ?? null,
+        startDate: trip?.start_date ?? null,
+        endDate: trip?.end_date ?? null,
+        groupSize,
+        budgetPerPerson: trip?.budget_per_person ?? null,
+        flightCostPerPerson: trip?.estimated_flight_cost_per_person ?? null,
+        tripType: trip?.trip_type ?? null,
+        prefSummary,
+      })
+    : null;
+  const cacheIsStale =
+    !hasCommittedNote &&
+    expectedSignature != null &&
+    trip?.cached_lodging_suggestions_signature !== expectedSignature;
+
+  // Fire the edge function when:
+  //  - the trip row has nothing cached at all (first-ever open), OR
+  //  - we have cache + prefSummary and the signatures don't match (silent refresh), OR
+  //  - the planner committed a steering note (cache is bypassed by design).
+  const query = useGetLodgingSuggestions(tripId, deps, {
+    enabled: stageReady && (!tripCachedPayload || cacheIsStale || hasCommittedNote),
+  });
+
+  // Prefer the just-fetched payload (when present) over the row cache so
+  // a successful refresh visibly updates the card.
+  const result: LodgingSuggestionsResult | null = query.data ?? tripCachedPayload ?? null;
+  const suggestions = result?.suggestions ?? [];
+  const recommended: RecommendedPlatform = result?.recommendedPlatform ?? 'mixed';
+
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+
+  function handleRegenerate() {
+    const next = noteDraft.trim();
+    if (next === committedNote.trim()) {
+      // Same note as last time — react-query won't auto-refetch on key
+      // equality, so nudge it manually.
+      void query.refetch();
+    } else {
+      setCommittedNote(next);
     }
-    getSuggestions.mutate(undefined, {
-      onSuccess: () => setExpanded(true),
-      onError: () => Alert.alert('Error', 'Could not get AI suggestions. Please try again.'),
-    });
+    setSelectedIndex(null);
   }
 
-  // No suggestions yet — show itinerary-style generate card
-  if (suggestions.length === 0) {
+  // Pre-stage state — the suggestions can't run yet because polls aren't decided.
+  if (!stageReady) {
     return (
-      <View style={{ backgroundColor: '#EEF3F8', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#D8E4EE', gap: 10 }}>
+      <View style={{ backgroundColor: SHEET_BG, borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: SHEET_BORDER, gap: 8 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Ionicons name="sparkles-outline" size={18} color="#1A4060" />
-          <Text style={{ fontSize: 14, fontWeight: '700', color: '#1A4060' }}>AI lodging suggestions</Text>
+          <Ionicons name="sparkles" size={18} color={TITLE_GREEN} />
+          <Text style={{ fontSize: 14, fontWeight: '700', color: TITLE_GREEN }}>Lodging suggestions</Text>
         </View>
-        <Text style={{ fontSize: 13, color: '#4A6E8A', lineHeight: 18 }}>
-          Rally will suggest 3 options based on your destination, dates, group size, and member preferences.
+        <Text style={{ fontSize: 13, color: BODY_MUTED, lineHeight: 18 }}>
+          Once the destination and dates are locked in, Rally will recommend lodging tailored to your group's preferences and budget.
         </Text>
-        <Pressable
-          onPress={handleGenerate}
-          disabled={getSuggestions.isPending}
-          style={{ backgroundColor: '#1A4060', borderRadius: 12, paddingVertical: 12, alignItems: 'center' }}
-          accessibilityRole="button"
-        >
-          {getSuggestions.isPending ? (
-            <Spinner tone="onPrimary" />
-          ) : (
-            <Text style={{ fontSize: 14, fontWeight: '700', color: '#FFFCF6' }}>Get suggestions</Text>
-          )}
-        </Pressable>
       </View>
     );
   }
 
-  return (
-    <View
-      className="mb-4 overflow-hidden rounded-2xl bg-card"
-      style={{ borderWidth: 1, borderColor: '#D8E4EE', shadowColor: '#1A4060', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 }}
-    >
-      <Pressable
-        onPress={handleGenerate}
-        className="flex-row items-center justify-between px-4 py-3"
-        accessibilityRole="button"
-      >
-        <View className="flex-row items-center gap-2">
-          <Ionicons name="sparkles-outline" size={15} color="#1A4060" />
-          <Text style={{ fontSize: 14, fontWeight: '700', color: '#1A4060' }}>AI lodging suggestions</Text>
-        </View>
-        {getSuggestions.isPending ? (
-          <Spinner />
-        ) : (
-          <Ionicons
-            name={expanded ? 'chevron-up' : 'chevron-down'}
-            size={15}
-            color="#A3A3A3"
-          />
-        )}
-      </Pressable>
+  const recommendedPlatforms: ('airbnb' | 'vrbo' | 'booking')[] =
+    recommended === 'mixed'   ? ['airbnb', 'vrbo', 'booking']
+  : recommended === 'airbnb'  ? ['airbnb', 'vrbo']  // rentals → both rental marketplaces
+  : recommended === 'vrbo'    ? ['vrbo', 'airbnb']
+  : ['booking'];
 
-      {expanded && suggestions.length > 0 ? (
-        <View style={{ paddingHorizontal: 14, paddingBottom: 14, gap: 8 }}>
-          {suggestions.map((s: LodgingSuggestion) => (
+  const isFirstFetch = (query.isLoading || query.isFetching) && suggestions.length === 0;
+  const isRegenFetch = query.isFetching && suggestions.length > 0;
+
+  return (
+    <View style={{ marginBottom: 16, gap: 12 }}>
+      {/* Cream tan sheet — controls only. Mirrors itinerary's AI card so
+          both Hub tabs read as the same product. */}
+      <View style={{ backgroundColor: SHEET_BG, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: SHEET_BORDER, gap: 10 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Ionicons name="sparkles" size={16} color={TITLE_GREEN} />
+          <Text style={{ fontSize: 14, fontWeight: '700', color: TITLE_GREEN, flex: 1 }}>
+            Lodging suggestions for your group
+          </Text>
+          {isRegenFetch ? <Spinner /> : null}
+        </View>
+        <Text style={{ fontSize: 12, color: BODY_MUTED, lineHeight: 17 }}>
+          Tap an option below to add it. Want different vibes? Add a note and regenerate.
+        </Text>
+        <TextInput
+          value={noteDraft}
+          onChangeText={setNoteDraft}
+          placeholder="e.g. more boutique hotels, near the beach"
+          placeholderTextColor="#a3a3a3"
+          multiline
+          maxLength={280}
+          style={{
+            backgroundColor: 'white',
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: SHEET_BORDER,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            fontSize: 13,
+            color: INK,
+            minHeight: 60,
+            textAlignVertical: 'top',
+          }}
+        />
+        <Button
+          variant="primary"
+          fullWidth
+          onPress={handleRegenerate}
+          disabled={query.isFetching}
+          loading={query.isFetching}
+        >
+          Regenerate
+        </Button>
+      </View>
+
+      {/* Below the sheet, on the page background — Recommended banner +
+          option cards. Visually mirrors itinerary's day cards. */}
+      {isFirstFetch ? (
+        <View style={{ paddingVertical: 24, alignItems: 'center', gap: 8 }}>
+          <Spinner />
+          <Text style={{ fontSize: 12, color: BODY_MUTED }}>
+            Finding lodging that matches your group…
+          </Text>
+        </View>
+      ) : query.isError && suggestions.length === 0 ? (
+        <View style={{ padding: 16, borderRadius: 16, backgroundColor: '#FFFCF6', borderWidth: 1, borderColor: SHEET_BORDER, gap: 8 }}>
+          <Text style={{ fontSize: 13, color: BODY_MUTED }}>
+            Couldn't generate suggestions just now.
+          </Text>
+          <Button variant="primary" onPress={() => query.refetch()} fullWidth>
+            Try again
+          </Button>
+        </View>
+      ) : suggestions.length === 0 ? null : (
+        <>
+          {/* Recommended-for-your-group banner */}
+          <View style={{ padding: 12, borderRadius: 12, backgroundColor: '#FFFCF6', borderWidth: 1, borderColor: SHEET_BORDER, gap: 2 }}>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: BODY_MUTED, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+              Recommended for your group
+            </Text>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: TITLE_GREEN }}>
+              {recommendedLabel(recommended)}
+            </Text>
+            <Text style={{ fontSize: 12, color: BODY_MUTED, lineHeight: 17, marginTop: 2 }}>
+              {recommendedReason(recommended)}
+            </Text>
+          </View>
+
+          {/* Suggestions list — each row is an itinerary-style block card */}
+          <View style={{ gap: 8 }}>
+            {suggestions.map((s: LodgingSuggestion) => {
+          const isSelected = selectedIndex === s.index;
+          const visual = propertyVisual(s.propertyType);
+          return (
             <Pressable
               key={s.index}
-              onPress={() => setSelectedIndex(selectedIndex === s.index ? null : s.index)}
+              onPress={() => setSelectedIndex(isSelected ? null : s.index)}
               style={{
-                borderRadius: 12,
-                borderWidth: selectedIndex === s.index ? 2 : 1,
-                borderColor: selectedIndex === s.index ? '#1A4060' : '#D9CCB6',
+                backgroundColor: '#FFFCF6',
+                borderRadius: 16,
+                borderWidth: isSelected ? 2 : 1,
+                borderColor: isSelected ? TITLE_GREEN : SHEET_BORDER,
                 padding: 12,
-                gap: 8,
+                gap: 10,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.06,
+                shadowRadius: 6,
+                elevation: 2,
               }}
             >
-              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#163026' }}>{s.label}</Text>
-                  <Text style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{s.propertyType} · {s.idealFor}</Text>
+              {/* Top row: icon + title/subtitle column + selected badge.
+                  Price moves to its own line below so the title and
+                  property-type subtitle aren't squeezed and don't truncate
+                  on small phones. */}
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                <View style={{ width: 32, height: 32, borderRadius: 12, backgroundColor: visual.bg, alignItems: 'center', justifyContent: 'center', marginTop: 2 }}>
+                  <Ionicons name={visual.icon} size={16} color={TITLE_GREEN} />
                 </View>
-                {selectedIndex === s.index ? (
-                  <View style={{ backgroundColor: '#1A4060', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 }}>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: INK }}>
+                    {s.label}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: '#9DA8A0', lineHeight: 16 }}>
+                    {s.propertyType} · {s.idealFor}
+                  </Text>
+                  {s.estimatedNightlyRate ? (
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: TITLE_GREEN, marginTop: 2 }}>
+                      {s.estimatedNightlyRate}
+                    </Text>
+                  ) : null}
+                </View>
+                {isSelected ? (
+                  <View style={{ backgroundColor: TITLE_GREEN, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, marginTop: 2 }}>
                     <Text style={{ fontSize: 10, fontWeight: '700', color: 'white' }}>Selected</Text>
                   </View>
-                ) : s.estimatedNightlyRate ? (
-                  <Text style={{ fontSize: 11, fontWeight: '500', color: '#888' }}>{s.estimatedNightlyRate}</Text>
                 ) : null}
               </View>
-              <Text style={{ fontSize: 12, color: '#555', lineHeight: 17 }}>{s.description}</Text>
+
+              <Text style={{ fontSize: 13, color: '#3F4A45', lineHeight: 18 }}>
+                {s.description}
+              </Text>
+
+              {/* Platform pills — keep brand colors so the handoff reads right */}
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                {s.airbnbUrl ? (
-                  <Pressable
-                    onPress={() => Linking.openURL(s.airbnbUrl!)}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FEF2F2', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 }}
-                  >
-                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#DC2626' }}>Airbnb</Text>
-                    <Ionicons name="open-outline" size={10} color="#DC2626" />
-                  </Pressable>
-                ) : null}
-                {s.vrboUrl ? (
-                  <Pressable
-                    onPress={() => Linking.openURL(s.vrboUrl!)}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#EFF6FF', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 }}
-                  >
-                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#2563EB' }}>VRBO</Text>
-                    <Ionicons name="open-outline" size={10} color="#2563EB" />
-                  </Pressable>
-                ) : null}
-                {s.bookingUrl ? (
-                  <Pressable
-                    onPress={() => Linking.openURL(s.bookingUrl!)}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#F8FAFC', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 }}
-                  >
-                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#475569' }}>Booking.com</Text>
-                    <Ionicons name="open-outline" size={10} color="#475569" />
-                  </Pressable>
-                ) : null}
+                {(['airbnb', 'vrbo', 'booking'] as const).map((p) => {
+                  const url = p === 'airbnb' ? s.airbnbUrl : p === 'vrbo' ? s.vrboUrl : s.bookingUrl;
+                  if (!url) return null;
+                  const isRecommended = recommendedPlatforms.includes(p);
+                  const style = PLATFORM_STYLE[p];
+                  return (
+                    <Pressable
+                      key={p}
+                      onPress={() => Linking.openURL(url)}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 4,
+                        backgroundColor: isRecommended ? style.text : style.bg,
+                        borderRadius: 999,
+                        paddingHorizontal: 10,
+                        paddingVertical: 4,
+                      }}
+                    >
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: isRecommended ? 'white' : style.text }}>
+                        {style.label}
+                      </Text>
+                      <Ionicons name="open-outline" size={10} color={isRecommended ? 'white' : style.text} />
+                    </Pressable>
+                  );
+                })}
               </View>
             </Pressable>
-          ))}
+          );
+        })}
+      </View>
+
           {selectedIndex !== null ? (
-            <Pressable
+            <Button
+              variant="primary"
+              fullWidth
               onPress={() => {
                 const s = suggestions.find((s: LodgingSuggestion) => s.index === selectedIndex);
-                if (s) { onSelect(s); setExpanded(false); setSelectedIndex(null); }
+                if (s) { onSelect(s); setSelectedIndex(null); }
               }}
-              style={{ backgroundColor: '#1A4060', borderRadius: 12, paddingVertical: 13, alignItems: 'center', marginTop: 4 }}
             >
-              <Text style={{ fontSize: 14, fontWeight: '700', color: 'white' }}>
-                Add "{suggestions.find((s: LodgingSuggestion) => s.index === selectedIndex)?.label}" to lodging
-              </Text>
-            </Pressable>
+              {`Add "${suggestions.find((s: LodgingSuggestion) => s.index === selectedIndex)?.label}" to lodging`}
+            </Button>
           ) : null}
-        </View>
-      ) : null}
-
+        </>
+      )}
     </View>
   );
 }
@@ -708,29 +916,14 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
   const createBlock = useCreateBlock(tripId);
   const deleteBlocksByType = useDeleteBlocksByType(tripId);
 
-  // Search / add state — start expanded when no options yet, collapse once options load
-  const [searchExpanded, setSearchExpanded] = useState(true);
   const [addSectionExpanded, setAddSectionExpanded] = useState(true);
-  const searchInitialized = useRef(false);
+  const addSectionInitialized = useRef(false);
   useEffect(() => {
-    if (optionsLoaded && !searchInitialized.current) {
-      searchInitialized.current = true;
-      if (options.length > 0) {
-        setSearchExpanded(false);
-        setAddSectionExpanded(false);
-      }
+    if (optionsLoaded && !addSectionInitialized.current) {
+      addSectionInitialized.current = true;
+      if (options.length > 0) setAddSectionExpanded(false);
     }
   }, [optionsLoaded, options.length]);
-  const guestDefault =
-    trip?.group_size_precise ??
-    GROUP_SIZE_MIDPOINTS[trip?.group_size_bucket ?? '5-8'];
-
-  const [destination, setDestination] = useState(trip?.destination ?? '');
-  const [destinationAddress, setDestinationAddress] = useState(trip?.destination_address ?? '');
-  const [checkIn, setCheckIn] = useState(trip?.start_date ?? '');
-  const [checkOut, setCheckOut] = useState(trip?.end_date ?? '');
-  const [guests, setGuests] = useState(guestDefault);
-  const [minBedrooms, setMinBedrooms] = useState(1);
 
   // URL paste
   const [pasteUrl, setPasteUrl] = useState('');
@@ -744,26 +937,6 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
   const [manualSheet, setManualSheet] = useState<ManualSheetState>(DEFAULT_MANUAL_SHEET);
 
   const atLimit = options.length >= MAX_PROPERTIES;
-
-  // Sync defaults when trip loads
-  useMemo(() => {
-    const defaultGuests =
-      trip?.group_size_precise ??
-      GROUP_SIZE_MIDPOINTS[trip?.group_size_bucket ?? '5-8'];
-    setGuests(defaultGuests);
-    if (trip?.start_date) setCheckIn(trip.start_date);
-    if (trip?.end_date) setCheckOut(trip.end_date);
-    if (trip?.destination) setDestination(trip.destination);
-    if (trip?.destination_address) setDestinationAddress(trip.destination_address);
-  }, [trip?.id]);
-
-  const searchParams: LodgingSearchParams = {
-    destination: destinationAddress || destination || trip?.name || 'your destination',
-    checkIn: checkIn || '2025-01-01',
-    checkOut: checkOut || '2025-01-07',
-    guests,
-    minBedrooms,
-  };
 
   function handleAddFromUrl() {
     setUrlError('');
@@ -879,6 +1052,27 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
     );
   }
 
+  // Pre-stage empty state — no destination/dates yet AND no manually-added
+  // lodging. Mirrors the Itinerary empty state so the page reads
+  // consistently across tabs while details are still being decided.
+  const stageReady = !!trip?.destination && !!trip?.start_date && !!trip?.end_date;
+  if (!stageReady && options.length === 0) {
+    return (
+      <View className="flex-1 bg-cream">
+        <View className="flex-row items-center justify-between px-5 pt-4 pb-3">
+          <Text className="text-base font-bold text-ink">Lodging</Text>
+        </View>
+        <View className="flex-1 justify-center">
+          <EmptyState
+            icon="bed-outline"
+            title="Lodging suggestions"
+            body="Once the destination and dates are locked in, Rally will recommend lodging tailored to your group's preferences and budget."
+          />
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View className="flex-1 bg-cream">
       <ScrollView
@@ -900,8 +1094,8 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
         {isPlanner ? (
           <LodgingAiSuggestionCard
             tripId={tripId}
+            trip={trip}
             onSelect={(s) => {
-              setSearchExpanded(false);
               setAddSectionExpanded(false);
               createOption.mutate({
                 trip_id: tripId,
@@ -951,128 +1145,7 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
           ))
         ) : null}
 
-        {/* ── Section A: Search panel ── */}
-        <View
-          className="mb-4 overflow-hidden rounded-2xl bg-card"
-          style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 2 }}
-        >
-          <Pressable
-            onPress={() => setSearchExpanded((p) => !p)}
-            className="flex-row items-center justify-between px-4 py-3"
-          >
-            <View className="flex-row items-center gap-2">
-              <Ionicons name="search-outline" size={16} color="#737373" />
-              <Text className="text-sm font-semibold text-ink">Search for lodging</Text>
-            </View>
-            <Ionicons
-              name={searchExpanded ? 'chevron-up' : 'chevron-down'}
-              size={16}
-              color="#A3A3A3"
-            />
-          </Pressable>
-
-          {searchExpanded ? (
-            <View className="gap-3 px-4 pb-4">
-              {/* Destination */}
-              <View>
-                <Text className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted">Destination</Text>
-                <PlacesAutocompleteInput
-                  value={destination}
-                  onChangeText={(text) => {
-                    setDestination(text);
-                    // Clear saved address if user manually edits
-                    setDestinationAddress('');
-                  }}
-                  onSelectPlace={(mainText, fullAddress) => {
-                    setDestination(mainText);
-                    setDestinationAddress(fullAddress);
-                  }}
-                  placeholder={trip?.name ?? 'Where are you going?'}
-                />
-              </View>
-
-              {/* Dates */}
-              <View className="flex-row gap-3">
-                <View className="flex-1">
-                  <FormField label="Check-in">
-                    <Input
-                      value={checkIn}
-                      onChangeText={setCheckIn}
-                      placeholder="YYYY-MM-DD"
-                      maxLength={10}
-                    />
-                  </FormField>
-                </View>
-                <View className="flex-1">
-                  <FormField label="Check-out">
-                    <Input
-                      value={checkOut}
-                      onChangeText={setCheckOut}
-                      placeholder="YYYY-MM-DD"
-                      maxLength={10}
-                    />
-                  </FormField>
-                </View>
-              </View>
-
-              {/* Guests */}
-              <View>
-                <Text className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted">Guests</Text>
-                <View className="flex-row items-center gap-3">
-                  <Pressable
-                    onPress={() => setGuests((g) => Math.max(1, g - 1))}
-                    className="h-9 w-9 items-center justify-center rounded-xl border border-line"
-                  >
-                    <Ionicons name="remove" size={16} color="#737373" />
-                  </Pressable>
-                  <Text className="min-w-[24px] text-center text-base font-semibold text-ink">{guests}</Text>
-                  <Pressable
-                    onPress={() => setGuests((g) => g + 1)}
-                    className="h-9 w-9 items-center justify-center rounded-xl border border-line"
-                  >
-                    <Ionicons name="add" size={16} color="#737373" />
-                  </Pressable>
-                </View>
-              </View>
-
-              {/* Min bedrooms */}
-              <FormField label="Min bedrooms">
-                <View className="flex-row gap-2">
-                  {MIN_BEDROOMS_OPTIONS.map((n) => (
-                    <Pill
-                      key={n}
-                      onPress={() => setMinBedrooms(n)}
-                      selected={minBedrooms === n}
-                      size="sm"
-                    >
-                      {n === 5 ? '5+' : String(n)}
-                    </Pill>
-                  ))}
-                </View>
-              </FormField>
-
-              {/* Platform buttons */}
-              <View className="flex-row gap-2 pt-1">
-                {[
-                  { label: 'Airbnb', url: buildAirbnbUrl(searchParams), color: '#E11D48', bg: '#FFE4E1' },
-                  { label: 'VRBO', url: buildVrboUrl(searchParams), color: '#2563EB', bg: '#E0ECFF' },
-                  { label: 'Booking.com', url: buildBookingUrl(searchParams), color: '#1E3A5F', bg: '#E0E8F0' },
-                ].map((p) => (
-                  <Pressable
-                    key={p.label}
-                    onPress={() => Linking.openURL(p.url)}
-                    className="flex-1 items-center justify-center rounded-xl py-2.5"
-                    style={{ backgroundColor: p.bg }}
-                  >
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: p.color }}>{p.label}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-          ) : null}
-        </View>
-
-        {/* ── Section B: Add a property ── */}
+        {/* ── Add a property ── */}
         {!atLimit ? (
           <View
             className="mb-4 overflow-hidden rounded-2xl bg-card"

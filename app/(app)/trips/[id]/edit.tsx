@@ -133,6 +133,16 @@ export default function EditTripScreen() {
   const [name, setName] = useState('');
   const [destinations, setDestinations] = useState<Array<{ name: string; address: string }>>([{ name: '', address: '' }]);
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
+  // Duration: mirror of new.tsx state. 0 → free-form poll, 1 → decided
+  // (writes trips.trip_duration), 2+ → live multi-select chip poll.
+  // Declared before decidedDateRange (below) because that useMemo reads
+  // `durations` — moving it later puts the variable in TDZ at first
+  // render and crashes the screen with "Cannot read property 'length'
+  // of undefined".
+  const [durations, setDurations] = useState<string[]>([]);
+  const [customDurations, setCustomDurations] = useState<string[]>([]);
+  const [customDurationInput, setCustomDurationInput] = useState('');
+  const [customDurationOpen, setCustomDurationOpen] = useState(false);
   const dateRanges = useMemo(
     () => groupConsecutiveDays(selectedDays).map((g) => ({ start: g.start, end: g.end === g.start ? null : g.end })),
     [selectedDays],
@@ -155,12 +165,6 @@ export default function EditTripScreen() {
   const [customBudgets, setCustomBudgets] = useState<string[]>([]);
   const [customBudgetInput, setCustomBudgetInput] = useState('');
   const [customBudgetOpen, setCustomBudgetOpen] = useState(false);
-  // Duration: mirror of new.tsx state. 0 → free-form poll, 1 → decided
-  // (writes trips.trip_duration), 2+ → live multi-select chip poll.
-  const [durations, setDurations] = useState<string[]>([]);
-  const [customDurations, setCustomDurations] = useState<string[]>([]);
-  const [customDurationInput, setCustomDurationInput] = useState('');
-  const [customDurationOpen, setCustomDurationOpen] = useState(false);
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [bookByDate, setBookByDate] = useState<string | null>(null);
   const [customIntroSms, setCustomIntroSms] = useState<string | null>(null);
@@ -650,7 +654,7 @@ export default function EditTripScreen() {
               {(() => {
                 const filled = destinations.filter((d) => d.name.trim()).length;
                 if (filled >= 2) return <Text className="text-[11px] font-semibold text-green">Will be polled</Text>;
-                if (filled === 1) return <Text className="text-[11px] font-semibold text-green">Decided</Text>;
+                if (filled === 1) return <Text className="text-[11px] font-semibold text-green">Locked in</Text>;
                 return <Text className="text-[11px] font-semibold text-[#737373]">Group decides</Text>;
               })()}
             </View>
@@ -709,7 +713,7 @@ export default function EditTripScreen() {
               {durations.length >= 2 ? (
                 <Text className="text-[11px] font-semibold text-green">Will be polled</Text>
               ) : durations.length === 1 ? (
-                <Text className="text-[11px] font-semibold text-green">Decided</Text>
+                <Text className="text-[11px] font-semibold text-green">Locked in</Text>
               ) : (
                 <Text className="text-[11px] font-semibold text-[#737373]">Group decides</Text>
               )}
@@ -817,7 +821,7 @@ export default function EditTripScreen() {
                 {decidedDateRange ? 'Trip dates' : 'Trip dates window'}
               </Text>
               {decidedDateRange ? (
-                <Text className="text-[11px] font-semibold text-green">Decided</Text>
+                <Text className="text-[11px] font-semibold text-green">Locked in</Text>
               ) : dateRanges.length >= 1 ? (
                 <Text className="text-[11px] font-semibold text-green">Will be polled</Text>
               ) : (
@@ -896,7 +900,7 @@ export default function EditTripScreen() {
               {budgets.length >= 2 ? (
                 <Text className="text-[11px] font-semibold text-green">Will be polled</Text>
               ) : budgets.length === 1 ? (
-                <Text className="text-[11px] font-semibold text-green">Decided</Text>
+                <Text className="text-[11px] font-semibold text-green">Locked in</Text>
               ) : (
                 <Text className="text-[11px] font-semibold text-[#737373]">Group decides</Text>
               )}

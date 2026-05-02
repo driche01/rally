@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePolls, pollKeys } from '@/hooks/usePolls';
 import { useRespondents, respondentKeys } from '@/hooks/useRespondents';
 import { useTrip } from '@/hooks/useTrips';
+import { prefetchLodgingSuggestions } from '@/hooks/useAiSuggestions';
 import { useItineraryBlocks } from '@/hooks/useItinerary';
 import { useLodgingOptions } from '@/hooks/useLodging';
 import { useTravelLegs } from '@/hooks/useTravelLegs';
@@ -77,12 +78,12 @@ const HERO_CONFIG: Record<TripStage, {
   // primary family. ctaLabel was dropped when the per-stage CTA was
   // collapsed into a single "Poll link" pill — but each stage still
   // tints the pill via ctaBg.
-  deciding:     { bg: '#1A1715', badge: 'FIGURING IT OUT', badgeColor: 'rgba(255,255,255,0.45)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaBg: '#0F3F2E' },
+  deciding:     { bg: '#174F3C', badge: 'FIGURING IT OUT', badgeColor: 'rgba(255,255,255,0.45)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaBg: '#0F3F2E' },
   confirmed:    { bg: '#0C2218', badge: 'CONFIRMED',        badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.65)', pillBg: 'rgba(255,255,255,0.1)', ctaBg: '#0F3F2E' },
   planning:     { bg: '#0F2620', badge: 'PLANNING',        badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.65)', pillBg: 'rgba(255,255,255,0.1)', ctaBg: '#0F3F2E' },
   experiencing: { bg: '#042E26', badge: 'TRIP IS ON!',     badgeColor: 'rgba(255,255,255,0.7)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.75)', pillBg: 'rgba(255,255,255,0.15)', ctaBg: 'rgba(255,255,255,0.2)' },
-  reconciling:  { bg: '#1A1715', badge: 'SORTING IT OUT',  badgeColor: 'rgba(255,255,255,0.45)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaBg: '#555552' },
-  done:         { bg: '#1A1715', badge: 'WHAT A TRIP!',    badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaBg: 'rgba(255,255,255,0.15)' },
+  reconciling:  { bg: '#174F3C', badge: 'SORTING IT OUT',  badgeColor: 'rgba(255,255,255,0.45)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaBg: '#555552' },
+  done:         { bg: '#174F3C', badge: 'WHAT A TRIP!',    badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaBg: 'rgba(255,255,255,0.15)' },
 };
 
 // ─── Activity entry-card ──────────────────────────────────────────────────────
@@ -120,13 +121,13 @@ function ActivityEntryCard({
       onPress={editMode ? undefined : onPress}
       style={styles.membersCard}
       accessibilityRole="button"
-      accessibilityLabel="View trip activity"
+      accessibilityLabel="View activity log"
     >
       <View style={styles.entryIcon}>
         <Ionicons name="pulse-outline" size={20} color="#555" />
       </View>
       <View style={styles.entryText}>
-        <Text style={styles.entryTitle}>Activity</Text>
+        <Text style={styles.entryTitle}>Activity Log</Text>
         <Text style={styles.entrySubtitle}>{subtitle}</Text>
       </View>
       {editMode
@@ -147,6 +148,32 @@ export default function TripDashboard() {
 
   const { data: trip } = useTrip(id);
   const { data: tripSession } = useTripSession(id);
+
+  // Lodging prefetch — opens the Lodging tab with results already in
+  // cache. Needs destination + both dates because suggest-lodging keys on
+  // them and the prefSummary is fetched as part of the prefetch.
+  useEffect(() => {
+    if (!trip?.id || !trip.destination || !trip.start_date || !trip.end_date) return;
+    const groupSize =
+      trip.group_size_precise ?? GROUP_SIZE_MIDPOINTS[trip.group_size_bucket ?? '5-8'];
+    void prefetchLodgingSuggestions(queryClient, trip.id, {
+      destination: trip.destination,
+      startDate: trip.start_date,
+      endDate: trip.end_date,
+      groupSize,
+      budgetPerPerson: trip.budget_per_person ?? null,
+      estimatedFlightCostPerPerson: trip.estimated_flight_cost_per_person ?? null,
+    });
+  }, [
+    trip?.id,
+    trip?.destination,
+    trip?.start_date,
+    trip?.end_date,
+    trip?.group_size_precise,
+    trip?.group_size_bucket,
+    trip?.budget_per_person,
+    trip?.estimated_flight_cost_per_person,
+  ]);
   const { data: sessionParticipants = [] } = useSessionParticipants(tripSession?.id);
   const { data: polls = [] } = usePolls(id);
   const { data: respondents = [] } = useRespondents(id);
@@ -374,7 +401,7 @@ const stage = trip ? getTripStage(trip) : 'deciding';
     }
   };
 
-  const ENTRY_CONFIG: Record<Exclude<CardKey, 'activity'>, {
+  const ENTRY_CONFIG: Record<CardKey, {
     icon: React.ComponentProps<typeof Ionicons>['name'];
     title: string;
     subtitle: string;
@@ -407,17 +434,7 @@ const stage = trip ? getTripStage(trip) : 'deciding';
   }), [id, nights, router]);
 
   const renderCard = useCallback((key: CardKey, isEditMode: boolean) => {
-    if (key === 'activity') {
-      if (!trip) return null;
-      return (
-        <ActivityEntryCard
-          latestEventAt={latestAuditEventAt}
-          onPress={() => router.push(`/(app)/trips/${id}/activity`)}
-          editMode={isEditMode}
-        />
-      );
-    }
-    const ep = ENTRY_CONFIG[key as Exclude<CardKey, 'activity'>];
+    const ep = ENTRY_CONFIG[key];
     if (!ep) return null;
     return (
       <Pressable
@@ -438,7 +455,7 @@ const stage = trip ? getTripStage(trip) : 'deciding';
         }
       </Pressable>
     );
-  }, [ENTRY_CONFIG, trip, latestAuditEventAt, router, id]);
+  }, [ENTRY_CONFIG]);
 
   return (
     <>
@@ -568,13 +585,25 @@ const stage = trip ? getTripStage(trip) : 'deciding';
             Each child renders nothing when there's nothing to show, so
             this collapses to zero height on a brand-new trip. */}
         <View style={{ marginTop: 12 }}>
-          <TripDashboardCards tripId={id} sessionId={tripSession?.id} />
+          <TripDashboardCards tripId={id} sessionId={tripSession?.id} stage={stage} />
         </View>
 
         {/* Entry points — long-press any card to reorder */}
-        <Text style={styles.sectionLabel}>Where do you want to start?</Text>
+        <Text style={styles.sectionLabel}>Lock in trip details for itinerary, travel, and lodging recs!</Text>
 
         <SortableEntryList tripId={id} renderCard={renderCard} reorderEnabled={canReorderCards} />
+
+        {/* Activity Log sits below the entry list as a fixed, non-reorderable
+            card so the planner can always reach it without it competing
+            visually with the planning entry points. */}
+        {trip ? (
+          <View style={{ marginTop: 12 }}>
+            <ActivityEntryCard
+              latestEventAt={latestAuditEventAt}
+              onPress={() => router.push(`/(app)/trips/${id}/activity`)}
+            />
+          </View>
+        ) : null}
       </ScrollView>
 
       <TextBlastComposerModal

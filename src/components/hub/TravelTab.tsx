@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
-import { useTrip } from '@/hooks/useTrips';
+import { useTrip, useUpdateTrip } from '@/hooks/useTrips';
 import { DateRangePicker } from '@/components/DateRangePicker';
 import {
   useCreateTravelLeg,
@@ -26,10 +26,29 @@ import {
   useTravelLegs,
   useUpdateTravelLeg,
 } from '@/hooks/useTravelLegs';
-import { useGetTravelSuggestions } from '@/hooks/useAiSuggestions';
+import { useTravelSuggestionsQuery, useMemberTravelSuggestions } from '@/hooks/useAiSuggestions';
+import { useRespondentsWithTravelInfo } from '@/hooks/useRespondents';
+import { useMyProfile } from '@/hooks/useProfile';
+import { computeTravelSignature } from '@/lib/travelSignature';
 import type { TravelSuggestion } from '@/lib/api/aiSuggestions';
-import type { TravelLeg, TransportMode } from '@/types/database';
-import { Avatar, Button, FormField, Input, Pill, Sheet, Spinner, Toggle } from '@/components/ui';
+import type { RespondentWithTravelInfo } from '@/lib/api/respondents';
+import type { TravelLeg, TransportMode, Trip } from '@/types/database';
+import { Avatar, Button, EmptyState, FormField, Input, Pill, Sheet, Spinner, Toggle } from '@/components/ui';
+
+/**
+ * Extract a per-person round-trip USD number from suggestion cost strings like
+ * "$150–250 each way", "$300 round-trip", "~$500". Returns null if unparseable.
+ * Used to size the lodging budget once a flight suggestion is locked in.
+ */
+function parseEstimatedFlightCost(raw: string | null): number | null {
+  if (!raw) return null;
+  const nums = Array.from(raw.matchAll(/\$?\s*([\d,]+(?:\.\d+)?)/g))
+    .map((m) => parseFloat(m[1].replace(/,/g, '')))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  if (nums.length === 0) return null;
+  const midpoint = nums.length === 1 ? nums[0] : (nums[0] + nums[1]) / 2;
+  return /each\s*way|one[-\s]*way/i.test(raw) ? Math.round(midpoint * 2) : Math.round(midpoint);
+}
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -723,7 +742,7 @@ function MemberLegCard({
   );
 }
 
-// ─── AI Travel Suggestion Card ────────────────────────────────────────────────
+// ─── Travel Suggestion Card ───────────────────────────────────────────────────
 
 const MODE_ICON: Record<string, React.ComponentProps<typeof Ionicons>['name']> = {
   flight: 'airplane-outline',
@@ -734,85 +753,353 @@ const MODE_ICON: Record<string, React.ComponentProps<typeof Ionicons>['name']> =
   other: 'navigate-outline',
 };
 
-function TravelAiSuggestionCard({ tripId, defaultExpanded = true, onApply }: { tripId: string; defaultExpanded?: boolean; onApply?: (s: TravelSuggestion) => void }) {
-  const getSuggestions = useGetTravelSuggestions(tripId);
-  const [expanded, setExpanded] = useState(defaultExpanded);
-  const [origin, setOrigin] = useState('');
-  const [showOriginInput, setShowOriginInput] = useState(false);
+// Icon-bg palette uses tokens from the lodging/itinerary system so all three
+// hub tabs read as one product. Each mode gets its own color so the three
+// most common (flight, train, bus) are visually distinct at a glance.
+const MODE_ICON_BG: Record<TransportMode, string> = {
+  flight: '#F1E2A8', // gold — sky/premium
+  train:  '#DFE8D2', // green — relaxed/scenic
+  bus:    '#FFF4F2', // peach — utilitarian/warm
+  car:    '#EFE3D0', // sand — road trip neutral
+  ferry:  '#D8E8E0', // soft teal — water
+  other:  '#EFE3D0', // sand — neutral fallback
+};
+
+function TravelSuggestionCard({
+  tripId,
+  trip,
+  enabled,
+  /** When set, suggestions are scoped to this single traveler (their home airport + dealbreakers). */
+  respondentPhone = null,
+  title = 'Travel suggestions for your group',
+  loadingMessage = 'Finding the best routes from your home airport…',
+  onApply,
+}: {
+  tripId: string;
+  /** Trip row — used to read the `cached_travel_suggestions` payload directly for instant render. */
+  trip: Trip | undefined;
+  /** Auto-fire on mount only when the trip has the inputs it needs (destination + dates). */
+  enabled: boolean;
+  respondentPhone?: string | null;
+  title?: string;
+  loadingMessage?: string;
+  onApply?: (s: TravelSuggestion) => void;
+}) {
+  // Group-scope cache lives on the trip row (warmed by trip_warm_travel_cache
+  // trigger). Member-scope queries always go through the edge function — there
+  // is no per-member cache yet. The trip-row read is what makes the Travel
+  // tab open instantly, just like Itinerary's stored draft.
+  const isGroupScope = !respondentPhone;
+  const tripCachedPayload: TravelSuggestion[] | null =
+    isGroupScope && Array.isArray(trip?.cached_travel_suggestions)
+      ? (trip!.cached_travel_suggestions as TravelSuggestion[])
+      : null;
+  const expectedSignature =
+    isGroupScope && trip
+      ? computeTravelSignature({
+          destination: trip.destination,
+          startDate: trip.start_date,
+          endDate: trip.end_date,
+          groupSize: trip.group_size_precise ?? 4,
+          budgetPerPerson: trip.budget_per_person,
+          tripType: trip.trip_type,
+        })
+      : null;
+  const cacheIsStale =
+    expectedSignature != null &&
+    trip?.cached_travel_suggestions_signature !== expectedSignature;
+
+  // Fire the edge function only when:
+  //  - we're in member scope (no row cache exists), OR
+  //  - the trip row has nothing cached (first-ever open / pre-trigger trips), OR
+  //  - the cache exists but the signature is stale (silent refresh).
+  const query = useTravelSuggestionsQuery(tripId, {
+    enabled: enabled && (!isGroupScope || !tripCachedPayload || cacheIsStale),
+    respondentPhone,
+  });
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-  const suggestions = getSuggestions.data ?? [];
+  // Prefer the freshly-fetched payload over the row cache so a successful
+  // refresh visibly updates the card.
+  const suggestions = query.data?.suggestions ?? tripCachedPayload ?? [];
+  const emptyReason = query.data?.reason ?? null;
 
-  function handleGenerate() {
-    if (suggestions.length > 0) {
-      setExpanded((p) => !p);
-      return;
+  async function handleRetry() {
+    const result = await query.refetch();
+    if (result.error) {
+      Alert.alert('Error', 'Could not load suggestions. Please try again.');
     }
-    setShowOriginInput(true);
   }
 
-  function handleSubmitOrigin() {
-    setShowOriginInput(false);
-    getSuggestions.mutate(origin || undefined, {
-      onSuccess: () => setExpanded(true),
-      onError: () => Alert.alert('Error', 'Could not get AI suggestions. Please try again.'),
-    });
-  }
-
-  // No suggestions yet — show itinerary-style generate card
-  if (suggestions.length === 0) {
+  // Loading state — true first-load only. Cache hit (row or query) skips this.
+  if (query.isLoading && suggestions.length === 0) {
     return (
-      <View style={{ backgroundColor: '#EEF3F8', borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#D8E4EE', gap: 10 }}>
+      <View style={{ backgroundColor: '#EFE3D0', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#DDE8D8', gap: 10 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Ionicons name="sparkles-outline" size={18} color="#1A4060" />
-          <Text style={{ fontSize: 14, fontWeight: '700', color: '#1A4060' }}>AI travel suggestions</Text>
+          <Ionicons name="sparkles" size={16} color="#0F3F2E" />
+          <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F3F2E', flex: 1 }}>{title}</Text>
         </View>
-        <Text style={{ fontSize: 13, color: '#4A6E8A', lineHeight: 18 }}>
-          Rally will suggest the best travel modes and routes based on your destination, dates, and group size.
-        </Text>
-        {showOriginInput ? (
-          <View style={{ gap: 8 }}>
-            <Text style={{ fontSize: 12, color: '#4A6E8A' }}>Where are you traveling from? (optional)</Text>
-            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-              <View style={{ flex: 1 }}>
-                <Input
-                  value={origin}
-                  onChangeText={setOrigin}
-                  placeholder="e.g. New York, NY"
-                  autoFocus
-                  returnKeyType="done"
-                  onSubmitEditing={handleSubmitOrigin}
-                />
-              </View>
-              <Pressable
-                onPress={handleSubmitOrigin}
-                disabled={getSuggestions.isPending}
-                style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: '#1A4060', justifyContent: 'center' }}
-              >
-                {getSuggestions.isPending ? (
-                  <Spinner tone="onPrimary" />
-                ) : (
-                  <Text style={{ fontSize: 13, fontWeight: '600', color: 'white' }}>Go</Text>
-                )}
-              </Pressable>
-            </View>
-          </View>
-        ) : (
-          <Pressable
-            onPress={handleGenerate}
-            disabled={getSuggestions.isPending}
-            style={{ backgroundColor: '#1A4060', borderRadius: 12, paddingVertical: 12, alignItems: 'center' }}
-            accessibilityRole="button"
-          >
-            {getSuggestions.isPending ? (
-              <Spinner tone="onPrimary" />
-            ) : (
-              <Text style={{ fontSize: 14, fontWeight: '700', color: '#FFFCF6' }}>Get suggestions</Text>
-            )}
-          </Pressable>
-        )}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <Spinner />
+          <Text style={{ fontSize: 13, color: '#4A6E8A', flex: 1 }}>
+            {loadingMessage}
+          </Text>
+        </View>
       </View>
     );
   }
+
+  // Empty after fetch (or prerequisites missing) — actionable guidance + retry.
+  if (suggestions.length === 0) {
+    const message =
+      emptyReason === 'no_origin'
+        ? respondentPhone
+          ? "We don't have this traveler's home airport yet. Once they fill it in, route suggestions will appear here."
+          : 'Set your home airport in your traveler profile so Rally can suggest routes from where you actually fly.'
+        : enabled
+          ? 'No suggestions yet. Tap to retry.'
+          : 'Add a destination and dates to see suggested routes for your group.';
+    return (
+      <View style={{ backgroundColor: '#EFE3D0', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#DDE8D8', gap: 10 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Ionicons name="sparkles" size={16} color="#0F3F2E" />
+          <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F3F2E', flex: 1 }}>{title}</Text>
+        </View>
+        <Text style={{ fontSize: 13, color: '#4A6E8A', lineHeight: 18 }}>{message}</Text>
+        {enabled && emptyReason !== 'no_origin' ? (
+          <Button variant="primary" onPress={handleRetry} fullWidth>
+            Try again
+          </Button>
+        ) : null}
+      </View>
+    );
+  }
+
+  // Loaded — mirrors the Lodging hero: sparkle title, separate white-cream
+  // suggestion cards inside the warm sand surface, Selected → CTA at the
+  // bottom of the hero (no chevron toggle, no inline pros/cons clutter).
+  const selected = selectedIndex != null
+    ? suggestions.find((s) => s.index === selectedIndex) ?? null
+    : null;
+
+  return (
+    <View style={{
+      backgroundColor: '#EFE3D0',
+      borderRadius: 16,
+      padding: 16,
+      marginBottom: 16,
+      borderWidth: 1,
+      borderColor: '#DDE8D8',
+      gap: 12,
+    }}>
+      {/* Header — sparkle + green title, mirrors itinerary + lodging */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Ionicons name="sparkles" size={16} color="#0F3F2E" />
+        <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F3F2E', flex: 1 }}>
+          {title}
+        </Text>
+        {query.isFetching ? <Spinner /> : null}
+      </View>
+
+      {/* Suggestion cards — itinerary-style block cards on the sand surface */}
+      <View style={{ gap: 8 }}>
+        {suggestions.map((s: TravelSuggestion) => {
+          const isSelected = selectedIndex === s.index;
+          return (
+            <Pressable
+              key={s.index}
+              onPress={() => setSelectedIndex(isSelected ? null : s.index)}
+              style={{
+                backgroundColor: '#FFFCF6',
+                borderRadius: 16,
+                borderWidth: isSelected ? 2 : 1,
+                borderColor: isSelected ? '#0F3F2E' : '#DDE8D8',
+                padding: 12,
+                gap: 10,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.06,
+                shadowRadius: 6,
+                elevation: 2,
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`${s.label}, ${s.estimatedDuration}${s.estimatedCostPerPerson ? `, ${s.estimatedCostPerPerson}` : ''}`}
+              accessibilityState={{ selected: isSelected }}
+            >
+              {/* Top row: icon + title/subtitle column + selected badge.
+                  Cost moves under the subtitle so the title doesn't get
+                  squeezed by a long price string on small phones. */}
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                <View style={{ width: 32, height: 32, borderRadius: 12, backgroundColor: MODE_ICON_BG[s.mode] ?? '#EFE3D0', alignItems: 'center', justifyContent: 'center', marginTop: 2 }}>
+                  <Ionicons name={MODE_ICON[s.mode] ?? 'navigate-outline'} size={16} color="#0F3F2E" />
+                </View>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#163026' }}>
+                    {s.label}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: '#9DA8A0', lineHeight: 16 }}>
+                    {MODE_CONFIG[s.mode]?.label ?? 'Travel'} · {s.estimatedDuration}
+                  </Text>
+                  {s.estimatedCostPerPerson ? (
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#0F3F2E', marginTop: 2 }}>
+                      {s.estimatedCostPerPerson}
+                    </Text>
+                  ) : null}
+                </View>
+                {isSelected ? (
+                  <View style={{ backgroundColor: '#0F3F2E', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, marginTop: 2 }}>
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: 'white' }}>Selected</Text>
+                  </View>
+                ) : null}
+              </View>
+
+              <Text style={{ fontSize: 13, color: '#3F4A45', lineHeight: 18 }}>
+                {s.description}
+              </Text>
+
+              {/* Google pill — soft Google-blue tint + Google blue text mirrors
+                  lodging's brand-tinted platform pills (Airbnb red, Booking.com
+                  slate). Tells the user where the search hand-off lands. */}
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                <Pressable
+                  onPress={(e) => { e.stopPropagation(); Linking.openURL(s.searchUrl); }}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 4,
+                    backgroundColor: '#E8F0FE',
+                    borderRadius: 999,
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                  }}
+                  accessibilityLabel={`Search ${s.label} on Google`}
+                >
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#1A73E8' }}>Google</Text>
+                  <Ionicons name="open-outline" size={10} color="#1A73E8" />
+                </Pressable>
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {selected ? (
+        <Button
+          variant="primary"
+          fullWidth
+          onPress={() => {
+            if (onApply) { onApply(selected); setSelectedIndex(null); }
+          }}
+        >
+          {`Add "${selected.label}" as travel leg`}
+        </Button>
+      ) : null}
+    </View>
+  );
+}
+
+// ─── Per-Member Routes Section (planner view) ────────────────────────────────
+//
+// Lists each respondent with their saved home airport. Each row has its own
+// "Suggest route" button that lazy-fires a single suggest-travel call scoped
+// to that one traveler. React-query caches results by [tripId, phone] so
+// collapsing/expanding the section doesn't refetch.
+
+function MemberRouteRow({
+  tripId,
+  member,
+  onApply,
+}: {
+  tripId: string;
+  member: RespondentWithTravelInfo;
+  onApply?: (s: TravelSuggestion, member: RespondentWithTravelInfo) => void;
+}) {
+  const [requested, setRequested] = useState(false);
+  const query = useMemberTravelSuggestions(tripId, member.phone, {
+    enabled: requested && !!member.phone && !!member.home_airport,
+  });
+  const suggestions = query.data?.suggestions ?? [];
+  const noAirport = !member.home_airport;
+
+  return (
+    <View style={{ borderRadius: 12, borderWidth: 1, borderColor: '#EBEBEB', padding: 12, gap: 10, backgroundColor: '#fff' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <Avatar name={member.name} size="sm" />
+        <View style={{ flex: 1, gap: 1 }}>
+          <Text style={{ fontSize: 14, fontWeight: '700', color: '#163026' }}>{member.name}</Text>
+          <Text style={{ fontSize: 12, color: noAirport ? '#A8A8A8' : '#5F685F' }}>
+            {noAirport ? 'No home airport saved' : `From ${member.home_airport}`}
+          </Text>
+        </View>
+        {!requested && !noAirport ? (
+          <Pressable
+            onPress={() => setRequested(true)}
+            style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, backgroundColor: '#0F3F2E' }}
+            accessibilityRole="button"
+            accessibilityLabel={`Suggest route for ${member.name}`}
+          >
+            <Text style={{ fontSize: 12, fontWeight: '700', color: '#FFFCF6' }}>Suggest route</Text>
+          </Pressable>
+        ) : null}
+      </View>
+
+      {requested && query.isPending ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Spinner />
+          <Text style={{ fontSize: 12, color: '#888' }}>Finding routes from {member.home_airport}…</Text>
+        </View>
+      ) : null}
+
+      {requested && query.isError ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text style={{ fontSize: 12, color: '#B45252' }}>Could not load suggestions.</Text>
+          <Pressable onPress={() => query.refetch()} hitSlop={6}>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: '#0F3F2E' }}>Try again</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {suggestions.length > 0 ? (
+        <View style={{ gap: 6 }}>
+          {suggestions.map((s) => (
+            <Pressable
+              key={s.index}
+              onPress={() => onApply?.(s, member)}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 8, borderRadius: 10, backgroundColor: '#F8F8F8' }}
+              accessibilityRole="button"
+              accessibilityLabel={`Apply ${s.label} for ${member.name}`}
+            >
+              <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: MODE_ICON_BG[s.mode] ?? '#EFE3D0', alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name={MODE_ICON[s.mode] ?? 'navigate-outline'} size={14} color="#0F3F2E" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#163026' }}>{s.label}</Text>
+                <Text style={{ fontSize: 11, color: '#888' }}>
+                  {s.estimatedDuration}
+                  {s.estimatedCostPerPerson ? ` · ${s.estimatedCostPerPerson}` : ''}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={14} color="#A3A3A3" />
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function PerMemberRoutesSection({
+  tripId,
+  onApply,
+}: {
+  tripId: string;
+  onApply?: (s: TravelSuggestion, member: RespondentWithTravelInfo) => void;
+}) {
+  const { data: members = [], isLoading } = useRespondentsWithTravelInfo(tripId);
+  const [expanded, setExpanded] = useState(false);
+
+  if (isLoading || members.length === 0) return null;
+
+  const withAirport = members.filter((m) => m.home_airport).length;
 
   return (
     <View
@@ -821,118 +1108,32 @@ function TravelAiSuggestionCard({ tripId, defaultExpanded = true, onApply }: { t
         borderRadius: 16,
         backgroundColor: 'white',
         borderWidth: 1,
-        borderColor: '#D8E4EE',
+        borderColor: '#DDE8D8',
         overflow: 'hidden',
-        shadowColor: '#1A4060',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.06,
-        shadowRadius: 6,
-        elevation: 2,
       }}
     >
       <Pressable
-        onPress={handleGenerate}
+        onPress={() => setExpanded((p) => !p)}
         style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14 }}
         accessibilityRole="button"
+        accessibilityLabel="Toggle per-member travel routes"
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Ionicons name="sparkles-outline" size={15} color="#1A4060" />
-          <Text style={{ fontSize: 14, fontWeight: '700', color: '#1A4060' }}>AI travel suggestions</Text>
+          <Ionicons name="people-outline" size={15} color="#1A4060" />
+          <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F3F2E' }}>Per-member routes</Text>
+          <Text style={{ fontSize: 11, color: '#888' }}>
+            {withAirport}/{members.length} with airport
+          </Text>
         </View>
-        {getSuggestions.isPending ? (
-          <Spinner />
-        ) : (
-          <Ionicons
-            name={expanded ? 'chevron-up' : 'chevron-down'}
-            size={15}
-            color="#A3A3A3"
-          />
-        )}
+        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={15} color="#A3A3A3" />
       </Pressable>
 
-      {/* Suggestions list */}
-      {expanded && suggestions.length > 0 ? (
-        <View style={{ paddingHorizontal: 14, paddingBottom: 14, gap: 8 }}>
-          {suggestions.map((s: TravelSuggestion) => (
-            <Pressable
-              key={s.index}
-              onPress={() => setSelectedIndex(selectedIndex === s.index ? null : s.index)}
-              style={{
-                borderRadius: 12,
-                borderWidth: selectedIndex === s.index ? 2 : 1,
-                borderColor: selectedIndex === s.index ? '#1A4060' : '#D9CCB6',
-                padding: 12,
-                gap: 8,
-              }}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <View style={{ width: 30, height: 30, borderRadius: 8, backgroundColor: '#FFF4F2', alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name={MODE_ICON[s.mode] ?? 'navigate-outline'} size={15} color="#0F3F2E" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#163026' }}>{s.label}</Text>
-                  <Text style={{ fontSize: 11, color: '#888' }}>
-                    {s.estimatedDuration}
-                    {s.estimatedCostPerPerson ? ` · ${s.estimatedCostPerPerson}` : ''}
-                  </Text>
-                </View>
-                {selectedIndex === s.index ? (
-                  <View style={{ backgroundColor: '#1A4060', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 }}>
-                    <Text style={{ fontSize: 10, fontWeight: '700', color: 'white' }}>Selected</Text>
-                  </View>
-                ) : (
-                  <Pressable
-                    onPress={() => Linking.openURL(s.searchUrl)}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, borderWidth: 1, borderColor: '#D9CCB6' }}
-                  >
-                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#1A4060' }}>Search</Text>
-                    <Ionicons name="open-outline" size={10} color="#1A4060" />
-                  </Pressable>
-                )}
-              </View>
-              <Text style={{ fontSize: 12, color: '#555', lineHeight: 17 }}>{s.description}</Text>
-              <View style={{ gap: 3 }}>
-                {s.pros.map((p, i) => (
-                  <View key={i} style={{ flexDirection: 'row', gap: 5, alignItems: 'flex-start' }}>
-                    <Text style={{ fontSize: 11, color: '#16A34A', marginTop: 1 }}>✓</Text>
-                    <Text style={{ fontSize: 11, color: '#555', flex: 1 }}>{p}</Text>
-                  </View>
-                ))}
-                {s.cons.map((c, i) => (
-                  <View key={i} style={{ flexDirection: 'row', gap: 5, alignItems: 'flex-start' }}>
-                    <Text style={{ fontSize: 11, color: '#888', marginTop: 1 }}>–</Text>
-                    <Text style={{ fontSize: 11, color: '#888', flex: 1 }}>{c}</Text>
-                  </View>
-                ))}
-              </View>
-              {s.bookingTip ? (
-                <View style={{ flexDirection: 'row', gap: 5, alignItems: 'flex-start', backgroundColor: '#FFF8F6', borderRadius: 8, padding: 8 }}>
-                  <Ionicons name="bulb-outline" size={12} color="#0F3F2E" style={{ marginTop: 1 }} />
-                  <Text style={{ fontSize: 11, color: '#0F3F2E', flex: 1 }}>{s.bookingTip}</Text>
-                </View>
-              ) : null}
-            </Pressable>
+      {expanded ? (
+        <View style={{ paddingHorizontal: 14, paddingBottom: 14, gap: 10 }}>
+          {members.map((m) => (
+            <MemberRouteRow key={m.id} tripId={tripId} member={m} onApply={onApply} />
           ))}
-          {selectedIndex !== null ? (
-            <Pressable
-              onPress={() => {
-                const s = suggestions.find((s: TravelSuggestion) => s.index === selectedIndex);
-                if (s && onApply) { onApply(s); setExpanded(false); setSelectedIndex(null); }
-              }}
-              style={{ backgroundColor: '#1A4060', borderRadius: 12, paddingVertical: 13, alignItems: 'center', marginTop: 4 }}
-            >
-              <Text style={{ fontSize: 14, fontWeight: '700', color: 'white' }}>
-                Add "{suggestions.find((s: TravelSuggestion) => s.index === selectedIndex)?.label}" as travel leg
-              </Text>
-            </Pressable>
-          ) : null}
         </View>
-      ) : null}
-
-      {!expanded && suggestions.length === 0 && !getSuggestions.isPending && !showOriginInput ? (
-        <Text style={{ paddingHorizontal: 14, paddingBottom: 12, fontSize: 12, color: '#A3A3A3' }}>
-          AI will suggest the best travel modes and routes based on your destination, dates, and group size.
-        </Text>
       ) : null}
     </View>
   );
@@ -944,16 +1145,22 @@ export function TravelTab({ tripId, isPlanner = true }: { tripId: string; isPlan
   const { data: trip } = useTrip(tripId);
   const { data: legs = [], isLoading } = useTravelLegs(tripId);
   const { data: memberLegs = [] } = useSharedMemberLegs(tripId);
+  // Personalized suggestions for the non-planner view need the viewer's phone.
+  const { data: myProfile } = useMyProfile();
+  const myPhone = myProfile?.phone ?? null;
 
   const createMutation = useCreateTravelLeg(tripId);
   const updateMutation = useUpdateTravelLeg(tripId);
   const deleteMutation = useDeleteTravelLeg(tripId);
+  const updateTripMutation = useUpdateTrip();
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingLeg, setEditingLeg] = useState<TravelLeg | null>(null);
   const [appliedSuggestion, setAppliedSuggestion] = useState<TravelSuggestion | null>(null);
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
+  // Auto-fire suggestions only when the trip has the inputs the prompt needs.
+  const canAutoSuggest = Boolean(trip?.destination && trip?.start_date);
 
   async function handleAdd(values: LegFormValues) {
     try {
@@ -970,6 +1177,18 @@ export function TravelTab({ tripId, isPlanner = true }: { tripId: string; isPlan
         notes: values.notes || null,
         shared_with_group: values.shareWithGroup,
       });
+      // When a flight suggestion drove this add, persist its per-person cost
+      // estimate to the trip so the lodging suggester can subtract it from
+      // the per-person budget.
+      if (
+        appliedSuggestion?.mode === 'flight' &&
+        trip?.estimated_flight_cost_per_person == null
+      ) {
+        const cost = parseEstimatedFlightCost(appliedSuggestion.estimatedCostPerPerson);
+        if (cost != null) {
+          updateTripMutation.mutate({ id: tripId, estimated_flight_cost_per_person: cost });
+        }
+      }
       setShowAddForm(false);
       setAppliedSuggestion(null);
     } catch {
@@ -1010,6 +1229,34 @@ export function TravelTab({ tripId, isPlanner = true }: { tripId: string; isPlan
     setShowAddForm(false);
     setEditingLeg(null);
     setAppliedSuggestion(null);
+  }
+
+  // Pre-stage empty state — no destination/start date yet AND no legs
+  // (own or shared by group members). Mirrors the Itinerary/Lodging
+  // empty states so the page reads consistently across tabs while
+  // details are still being decided.
+  if (!canAutoSuggest && legs.length === 0 && memberLegs.length === 0 && !isLoading) {
+    return (
+      <View style={{ flex: 1, padding: 16, gap: 12 }}>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 4,
+          }}
+        >
+          <Text style={{ fontSize: 20, fontWeight: '700', color: '#163026' }}>Travel</Text>
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center' }}>
+          <EmptyState
+            icon="airplane-outline"
+            title="Travel suggestions"
+            body="Lock in a destination and dates to see suggested routes for your group."
+          />
+        </View>
+      </View>
+    );
   }
 
   return (
@@ -1053,14 +1300,35 @@ export function TravelTab({ tripId, isPlanner = true }: { tripId: string; isPlan
         ) : null}
       </View>
 
-      {/* AI suggestions — pinned to top, planner only */}
+      {/* Travel suggestions — pinned to top.
+          Planners see the group-wide card + a per-member breakdown.
+          Members see a personal card scoped to their own profile. */}
       {isPlanner ? (
-        <TravelAiSuggestionCard
+        <>
+          <TravelSuggestionCard
+            tripId={tripId}
+            trip={trip}
+            enabled={canAutoSuggest && legs.length === 0}
+            onApply={(s) => { setAppliedSuggestion(s); setShowAddForm(true); }}
+          />
+          {canAutoSuggest ? (
+            <PerMemberRoutesSection
+              tripId={tripId}
+              onApply={(s) => { setAppliedSuggestion(s); setShowAddForm(true); }}
+            />
+          ) : null}
+        </>
+      ) : (
+        <TravelSuggestionCard
           tripId={tripId}
-          defaultExpanded={legs.length === 0}
+          trip={trip}
+          enabled={canAutoSuggest && legs.length === 0 && !!myPhone}
+          respondentPhone={myPhone}
+          title="Your route"
+          loadingMessage="Finding the best routes from your home airport…"
           onApply={(s) => { setAppliedSuggestion(s); setShowAddForm(true); }}
         />
-      ) : null}
+      )}
 
       {/* My legs */}
       {isLoading && legs.length === 0 ? (
@@ -1125,8 +1393,11 @@ export function TravelTab({ tripId, isPlanner = true }: { tripId: string; isPlan
         </Pressable>
       ) : null}
 
-      {/* Empty state */}
-      {legs.length === 0 && !isLoading ? (
+      {/* Empty state — only when there's no other content driving the page.
+          Once Travel suggestions land in the trip-row cache, the suggestion
+          card carries the page on its own; the airplane illustration below
+          starts to feel redundant. */}
+      {legs.length === 0 && !isLoading && !Array.isArray(trip?.cached_travel_suggestions) ? (
         <View style={{ alignItems: 'center', paddingVertical: 48, gap: 10 }}>
           <Ionicons name="airplane-outline" size={44} color="#D0D0D0" />
           <Text style={{ fontSize: 16, fontWeight: '600', color: '#163026' }}>No travel legs yet</Text>

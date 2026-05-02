@@ -44,6 +44,12 @@ import { personalizeBody } from '../_sms-shared/personalize.ts';
 import { pushToPlanner } from '../_sms-shared/planner-notify.ts';
 import { track, captureError } from '../_sms-shared/telemetry.ts';
 import { getServiceRoleKey } from '../_sms-shared/api-keys.ts';
+import {
+  isTripFullyLocked,
+  isTripStartedAsOf,
+  SKIP_REASON_TRIP_LOCKED,
+  SKIP_REASON_TRIP_STARTED,
+} from '../_sms-shared/skip-rules.ts';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -65,6 +71,7 @@ interface Trip {
   book_by_date: string | null;
   responses_due_date: string | null;
   custom_intro_sms: string | null;
+  start_date: string | null;
   finalize_prompt_sent_at?: string | null;
   stuck_alert_sent_at?: string | null;
 }
@@ -343,6 +350,11 @@ async function fireDueNudges(admin: SupabaseClient): Promise<{ sent: number; ski
     { trip: Trip; plannerName: string | null; sessionParticipants: Participant[]; roster: Roster | null }
   >();
   const participantById = new Map<string, Participant>();
+  // Per-tick cache of "is this trip fully locked?" — used to drop nudges that
+  // were seeded *after* the lock-trigger fired (e.g. a late joiner added once
+  // every poll was already decided). The trigger in migration 105 covers the
+  // common path; this is the defense-in-depth for rows it didn't see.
+  const tripFullyLockedById = new Map<string, boolean>();
 
   let sent = 0;
   let skipped = 0;
@@ -361,7 +373,7 @@ async function fireDueNudges(admin: SupabaseClient): Promise<{ sent: number; ski
         if (!ses) { skipped++; await skip(admin, row.id, 'session_missing'); continue; }
         const { data: trip } = await admin
           .from('trips')
-          .select('id, name, share_token, destination, book_by_date, responses_due_date, custom_intro_sms')
+          .select('id, name, share_token, destination, book_by_date, responses_due_date, custom_intro_sms, start_date')
           .eq('id', ses.trip_id)
           .maybeSingle();
         if (!trip) { skipped++; await skip(admin, row.id, 'trip_missing'); continue; }
@@ -405,6 +417,35 @@ async function fireDueNudges(admin: SupabaseClient): Promise<{ sent: number; ski
 
       if (participant.status !== 'active' || !participant.is_attending) {
         skipped++; await skip(admin, row.id, 'participant_inactive'); continue;
+      }
+
+      // Trip already started → skip. Once today >= start_date the trip is
+      // either happening or already over; poll-completion nudges ("hey,
+      // weigh in!") are stale by definition. There's no DB transition for
+      // "trip starts" — it's date-derived — so we gate at fire time.
+      if (isTripStartedAsOf(ctx.trip.start_date, new Date().toISOString().slice(0, 10))) {
+        skipped++; await skip(admin, row.id, SKIP_REASON_TRIP_STARTED); continue;
+      }
+
+      // Trip fully locked → skip. Migration 105 bulk-skips at the moment of
+      // lock; this catches rows seeded afterward (late joiners) so we don't
+      // text someone "what do you think about X?" when X is already decided.
+      let fullyLocked = tripFullyLockedById.get(ctx.trip.id);
+      if (fullyLocked === undefined) {
+        const { count: total } = await admin
+          .from('polls')
+          .select('id', { count: 'exact', head: true })
+          .eq('trip_id', ctx.trip.id);
+        const { count: undecided } = await admin
+          .from('polls')
+          .select('id', { count: 'exact', head: true })
+          .eq('trip_id', ctx.trip.id)
+          .neq('status', 'decided');
+        fullyLocked = isTripFullyLocked(total ?? 0, undecided ?? 0);
+        tripFullyLockedById.set(ctx.trip.id, fullyLocked);
+      }
+      if (fullyLocked) {
+        skipped++; await skip(admin, row.id, SKIP_REASON_TRIP_LOCKED); continue;
       }
 
       // Already responded → skip (the whole point of the cadence).

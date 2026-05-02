@@ -83,6 +83,10 @@ export function useApproveRecommendation(tripId: string | undefined) {
         qc.invalidateQueries({ queryKey: recommendationKeys.forTrip(tripId) });
         qc.invalidateQueries({ queryKey: tripKeys.detail(tripId) });
         qc.invalidateQueries({ queryKey: ['polls', tripId] });
+        // Lock-the-last-poll fires the migration-105 trigger, which
+        // bulk-skips pending nudge_sends rows server-side. Invalidate so
+        // the CadenceCard reflects that without a manual refresh.
+        qc.invalidateQueries({ queryKey: ['nudge_schedule'] });
       }
     },
   });
@@ -127,6 +131,10 @@ export function useApproveRecommendationWithDates(tripId: string | undefined) {
         qc.invalidateQueries({ queryKey: recommendationKeys.forTrip(tripId) });
         qc.invalidateQueries({ queryKey: tripKeys.detail(tripId) });
         qc.invalidateQueries({ queryKey: ['polls', tripId] });
+        // Lock-the-last-poll fires the migration-105 trigger, which
+        // bulk-skips pending nudge_sends rows server-side. Invalidate so
+        // the CadenceCard reflects that without a manual refresh.
+        qc.invalidateQueries({ queryKey: ['nudge_schedule'] });
       }
     },
   });
@@ -145,53 +153,50 @@ export function useUndoPollLock(tripId: string | undefined) {
         qc.invalidateQueries({ queryKey: recommendationKeys.forTrip(tripId) });
         qc.invalidateQueries({ queryKey: tripKeys.detail(tripId) });
         qc.invalidateQueries({ queryKey: ['polls', tripId] });
+        // Undoing a lock may restore previously-skipped nudges (migration
+        // 105 trigger). Refresh the CadenceCard so they reappear.
+        qc.invalidateQueries({ queryKey: ['nudge_schedule'] });
       }
     },
   });
 }
 
 /**
- * On dashboard mount, ensure every still-live poll has a pending
- * recommendation. The RPC is idempotent (returns "existed" when a row
- * already exists), so calling it for every undecided poll is a cheap
- * no-op when recs are already there. Closes the gap between the cron
- * scheduler's 15-min tick and the planner opening the trip — recs show
- * up immediately on dashboard load instead of waiting on the next tick.
+ * On dashboard mount, refresh the pending recommendation for every
+ * still-live poll. The RPC (migration 098+) always recomputes the
+ * vote breakdown / winner / holdouts / confidence on each call and
+ * either UPDATEs the existing pending row or INSERTs a fresh one — so
+ * calling it for every live poll is the cheapest way to guarantee the
+ * dashboard shows current data without waiting on the cron's tick.
+ *
+ * Earlier this skipped polls that already had a pending rec, which
+ * stranded stale rows: a rec generated when only some members had
+ * voted kept its outdated holdout list forever and DecisionQueueCard
+ * (which gates on `holdouts.length === 0`) silently hid it. Always
+ * calling closes that gap.
  */
 export function useAutoGenerateRecommendations(tripId: string | undefined) {
   const qc = useQueryClient();
   const ranForTrip = useRef<string | null>(null);
 
-  // Load polls + current pending recs so we know what's missing.
   const { data: polls } = useQuery({
     queryKey: ['polls', tripId, 'auto_rec'],
     queryFn: () => getPollsForTrip(tripId!),
     enabled: Boolean(tripId),
     staleTime: 30_000,
   });
-  const { data: recs } = useQuery({
-    queryKey: recommendationKeys.forTrip(tripId ?? ''),
-    queryFn: () => getPendingRecommendations(tripId!),
-    enabled: Boolean(tripId),
-  });
 
   useEffect(() => {
-    if (!tripId || !polls || !recs) return;
+    if (!tripId || !polls) return;
     if (ranForTrip.current === tripId) return; // once per trip per session
 
     const livePolls = polls.filter((p) => p.status === 'live');
     if (livePolls.length === 0) return;
 
-    const pollsWithPendingRec = new Set(
-      recs.filter((r) => r.status === 'pending').map((r) => r.poll_id),
-    );
-    const pollsToRequest = livePolls.filter((p) => !pollsWithPendingRec.has(p.id));
-    if (pollsToRequest.length === 0) return;
-
     ranForTrip.current = tripId;
     (async () => {
       let any = false;
-      for (const p of pollsToRequest) {
+      for (const p of livePolls) {
         const r = await requestRecommendation(p.id).catch(() => ({ ok: false }));
         if (r.ok) any = true;
       }
@@ -199,7 +204,7 @@ export function useAutoGenerateRecommendations(tripId: string | undefined) {
         qc.invalidateQueries({ queryKey: recommendationKeys.forTrip(tripId) });
       }
     })();
-  }, [tripId, polls, recs, qc]);
+  }, [tripId, polls, qc]);
 }
 
 export function useHoldRecommendation(tripId: string | undefined) {
