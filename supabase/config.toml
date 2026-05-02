@@ -8,3 +8,16 @@ verify_jwt = false
 
 [functions.restaurant-details]
 verify_jwt = false
+
+# Pre-login OTP flows: caller has no JWT yet (they're trying to log in
+# or claim a phone). The new sb_publishable_* anon key isn't JWT-format
+# and the gateway rejects it before our handler runs. Each function
+# does its own rate-limit / phone validation in-handler.
+[functions.request-phone-login-otp]
+verify_jwt = false
+
+[functions.verify-phone-login-otp]
+verify_jwt = false
+
+[functions.claim-otp]
+verify_jwt = false

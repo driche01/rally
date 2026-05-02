@@ -71,9 +71,12 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, error: 'rate_limited' }, 429);
   }
 
-  // Anti-enumeration: don't reveal whether this phone has an account.
-  // Return ok=true regardless; just skip the DB write + SMS send if there's
-  // no matching profile.
+  // We deliberately surface registered=false to the client when no
+  // profile matches this phone. The login screen uses that signal to
+  // route the user to signup with their phone pre-filled instead of
+  // dead-ending them on a code-entry screen waiting for an SMS that
+  // will never arrive. Anti-enumeration is dropped at planner direction
+  // — better UX > unverified-account enumeration risk pre-launch.
   const { data: profile } = await admin
     .from('profiles')
     .select('id')
@@ -81,7 +84,7 @@ Deno.serve(async (req: Request) => {
     .maybeSingle();
 
   if (!profile) {
-    return json({ ok: true, sent: false });
+    return json({ ok: true, sent: false, registered: false });
   }
 
   // Generate code + hash, insert token, send SMS.
