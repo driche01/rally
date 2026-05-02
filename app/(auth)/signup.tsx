@@ -29,7 +29,7 @@ import Animated, {
   withSpring,
   Easing,
 } from 'react-native-reanimated';
-import { Button, Input } from '@/components/ui';
+import { BrandMark, Button, Input } from '@/components/ui';
 import { useGoogleSignIn, useSignUp } from '@/hooks/useAuth';
 import { T, headlineFont } from '@/theme';
 
@@ -218,14 +218,9 @@ export default function SignupScreen() {
         }}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Brand mark */}
+        {/* Brand mark — canonical "● RALLY" via shared BrandMark. */}
         <Animated.View style={logoStyle}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: T.green }} />
-            <Text style={{ ...headlineFont.bold, fontSize: 20, color: T.green, letterSpacing: 1 }}>
-              RALLY
-            </Text>
-          </View>
+          <BrandMark size="md" />
         </Animated.View>
 
         {/* Headline */}
@@ -242,7 +237,12 @@ export default function SignupScreen() {
           >
             Get started.
           </Text>
-          <Text style={{ fontSize: 16, color: T.muted, lineHeight: 24 }}>
+          <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.8}
+            style={{ fontSize: 14, color: T.muted, lineHeight: 20 }}
+          >
             One account, one link. Your group plans the rest.
           </Text>
         </Animated.View>

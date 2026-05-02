@@ -31,7 +31,7 @@ import Animated, {
   withDelay,
   Easing,
 } from 'react-native-reanimated';
-import { Button, Input } from '@/components/ui';
+import { BrandMark, Button, Input } from '@/components/ui';
 import { useGoogleSignIn, useSignIn } from '@/hooks/useAuth';
 import { log } from '@/lib/logger';
 import { normalizePhone } from '@/lib/phone';
@@ -184,14 +184,9 @@ export default function LoginScreen() {
         }}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Brand mark */}
+        {/* Brand mark — canonical "● RALLY" via shared BrandMark. */}
         <Animated.View style={logoStyle}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: T.green }} />
-            <Text style={{ ...headlineFont.bold, fontSize: 20, color: T.green, letterSpacing: 1 }}>
-              RALLY
-            </Text>
-          </View>
+          <BrandMark size="md" />
         </Animated.View>
 
         {/* Headline */}
@@ -208,7 +203,12 @@ export default function LoginScreen() {
           >
             Welcome back.
           </Text>
-          <Text style={{ fontSize: 16, color: T.muted, lineHeight: 24 }}>
+          <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.8}
+            style={{ fontSize: 14, color: T.muted, lineHeight: 20 }}
+          >
             Log in to pick up where your group left off.
           </Text>
         </Animated.View>

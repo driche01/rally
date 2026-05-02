@@ -262,12 +262,14 @@ export default function AccountScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 32 }}
+        contentContainerStyle={{ paddingBottom: 12 }}
         showsVerticalScrollIndicator={false}
       >
 
-        {/* Avatar + info — tap the circle to upload, replace, or remove. */}
-        <View className="items-center py-10 gap-3">
+        {/* Avatar — tap the circle to upload, replace, or remove. Name +
+            email are duplicated in the form rows below, so we omit them
+            here to keep everything on a single screen. */}
+        <View className="items-center pt-4 pb-6">
           <Pressable
             onPress={handleAvatarPress}
             disabled={avatarBusy}
@@ -275,9 +277,9 @@ export default function AccountScreen() {
             accessibilityLabel={avatarUrl ? 'Change profile photo' : 'Add profile photo'}
             accessibilityState={{ busy: avatarBusy }}
             style={{
-              width: 96,
-              height: 96,
-              borderRadius: 48,
+              width: 76,
+              height: 76,
+              borderRadius: 38,
               shadowColor: '#0F3F2E',
               shadowOffset: { width: 0, height: 4 },
               shadowOpacity: 0.25,
@@ -287,9 +289,9 @@ export default function AccountScreen() {
           >
             <View
               style={{
-                width: 96,
-                height: 96,
-                borderRadius: 48,
+                width: 76,
+                height: 76,
+                borderRadius: 38,
                 overflow: 'hidden',
                 backgroundColor: '#0F3F2E',
                 alignItems: 'center',
@@ -299,10 +301,10 @@ export default function AccountScreen() {
               {avatarUrl ? (
                 <Image
                   source={{ uri: avatarUrl }}
-                  style={{ width: 96, height: 96 }}
+                  style={{ width: 76, height: 76 }}
                 />
               ) : (
-                <Text className="text-2xl font-bold text-white">{initials}</Text>
+                <Text className="text-xl font-bold text-white">{initials}</Text>
               )}
               {avatarBusy ? (
                 <View
@@ -324,9 +326,9 @@ export default function AccountScreen() {
                 position: 'absolute',
                 right: -2,
                 bottom: -2,
-                width: 30,
-                height: 30,
-                borderRadius: 15,
+                width: 26,
+                height: 26,
+                borderRadius: 13,
                 backgroundColor: '#FFFFFF',
                 borderWidth: 2,
                 borderColor: '#FBF7EF',
@@ -334,15 +336,9 @@ export default function AccountScreen() {
                 justifyContent: 'center',
               }}
             >
-              <Ionicons name="camera" size={16} color="#0F3F2E" />
+              <Ionicons name="camera" size={14} color="#0F3F2E" />
             </View>
           </Pressable>
-          {name ? (
-            <Text className="text-xl font-semibold text-ink">{name}</Text>
-          ) : null}
-          {email ? (
-            <Text className="text-sm text-muted">{email}</Text>
-          ) : null}
         </View>
 
         {/* Profile card — editable name / email / phone / password.
@@ -360,7 +356,7 @@ export default function AccountScreen() {
         >
           <Pressable
             onPress={() => setEditing('name')}
-            className="flex-row items-center gap-3 border-b border-line px-5 py-4"
+            className="flex-row items-center gap-3 border-b border-line px-5 py-3"
             accessibilityRole="button"
           >
             <Ionicons name="person-outline" size={20} color="#5F685F" />
@@ -377,7 +373,7 @@ export default function AccountScreen() {
 
           <Pressable
             onPress={() => setEditing('email')}
-            className="flex-row items-center gap-3 border-b border-line px-5 py-4"
+            className="flex-row items-center gap-3 border-b border-line px-5 py-3"
             accessibilityRole="button"
           >
             <Ionicons name="mail-outline" size={20} color="#5F685F" />
@@ -390,7 +386,7 @@ export default function AccountScreen() {
 
           <Pressable
             onPress={() => setEditing('phone')}
-            className="flex-row items-center gap-3 border-b border-line px-5 py-4"
+            className="flex-row items-center gap-3 border-b border-line px-5 py-3"
             accessibilityRole="button"
           >
             <Ionicons name="call-outline" size={20} color="#5F685F" />
@@ -405,7 +401,7 @@ export default function AccountScreen() {
 
           <Pressable
             onPress={() => setEditing('password')}
-            className="flex-row items-center gap-3 px-5 py-4"
+            className="flex-row items-center gap-3 px-5 py-3"
             accessibilityRole="button"
           >
             <Ionicons name="lock-closed-outline" size={20} color="#5F685F" />
@@ -431,7 +427,7 @@ export default function AccountScreen() {
           {claimable ? (
             <Pressable
               onPress={handleClaimPhone}
-              className="flex-row items-center gap-3 border-b border-line px-5 py-4"
+              className="flex-row items-center gap-3 border-b border-line px-5 py-3"
               accessibilityRole="button"
               accessibilityLabel="Link your phone history"
             >
@@ -448,7 +444,7 @@ export default function AccountScreen() {
 
           <Pressable
             onPress={() => router.push('/(app)/profile-prefs')}
-            className="flex-row items-center gap-3 border-b border-line px-5 py-4"
+            className="flex-row items-center gap-3 border-b border-line px-5 py-3"
             accessibilityRole="button"
             accessibilityLabel="Travel preferences"
           >
@@ -464,7 +460,7 @@ export default function AccountScreen() {
 
           <Pressable
             onPress={handleSignOut}
-            className="flex-row items-center gap-3 border-b border-line px-5 py-4"
+            className="flex-row items-center gap-3 border-b border-line px-5 py-3"
             accessibilityRole="button"
             accessibilityLabel="Sign out"
           >
@@ -476,7 +472,7 @@ export default function AccountScreen() {
           <Pressable
             onPress={handleDeleteAccount}
             disabled={deleting}
-            className="flex-row items-center gap-3 px-5 py-4"
+            className="flex-row items-center gap-3 px-5 py-3"
             accessibilityRole="button"
             accessibilityLabel="Delete account"
             accessibilityState={{ busy: deleting }}
@@ -490,7 +486,7 @@ export default function AccountScreen() {
         </View>
 
         {/* App version */}
-        <Text className="mt-8 text-center text-xs text-muted">
+        <Text className="mt-3 text-center text-xs text-muted">
           Rally v{version}
         </Text>
 

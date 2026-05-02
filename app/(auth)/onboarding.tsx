@@ -10,6 +10,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { T, headlineFont } from '@/theme';
+import { BrandMark } from '@/components/ui';
 
 // ── Onboarding screen ─────────────────────────────────────────────────────────
 // Editorial cream surface. Shown to unauthenticated users before login.
@@ -70,23 +71,9 @@ export default function OnboardingScreen() {
         paddingHorizontal: 32,
       }}
     >
-      {/* Logo mark — small "● RALLY" used as the universal brand mark across auth screens. */}
+      {/* Logo mark — canonical "● RALLY" via shared BrandMark component. */}
       <Animated.View style={logoStyle}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <View
-            style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: T.green }}
-          />
-          <Text
-            style={{
-              ...headlineFont.bold,
-              fontSize: 20,
-              color: T.green,
-              letterSpacing: 1,
-            }}
-          >
-            RALLY
-          </Text>
-        </View>
+        <BrandMark size="md" />
       </Animated.View>
 
       {/* Hero headline — let the text wrap naturally so we don't pin to a specific device width. */}
@@ -124,7 +111,7 @@ export default function OnboardingScreen() {
           })}
           accessibilityRole="button"
         >
-          <Text style={{ fontSize: 17, fontWeight: '700', color: T.white }}>
+          <Text style={{ fontSize: 17, fontWeight: '700', color: T.ink }}>
             Get started
           </Text>
         </Pressable>
