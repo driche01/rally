@@ -262,6 +262,7 @@ export async function getOrCreateRespondent(
       is_planner:    false,
       rsvp:          null,
       preferences:   null,
+      decline_reason: null,
       created_at:    new Date().toISOString(),
     };
   }
@@ -287,6 +288,7 @@ export async function getOrCreateRespondent(
     is_planner: false,
     rsvp: null,
     preferences: null,
+    decline_reason: null,
     created_at: new Date().toISOString(),
   };
 }
@@ -520,8 +522,20 @@ export async function optOutFromTrip(
   respondentId: string,
   tripId: string,
   phone: string | null,
+  declineReason?: string | null,
 ): Promise<void> {
-  await saveRespondentRsvpAndPreferences(respondentId, 'out');
+  // Inline update so we can write the decline_reason in the same round-trip.
+  // (saveRespondentRsvpAndPreferences only handles rsvp + preferences.)
+  const trimmed = declineReason?.trim();
+  const { error } = await supabase
+    .from('respondents')
+    .update({
+      rsvp: 'out',
+      preferences: null,
+      decline_reason: trimmed && trimmed.length > 0 ? trimmed.slice(0, 280) : null,
+    })
+    .eq('id', respondentId);
+  if (error) throw error;
   await sendSurveyConfirmationSms(tripId, phone, 'out');
 }
 

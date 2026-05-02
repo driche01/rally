@@ -157,13 +157,22 @@ export function socialProofCountOnly(respondedCount: number, totalCount: number)
   return `${respondedCount} of ${totalCount} in, ${remaining} still left.`;
 }
 
+function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return s[(v - 20) % 10] || s[v] || s[0];
+}
+
 export function formatShortDate(iso: string): string {
-  // "Mon May 6" — same shape as src/lib/cadence.ts formatCadenceDate so the
-  // app preview and the actual SMS body stay visually consistent.
+  // "Wed, May 13th" — used in outbound SMS bodies (initial outreach,
+  // survey-confirmation, finalize-prompt). The in-app cadence preview
+  // uses src/lib/cadence.ts formatCadenceDate, which keeps a denser
+  // separator-friendly format ("Wed May 13").
   const d = new Date(iso + 'T16:00:00.000Z');
   const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  return `${days[d.getUTCDay()]} ${months[d.getUTCMonth()]} ${d.getUTCDate()}`;
+  const day = d.getUTCDate();
+  return `${days[d.getUTCDay()]}, ${months[d.getUTCMonth()]} ${day}${ordinal(day)}`;
 }
 
 function firstName(n: string | null): string | null {
@@ -181,7 +190,7 @@ export function initialOutreachSms(opts: NudgeBodyOpts): string {
   const byDate = opts.responsesDueDate ? ` by ${formatShortDate(opts.responsesDueDate)}` : '';
   return (
     `${greet}\u2014 ${planner}'s planning ${tripPhrase} and wants your picks${byDate}. ` +
-    `Quick survey, no login: ${opts.surveyUrl}`
+    `Please complete a quick survey: ${opts.surveyUrl}`
   );
 }
 

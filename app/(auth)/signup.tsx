@@ -31,6 +31,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { BrandMark, Button, Input } from '@/components/ui';
 import { useGoogleSignIn, useSignUp } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabase';
 import { T, headlineFont } from '@/theme';
 
 /**
@@ -66,6 +67,12 @@ export default function SignupScreen() {
   const [phone, setPhone] = useState(prefillPhone);
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  // Set to the email used when Supabase returns user-without-session
+  // (email-confirm pending). Drives the "check your inbox" overlay
+  // that replaces the auto-celebrate-and-route flow — that flow used
+  // to push the user into the app before they were actually signed in.
+  const [pendingConfirmEmail, setPendingConfirmEmail] = useState<string | null>(null);
+  const [resendingConfirm, setResendingConfirm] = useState(false);
   const [errors, setErrors] = useState<{
     firstName?: string;
     lastName?: string;
@@ -160,14 +167,26 @@ export default function SignupScreen() {
   async function handleSignup() {
     if (!validate()) return;
     setLoading(true);
+    const cleanEmailForSubmit = email.trim().toLowerCase();
     try {
       const result = await signUp(
         firstName.trim(),
         lastName.trim(),
-        email.trim().toLowerCase(),
+        cleanEmailForSubmit,
         phone.trim(),
         password,
       );
+
+      // Email-confirmation gate: when the project requires email
+      // confirmation, Supabase returns user-without-session. Don't
+      // celebrate or route into the app — show the "check your inbox"
+      // state so the user knows what's expected next. The auth listener
+      // in RootLayout will pick up the session as soon as they tap the
+      // link in the confirmation email.
+      if (result.user && !result.session) {
+        setPendingConfirmEmail(cleanEmailForSubmit);
+        return;
+      }
 
       // Phase 3 — if we found unclaimed SMS/survey history for this phone,
       // fire off an OTP and route to the claim screen. The OTP send is
@@ -200,14 +219,166 @@ export default function SignupScreen() {
       router.replace('/(app)/profile-setup');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Signup failed.';
-      const isDuplicate = message.toLowerCase().includes('already');
-      Alert.alert(
-        'Signup failed',
-        isDuplicate ? 'An account with this email already exists.' : message,
-      );
+      const lower = message.toLowerCase();
+      const isDuplicate = lower.includes('already');
+      // Mirror of the login → signup pre-fill: when the user tries to
+      // sign up with an email that already has an account, push them to
+      // login with the email pre-filled instead of dead-ending on an
+      // alert.
+      if (isDuplicate) {
+        const cleanEmail = email.trim().toLowerCase();
+        Alert.alert(
+          'Account exists',
+          `${cleanEmail} already has a Rally account. Log in instead.`,
+          [{
+            text: 'Log in',
+            onPress: () => router.replace({
+              pathname: '/(auth)/login' as Parameters<typeof router.replace>[0] extends string
+                ? string
+                : never,
+              params: { email: cleanEmail },
+            } as unknown as Parameters<typeof router.replace>[0]),
+          }],
+        );
+        return;
+      }
+      // Supabase rate-limits per-email confirmation sends; the raw
+      // "For security purposes, you can only request this after N
+      // seconds" message is technically informative but cryptic.
+      // Reword so the user knows it's not a permanent failure.
+      const isRateLimited =
+        lower.includes('rate limit')
+        || lower.includes('over_email_send_rate_limit')
+        || lower.includes('for security purposes');
+      if (isRateLimited) {
+        Alert.alert(
+          'Too many attempts',
+          'Wait a minute, then try again. (Supabase rate-limits confirmation emails per address.)',
+        );
+        return;
+      }
+      Alert.alert('Signup failed', message);
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleResendConfirmation() {
+    if (!pendingConfirmEmail) return;
+    setResendingConfirm(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: pendingConfirmEmail,
+      });
+      if (error) {
+        Alert.alert('Could not resend', error.message);
+        return;
+      }
+      Alert.alert('Sent', `Another confirmation email is on its way to ${pendingConfirmEmail}.`);
+    } catch (err) {
+      Alert.alert(
+        'Could not resend',
+        err instanceof Error ? err.message : 'Try again in a moment.',
+      );
+    } finally {
+      setResendingConfirm(false);
+    }
+  }
+
+  // Email-confirmation pending — replace the form with a clear "check
+  // your inbox" surface so the user knows what's expected. Once they
+  // tap the link in the email, the auth listener picks up the session
+  // and routes them into the app.
+  if (pendingConfirmEmail) {
+    return (
+      <KeyboardAvoidingView
+        style={{ flex: 1, backgroundColor: T.cream }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          contentContainerStyle={{
+            flexGrow: 1,
+            paddingTop: insets.top + 24,
+            paddingBottom: insets.bottom + 32,
+            paddingHorizontal: 32,
+            justifyContent: 'center',
+          }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <BrandMark size="md" />
+
+          <View style={{ marginTop: 48, alignItems: 'center' }}>
+            <View
+              style={{
+                width: 64, height: 64, borderRadius: 32,
+                backgroundColor: T.greenSoft,
+                alignItems: 'center', justifyContent: 'center',
+                marginBottom: 24,
+              }}
+            >
+              <Ionicons name="mail-outline" size={32} color={T.green} />
+            </View>
+            <Text
+              style={{
+                ...headlineFont.bold,
+                fontSize: 36,
+                color: T.ink,
+                letterSpacing: -1,
+                textAlign: 'center',
+                marginBottom: 12,
+              }}
+            >
+              Check your inbox.
+            </Text>
+            <Text
+              style={{
+                fontSize: 16, color: T.muted, lineHeight: 24,
+                textAlign: 'center', marginBottom: 8,
+              }}
+            >
+              We sent a confirmation link to
+            </Text>
+            <Text
+              style={{
+                fontSize: 16, color: T.ink, fontWeight: '600',
+                textAlign: 'center', marginBottom: 24,
+              }}
+            >
+              {pendingConfirmEmail}
+            </Text>
+            <Text
+              style={{
+                fontSize: 14, color: T.muted, lineHeight: 20,
+                textAlign: 'center', marginBottom: 32,
+              }}
+            >
+              Tap the link to finish setting up your Rally account. You'll be signed in automatically.
+            </Text>
+
+            <Button
+              variant="secondary"
+              onPress={handleResendConfirmation}
+              loading={resendingConfirm}
+              fullWidth
+            >
+              Resend email
+            </Button>
+
+            <Pressable
+              onPress={() => setPendingConfirmEmail(null)}
+              style={{ marginTop: 16 }}
+              hitSlop={8}
+              accessibilityRole="button"
+            >
+              <Text style={{ fontSize: 14, color: T.green, fontWeight: '600' }}>
+                Use a different email
+              </Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
   }
 
   return (

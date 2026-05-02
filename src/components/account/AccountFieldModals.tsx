@@ -285,8 +285,39 @@ export function EditPhoneModal({
     setSaving(true);
     setErr(null);
     try {
-      const { error } = await supabase.auth.updateUser({ phone: normalized });
-      if (error) throw error;
+      // Route via our own edge fn (Rally's Twilio) instead of Supabase's
+      // native phone-OTP, which would require a phone provider configured
+      // in the Supabase Auth dashboard ("Unable to get SMS provider").
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        setErr('Sign out and back in, then try again.');
+        return;
+      }
+      const res = await fetch(
+        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/request-phone-change-otp`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ phone: normalized }),
+        },
+      );
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) {
+        if (data.error === 'rate_limited') {
+          setErr('Too many attempts. Wait a few minutes, then try again.');
+        } else if (data.error === 'invalid_phone') {
+          setErr('Enter a valid US phone number.');
+        } else if (data.error === 'send_failed') {
+          setErr("We couldn't text that number. Double-check the digits.");
+        } else {
+          setErr('Could not send code. Try again.');
+        }
+        return;
+      }
       setSubmittedPhone(normalized);
       setStep('verify');
     } catch (e) {
@@ -301,17 +332,30 @@ export function EditPhoneModal({
     setSaving(true);
     setErr(null);
     try {
-      const { error } = await supabase.auth.verifyOtp({
-        phone: submittedPhone,
-        token: otp.trim(),
-        type: 'phone_change',
-      });
-      if (error) throw error;
-      // Mirror onto the Rally users / profiles row so the rest of the
-      // app sees the updated phone immediately.
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        await supabase.from('profiles').update({ phone: submittedPhone }).eq('id', user.id);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        setErr('Sign out and back in, then try again.');
+        return;
+      }
+      const res = await fetch(
+        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/verify-phone-change-otp`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ phone: submittedPhone, code: otp.trim() }),
+        },
+      );
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; reason?: string };
+      if (!res.ok || !data.ok) {
+        if (data.reason === 'expired') setErr('Code expired. Send a new one.');
+        else if (data.reason === 'too_many_attempts') setErr('Too many tries. Send a new code.');
+        else if (data.reason === 'phone_in_use') setErr('That phone is already on another Rally account.');
+        else setErr('Code rejected. Try again.');
+        return;
       }
       onSaved();
       onClose();

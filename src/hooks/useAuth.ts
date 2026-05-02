@@ -58,36 +58,34 @@ export function useSignUp() {
     phone: string,
     password: string,
   ) => {
+    const normalizedPhone = phone ? normalizePhone(phone) : null;
+
+    // Pass the full profile (name + last_name + phone) via auth
+    // metadata. The handle_new_user trigger (migration 110) reads
+    // these on insert and writes the profiles row server-side, so
+    // we don't need a follow-up client upsert — which used to fail
+    // when email-confirmation was on (no session → RLS denial).
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { name: firstName } },
-    });
-    if (error) throw error;
-
-    const normalizedPhone = phone ? normalizePhone(phone) : null;
-
-    // Create profile immediately (session is available when email confirmation is off)
-    if (data.user) {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .upsert({
-          id:        data.user.id,
+      options: {
+        data: {
           name:      firstName,
           last_name: lastName || null,
-          email,
           phone:     normalizedPhone ?? phone ?? null,
-        });
-      if (profileError) throw profileError;
-    }
+        },
+      },
+    });
+    if (error) throw error;
 
     // Phase 3 — phone claim probe.
     // Check whether Rally already has SMS/survey history for this phone
     // that we should offer to merge into the new account. The actual OTP
     // send + claim-phone routing happens in the signup screen so we don't
-    // couple the auth hook to navigation.
+    // couple the auth hook to navigation. Skipped when there's no
+    // session (email-confirm pending) — the RPC requires auth context.
     let claimAvailable = false;
-    if (normalizedPhone) {
+    if (normalizedPhone && data.session) {
       const { data: claimable } = await supabase.rpc('check_claim_available', {
         p_phone: normalizedPhone,
       });

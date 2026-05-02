@@ -21,3 +21,12 @@ verify_jwt = false
 
 [functions.claim-otp]
 verify_jwt = false
+
+# Authed endpoints that still need verify_jwt=false because the
+# sb_publishable_* anon key isn't JWT-format. We extract + validate the
+# real user JWT in-handler via supabase-js getUser(token).
+[functions.request-phone-change-otp]
+verify_jwt = false
+
+[functions.verify-phone-change-otp]
+verify_jwt = false

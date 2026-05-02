@@ -52,12 +52,19 @@ function TripCard({
   const qc = useQueryClient();
   const [preciseModalVisible, setPreciseModalVisible] = useState(false);
   const isPlanner = !!currentUserId && trip.created_by === currentUserId;
+  const isDraft = trip.status === 'draft';
 
   // Warm the dashboard's per-card queries (cadence, live results, group
   // preferences) in parallel with the screen transition so they render
   // populated instead of flashing their own loading states. Best-effort —
   // each card still owns the real fetch as a fallback.
   function openTrip() {
+    if (isDraft) {
+      // Drafts route back into the New Rally screen (pre-filled from
+      // form_draft) so the planner picks up where they left off.
+      router.push(`/(app)/trips/new?draftId=${trip.id}`);
+      return;
+    }
     void prefetchTripDetail(qc, trip.id);
     router.push(`/(app)/trips/${trip.id}`);
   }
@@ -139,32 +146,46 @@ function TripCard({
               <Text style={styles.sizePillText}>{sizeLabel}</Text>
             </Pressable>
 
-            {/* Stage progress bar */}
-            <View style={styles.stageBar}>
-              {STAGES.map((s, i) => (
-                <View
-                  key={s}
-                  style={[
-                    styles.stageSegment,
-                    i < stageIndex  && { backgroundColor: stageColor.past },
-                    i === stageIndex && { backgroundColor: stageColor.active },
-                  ]}
-                />
-              ))}
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
-              <Text style={[styles.stageLabel, { color: stageColor.label }]}>{STAGE_LABEL[stage]}</Text>
-              <View style={[styles.rolePill, isPlanner ? styles.rolePillPlanner : styles.rolePillMember]}>
-                <Ionicons
-                  name={isPlanner ? 'ribbon-outline' : 'person-outline'}
-                  size={10}
-                  color={isPlanner ? '#7C5A0A' : '#0F3F2E'}
-                />
-                <Text style={[styles.rolePillText, isPlanner ? styles.rolePillTextPlanner : styles.rolePillTextMember]}>
-                  {isPlanner ? 'Planner' : 'Member'}
-                </Text>
+            {isDraft ? (
+              // Drafts skip the stage bar/label — there's no progress to
+              // show until the planner promotes. Render a single "Draft"
+              // pill so the row reads as in-progress, not abandoned.
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+                <View style={styles.draftPill}>
+                  <Ionicons name="create-outline" size={11} color="#5F685F" />
+                  <Text style={styles.draftPillText}>Draft · tap to keep editing</Text>
+                </View>
               </View>
-            </View>
+            ) : (
+              <>
+                {/* Stage progress bar */}
+                <View style={styles.stageBar}>
+                  {STAGES.map((s, i) => (
+                    <View
+                      key={s}
+                      style={[
+                        styles.stageSegment,
+                        i < stageIndex  && { backgroundColor: stageColor.past },
+                        i === stageIndex && { backgroundColor: stageColor.active },
+                      ]}
+                    />
+                  ))}
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
+                  <Text style={[styles.stageLabel, { color: stageColor.label }]}>{STAGE_LABEL[stage]}</Text>
+                  <View style={[styles.rolePill, isPlanner ? styles.rolePillPlanner : styles.rolePillMember]}>
+                    <Ionicons
+                      name={isPlanner ? 'ribbon-outline' : 'person-outline'}
+                      size={10}
+                      color={isPlanner ? '#7C5A0A' : '#0F3F2E'}
+                    />
+                    <Text style={[styles.rolePillText, isPlanner ? styles.rolePillTextPlanner : styles.rolePillTextMember]}>
+                      {isPlanner ? 'Planner' : 'Member'}
+                    </Text>
+                  </View>
+                </View>
+              </>
+            )}
           </TouchableOpacity>
 
         </View>
@@ -305,6 +326,24 @@ const styles = StyleSheet.create({
   sizePillText: {
     fontSize: 11,
     color: '#5F685F',
+  },
+  draftPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderWidth: 1,
+    borderColor: '#D9CCB6',
+    borderRadius: 99,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    backgroundColor: '#F3F1EC',
+    alignSelf: 'flex-start',
+  },
+  draftPillText: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    color: '#5F685F',
+    letterSpacing: 0.3,
   },
   stageBar: {
     flexDirection: 'row',

@@ -38,6 +38,7 @@ import { CustomPollsSection, cleanCustomPoll } from '@/components/trips/CustomPo
 import { FormSectionHeader } from '@/components/trips/FormSectionHeader';
 import { BookByPicker } from '@/components/trips/BookByPicker';
 import { GroupSection } from '@/components/trips/GroupSection';
+import { PollSectionHeader, SKIPPED_HINT_STYLE, computePollStatus } from '@/components/trips/PollSectionHeader';
 import type { CustomPoll } from '@/types/polls';
 import { useTrip, useUpdateTrip } from '@/hooks/useTrips';
 import { usePolls } from '@/hooks/usePolls';
@@ -143,13 +144,27 @@ export default function EditTripScreen() {
   const [customDurations, setCustomDurations] = useState<string[]>([]);
   const [customDurationInput, setCustomDurationInput] = useState('');
   const [customDurationOpen, setCustomDurationOpen] = useState(false);
+  // Per-section skip flags. Hydrated from existing trip data: a section
+  // counts as skipped when neither a poll record nor the trip-level
+  // primitive exists (the only way that state arises today is the
+  // planner explicitly skipping during creation, since pre-skip flows
+  // always produced one or the other). Toggling counts as a change for
+  // diff detection so save deletes the poll and clears the column.
+  // Declared before decidedDateRange (below) since that memo reads them.
+  const [destinationDisabled, setDestinationDisabled] = useState(false);
+  const [durationDisabled, setDurationDisabled] = useState(false);
+  const [datesDisabled, setDatesDisabled] = useState(false);
+  const [budgetDisabled, setBudgetDisabled] = useState(false);
   const dateRanges = useMemo(
     () => groupConsecutiveDays(selectedDays).map((g) => ({ start: g.start, end: g.end === g.start ? null : g.end })),
     [selectedDays],
   );
   // Mirrors new.tsx: a single date range whose night-count matches the only
   // selected duration is treated as decided (no dates poll, no duration poll).
+  // Suppressed when either section is skipped — the planner has explicitly
+  // opted out of writing those trip-level values.
   const decidedDateRange = useMemo<{ start: string; end: string | null } | null>(() => {
+    if (datesDisabled || durationDisabled) return null;
     if (dateRanges.length !== 1 || durations.length !== 1) return null;
     const r = dateRanges[0];
     if (!r.start) return null;
@@ -160,7 +175,7 @@ export default function EditTripScreen() {
     const endMs = new Date((r.end ?? r.start) + 'T12:00:00').getTime();
     const days = Math.round((endMs - startMs) / 86400000) + 1;
     return nights === days - 1 ? r : null;
-  }, [dateRanges, durations]);
+  }, [dateRanges, durations, datesDisabled, durationDisabled]);
   const [budgets, setBudgets] = useState<string[]>([]);
   const [customBudgets, setCustomBudgets] = useState<string[]>([]);
   const [customBudgetInput, setCustomBudgetInput] = useState('');
@@ -183,6 +198,10 @@ export default function EditTripScreen() {
     budgets: string[];
     durations: string[];
     customPolls: { pollId: string | null; question: string; options: string[]; allowMulti: boolean }[];
+    destinationDisabled: boolean;
+    durationDisabled: boolean;
+    datesDisabled: boolean;
+    budgetDisabled: boolean;
   } | null>(null);
 
   // Per-poll-type response counts. Hydrated alongside the form.
@@ -196,7 +215,9 @@ export default function EditTripScreen() {
     setBookByDate(trip.book_by_date ?? null);
     setCustomIntroSms(trip.custom_intro_sms ?? null);
 
-    // Destination: prefer poll options if a poll exists, else use trip primitive
+    // Destination: prefer poll options if a poll exists, else use trip primitive.
+    // Skipped state is signaled by the absence of both — pre-skip flows always
+    // produced at least a write-in destination poll or a `trip.destination` value.
     const destPoll = polls.find((p) => p.type === 'destination');
     if (destPoll && destPoll.poll_options.length > 0) {
       setDestinations(destPoll.poll_options.map((o) => ({ name: o.label, address: '' })));
@@ -205,6 +226,11 @@ export default function EditTripScreen() {
     } else {
       setDestinations([{ name: '', address: '' }]);
     }
+    // A destination poll exists for both 2+ option polls AND zero-option
+    // write-in polls (the "Group decides" case), so destPoll truthiness
+    // is enough to keep this section enabled. Skipped sections leave no
+    // poll record at all.
+    if (!destPoll && !trip.destination) setDestinationDisabled(true);
 
     // Dates: parse per-day option labels back to ISO. If no poll, use trip primitives.
     const datesPoll = polls.find((p) => p.type === 'dates');
@@ -227,6 +253,7 @@ export default function EditTripScreen() {
     } else {
       setSelectedDays([]);
     }
+    if (!datesPoll && !trip.start_date) setDatesDisabled(true);
 
     // Budget: poll options + carve out custom buckets
     const budgetPoll = polls.find((p) => p.type === 'budget');
@@ -243,6 +270,7 @@ export default function EditTripScreen() {
       setBudgets([]);
       setCustomBudgets([]);
     }
+    if (!budgetPoll && !trip.budget_per_person) setBudgetDisabled(true);
 
     // Duration: prefer the canonical custom poll's options if present.
     // Falls back to trip.trip_duration (decided value, no poll) if the
@@ -263,6 +291,7 @@ export default function EditTripScreen() {
       setDurations([]);
       setCustomDurations([]);
     }
+    if (!durationPoll && !trip.trip_duration) setDurationDisabled(true);
 
     // Custom polls — every type='custom' poll. The canonical duration
     // poll is filtered out (it has its own form section) so it doesn't
@@ -295,8 +324,24 @@ export default function EditTripScreen() {
         options: [...cp.options],
         allowMulti: cp.allowMulti,
       })),
+      destinationDisabled,
+      durationDisabled,
+      datesDisabled,
+      budgetDisabled,
     });
-  }, [initialized, initialSnapshot, destinations, selectedDays, budgets, durations, customPolls]);
+  }, [
+    initialized,
+    initialSnapshot,
+    destinations,
+    selectedDays,
+    budgets,
+    durations,
+    customPolls,
+    destinationDisabled,
+    durationDisabled,
+    datesDisabled,
+    budgetDisabled,
+  ]);
 
   // Pull poll-response counts so we can warn the planner about edits
   // that would reset existing votes.
@@ -328,23 +373,27 @@ export default function EditTripScreen() {
 
   const destChanged = useMemo(() => {
     if (!initialSnapshot) return false;
+    if (initialSnapshot.destinationDisabled !== destinationDisabled) return true;
     return !arraysEqual(initialSnapshot.destinations, destinations.map((d) => d.name).filter(Boolean));
-  }, [initialSnapshot, destinations]);
+  }, [initialSnapshot, destinations, destinationDisabled]);
 
   const datesChanged = useMemo(() => {
     if (!initialSnapshot) return false;
+    if (initialSnapshot.datesDisabled !== datesDisabled) return true;
     return !arraysEqual(initialSnapshot.selectedDays, selectedDays);
-  }, [initialSnapshot, selectedDays]);
+  }, [initialSnapshot, selectedDays, datesDisabled]);
 
   const budgetsChanged = useMemo(() => {
     if (!initialSnapshot) return false;
+    if (initialSnapshot.budgetDisabled !== budgetDisabled) return true;
     return !arraysEqual(initialSnapshot.budgets, budgets);
-  }, [initialSnapshot, budgets]);
+  }, [initialSnapshot, budgets, budgetDisabled]);
 
   const durationsChanged = useMemo(() => {
     if (!initialSnapshot) return false;
+    if (initialSnapshot.durationDisabled !== durationDisabled) return true;
     return !arraysEqual(initialSnapshot.durations, durations);
-  }, [initialSnapshot, durations]);
+  }, [initialSnapshot, durations, durationDisabled]);
 
   // Per-custom-poll diff. A custom poll has changed if its question,
   // option list, or allow-multi flag differs from the snapshot.
@@ -499,20 +548,22 @@ export default function EditTripScreen() {
     try {
       // 1. Update trip primitives. start/end/destination/budget/duration
       //    follow the 0-or-1 contract (1 option = decided value, anything
-      //    else clears the column so polls own it).
+      //    else clears the column so polls own it). Skipped sections force
+      //    the column to null so the survey doesn't render a stale
+      //    "decided" poll for a question the planner opted out of.
       await updateTrip.mutateAsync({
         id: trip.id,
         name: name.trim(),
         group_size_bucket: bucket,
         group_size_precise: precise,
-        start_date: cleanDateRanges.length === 1 ? cleanDateRanges[0].start : null,
-        end_date: cleanDateRanges.length === 1 ? cleanDateRanges[0].end : null,
-        budget_per_person: cleanBudgets.length === 1 ? cleanBudgets[0] : null,
-        destination: cleanDestinations.length === 1 ? cleanDestinations[0].name : null,
-        destination_address: cleanDestinations.length === 1 ? cleanDestinations[0].address : null,
+        start_date: datesDisabled ? null : (cleanDateRanges.length === 1 ? cleanDateRanges[0].start : null),
+        end_date: datesDisabled ? null : (cleanDateRanges.length === 1 ? cleanDateRanges[0].end : null),
+        budget_per_person: !budgetDisabled && cleanBudgets.length === 1 ? cleanBudgets[0] : null,
+        destination: !destinationDisabled && cleanDestinations.length === 1 ? cleanDestinations[0].name : null,
+        destination_address: !destinationDisabled && cleanDestinations.length === 1 ? cleanDestinations[0].address : null,
         // Decided duration: only set when exactly 1 option provided.
         // 0 → free-form poll handled below; 2+ → live poll handled below.
-        trip_duration: cleanDurations.length === 1 ? cleanDurations[0] : null,
+        trip_duration: !durationDisabled && cleanDurations.length === 1 ? cleanDurations[0] : null,
         book_by_date: bookByDate,
         custom_intro_sms: customIntroSms,
       });
@@ -520,33 +571,62 @@ export default function EditTripScreen() {
       // 2. Sync polls. For each field type, delete the existing poll(s)
       //    and recreate based on current state. Cascade clears responses.
       //    We only rebuild the polls for fields that actually changed —
-      //    untouched polls stay intact.
-      if (destChanged) {
-        await rebuildPoll(trip.id, polls, 'destination', cleanDestinations.map((d) => d.name), 'Where do you want to go?', true);
-      }
-      if (datesChanged) {
-        await rebuildPoll(trip.id, polls, 'dates', expandRangesToDayLabels(cleanDateRanges), 'When are you free?', true);
-      }
-      if (budgetsChanged) {
-        await rebuildPoll(trip.id, polls, 'budget', cleanBudgets, "What's your budget? (travel + lodging only)", false);
-      }
-
-      if (durationsChanged) {
-        // The duration poll is a custom poll keyed off DURATION_POLL_TITLE.
-        // Empty options → free-form numeric mode (allowEmpty=true keeps the
-        // poll record so respondents see a number input on the survey).
-        const existingDurationPoll = polls.find(
-          (p) => p.type === 'custom' && p.title === DURATION_POLL_TITLE,
-        );
-        await rebuildCustomPoll(
-          trip.id,
-          existingDurationPoll?.id ?? null,
-          DURATION_POLL_TITLE,
-          cleanDurations,
-          true,
-          true,
-        );
-      }
+      //    untouched polls stay intact. Disabled sections pass [] which
+      //    deletes the poll without recreating one. The four standard
+      //    rebuilds touch independent poll types and read position from
+      //    the captured `polls` snapshot, so they're safe to run in
+      //    parallel; the custom-polls loop below stays sequential because
+      //    new custom polls compute position from a fresh count() that
+      //    races otherwise.
+      const existingDurationPoll = polls.find(
+        (p) => p.type === 'custom' && p.title === DURATION_POLL_TITLE,
+      );
+      await Promise.all([
+        destChanged
+          ? rebuildPoll(
+              trip.id,
+              polls,
+              'destination',
+              destinationDisabled ? [] : cleanDestinations.map((d) => d.name),
+              'Where do you want to go?',
+              true,
+            )
+          : Promise.resolve(),
+        datesChanged
+          ? rebuildPoll(
+              trip.id,
+              polls,
+              'dates',
+              datesDisabled ? [] : expandRangesToDayLabels(cleanDateRanges),
+              'When are you free?',
+              true,
+            )
+          : Promise.resolve(),
+        budgetsChanged
+          ? rebuildPoll(
+              trip.id,
+              polls,
+              'budget',
+              budgetDisabled ? [] : cleanBudgets,
+              "What's your budget? (travel + lodging only)",
+              false,
+            )
+          : Promise.resolve(),
+        durationsChanged
+          ? durationDisabled
+            ? existingDurationPoll
+              ? supabase.from('polls').delete().eq('id', existingDurationPoll.id).then(() => undefined)
+              : Promise.resolve()
+            : rebuildCustomPoll(
+                trip.id,
+                existingDurationPoll?.id ?? null,
+                DURATION_POLL_TITLE,
+                cleanDurations,
+                true,
+                true,
+              )
+          : Promise.resolve(),
+      ]);
 
       // Rebuild changed custom polls (added or edited)
       let anyCustomChanged = false;
@@ -649,15 +729,18 @@ export default function EditTripScreen() {
 
           {/* Destination */}
           <View className="gap-2">
-            <View className="flex-row items-baseline justify-between">
-              <Text style={FORM_LABEL_STYLE}>Destination</Text>
-              {(() => {
-                const filled = destinations.filter((d) => d.name.trim()).length;
-                if (filled >= 2) return <Text className="text-[11px] font-semibold text-green">Will be polled</Text>;
-                if (filled === 1) return <Text className="text-[11px] font-semibold text-green">Locked in</Text>;
-                return <Text className="text-[11px] font-semibold text-[#737373]">Group decides</Text>;
-              })()}
-            </View>
+            <PollSectionHeader
+              label="Destination"
+              disabled={destinationDisabled}
+              onToggle={() => setDestinationDisabled((v) => !v)}
+              status={computePollStatus(destinations.filter((d) => d.name.trim()).length)}
+            />
+            {destinationDisabled ? (
+              <Text style={SKIPPED_HINT_STYLE}>
+                Skipped — Rally won't ask the group where to go.
+              </Text>
+            ) : (
+            <>
             {destinations.map((d, i) => (
               <View key={i} className="flex-row items-center gap-2">
                 <View className="flex-1">
@@ -701,6 +784,8 @@ export default function EditTripScreen() {
             {destChanged && (responseCounts['destination'] ?? 0) > 0 ? (
               <ResetWarning votes={responseCounts['destination']} />
             ) : null}
+            </>
+            )}
           </View>
 
           {/* How long? — placed above Trip dates because the date picker is
@@ -708,16 +793,18 @@ export default function EditTripScreen() {
               range). 0 = free-form poll, 1 = decided (writes
               trips.trip_duration), 2+ = live multi-select chip poll. */}
           <View className="gap-2">
-            <View className="flex-row items-baseline justify-between">
-              <Text style={FORM_LABEL_STYLE}>How long?</Text>
-              {durations.length >= 2 ? (
-                <Text className="text-[11px] font-semibold text-green">Will be polled</Text>
-              ) : durations.length === 1 ? (
-                <Text className="text-[11px] font-semibold text-green">Locked in</Text>
-              ) : (
-                <Text className="text-[11px] font-semibold text-[#737373]">Group decides</Text>
-              )}
-            </View>
+            <PollSectionHeader
+              label="How long?"
+              disabled={durationDisabled}
+              onToggle={() => setDurationDisabled((v) => !v)}
+              status={computePollStatus(durations.length)}
+            />
+            {durationDisabled ? (
+              <Text style={SKIPPED_HINT_STYLE}>
+                Skipped — Rally won't ask the group about trip length.
+              </Text>
+            ) : (
+            <>
             <Text style={{ fontSize: 13, color: '#737373', marginTop: -2 }}>
               Pick durations to vote on, or skip to let your group tell you how many nights.
             </Text>
@@ -812,22 +899,24 @@ export default function EditTripScreen() {
                 <Text className="text-[13px] font-semibold text-green">Add custom duration</Text>
               </Pressable>
             )}
+            </>
+            )}
           </View>
 
           {/* Trip dates */}
           <View className="gap-2">
-            <View className="flex-row items-baseline justify-between">
-              <Text style={FORM_LABEL_STYLE}>
-                {decidedDateRange ? 'Trip dates' : 'Trip dates window'}
+            <PollSectionHeader
+              label={decidedDateRange ? 'Trip dates' : 'Trip dates window'}
+              disabled={datesDisabled}
+              onToggle={() => setDatesDisabled((v) => !v)}
+              status={computePollStatus(dateRanges.length, Boolean(decidedDateRange))}
+            />
+            {datesDisabled ? (
+              <Text style={SKIPPED_HINT_STYLE}>
+                Skipped — Rally won't ask the group when they're free.
               </Text>
-              {decidedDateRange ? (
-                <Text className="text-[11px] font-semibold text-green">Locked in</Text>
-              ) : dateRanges.length >= 1 ? (
-                <Text className="text-[11px] font-semibold text-green">Will be polled</Text>
-              ) : (
-                <Text className="text-[11px] font-semibold text-[#737373]">Group decides</Text>
-              )}
-            </View>
+            ) : (
+            <>
             <TouchableOpacity
               className="flex-row items-center gap-2.5 border-[1.5px] border-line rounded-xl bg-card px-3.5 py-[13px]"
               onPress={() => setDatePickerVisible(true)}
@@ -881,13 +970,18 @@ export default function EditTripScreen() {
             {datesChanged && (responseCounts['dates'] ?? 0) > 0 ? (
               <ResetWarning votes={responseCounts['dates']} />
             ) : null}
+            </>
+            )}
           </View>
 
           {/* Spend per person */}
           <View className="gap-2">
-            <View className="flex-row items-baseline justify-between">
-              <View className="flex-row items-center gap-1.5">
-                <Text style={FORM_LABEL_STYLE}>Spend per person</Text>
+            <PollSectionHeader
+              label="Spend per person"
+              disabled={budgetDisabled}
+              onToggle={() => setBudgetDisabled((v) => !v)}
+              status={computePollStatus(budgets.length)}
+              labelTrailing={
                 <Pressable
                   onPress={() => Alert.alert('Spend per person', 'Travel + lodging only. Meals and activities are split separately.')}
                   hitSlop={8}
@@ -896,15 +990,14 @@ export default function EditTripScreen() {
                 >
                   <Ionicons name="information-circle-outline" size={16} color="#A0A0A0" />
                 </Pressable>
-              </View>
-              {budgets.length >= 2 ? (
-                <Text className="text-[11px] font-semibold text-green">Will be polled</Text>
-              ) : budgets.length === 1 ? (
-                <Text className="text-[11px] font-semibold text-green">Locked in</Text>
-              ) : (
-                <Text className="text-[11px] font-semibold text-[#737373]">Group decides</Text>
-              )}
-            </View>
+              }
+            />
+            {budgetDisabled ? (
+              <Text style={SKIPPED_HINT_STYLE}>
+                Skipped — Rally won't ask the group about budget.
+              </Text>
+            ) : (
+            <>
             <View className="flex-row flex-wrap gap-2">
               {BUDGET_OPTIONS.map((opt) => {
                 const sel = budgets.includes(opt);
@@ -985,6 +1078,8 @@ export default function EditTripScreen() {
             {budgetsChanged && (responseCounts['budget'] ?? 0) > 0 ? (
               <ResetWarning votes={responseCounts['budget']} />
             ) : null}
+            </>
+            )}
           </View>
 
           {/* Custom polls — free-form questions added by the planner. */}

@@ -34,18 +34,25 @@ interface Props {
   onChange: (next: string | null) => void;
 }
 
+function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return s[(v - 20) % 10] || s[v] || s[0];
+}
+
 function formatShortDate(iso: string): string {
   const d = new Date(iso + 'T16:00:00.000Z');
   const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  return `${days[d.getUTCDay()]} ${months[d.getUTCMonth()]} ${d.getUTCDate()}`;
+  const day = d.getUTCDate();
+  return `${days[d.getUTCDay()]}, ${months[d.getUTCMonth()]} ${day}${ordinal(day)}`;
 }
 
 function buildDefaultBody(opts: Pick<Props, 'plannerFirstName' | 'destination' | 'responsesDueDate'>): string {
   const planner = (opts.plannerFirstName?.trim() || PLANNER_FALLBACK).split(/\s+/)[0];
   const dest = opts.destination ? ` to ${opts.destination}` : '';
   const byDate = opts.responsesDueDate ? ` by ${formatShortDate(opts.responsesDueDate)}` : '';
-  return `Hey ${RECIPIENT_PLACEHOLDER} — ${planner} is planning a trip${dest} and wants your input${byDate}. Quick survey (no login): rallysurveys.netlify.app/...`;
+  return `Hey ${RECIPIENT_PLACEHOLDER} — ${planner} is planning a trip${dest} and wants your input${byDate}. Please complete a quick survey: TKTK`;
 }
 
 export function LiveSmsPreview({

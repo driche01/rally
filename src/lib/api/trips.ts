@@ -1,5 +1,5 @@
 import { supabase, supabaseAnon } from '../supabase';
-import type { GroupSizeBucket, Trip, TripWithPolls } from '../../types/database';
+import type { GroupSizeBucket, Trip, TripDraftFormState, TripWithPolls } from '../../types/database';
 import { addPlannerMember } from './members';
 
 /**
@@ -100,16 +100,33 @@ export async function createTrip(input: CreateTripInput): Promise<Trip> {
     .single();
   if (error) throw error;
 
-  // Auto-enroll the creator as the planner member
   await addPlannerMember(data.id, user.id);
+  await runActivationSideEffects(data, contacts, pollOptions);
 
+  return data;
+}
+
+/**
+ * Side effects that turn a freshly-inserted (or freshly-promoted) trip
+ * into a "live" rally: SMS session, participants, polls, scheduler poke.
+ * Shared by createTrip (insert path) and promoteDraftToActive (status
+ * flip path) so behavior stays in lockstep.
+ *
+ * The planner-as-member enrollment is the caller's responsibility — drafts
+ * already have it from saveDraftTrip, and createTrip handles it inline.
+ */
+async function runActivationSideEffects(
+  trip: Trip,
+  contacts: CreateTripInput['contacts'],
+  pollOptions: CreateTripInput['poll_options'],
+): Promise<void> {
   // Auto-create the SMS trip_session so the dashboard cards (cadence,
   // inbox, decision queue) have something to anchor to before any
-  // participant joins. Best-effort: trip creation succeeds even if the
+  // participant joins. Best-effort: activation succeeds even if the
   // session insert fails (e.g. profile.phone missing for first-time
   // users — they can join via the share link path instead).
   try {
-    await supabase.rpc('app_create_sms_session', { p_trip_id: data.id });
+    await supabase.rpc('app_create_sms_session', { p_trip_id: trip.id });
   } catch {
     /* non-fatal — session is created lazily by join-link flow if missing */
   }
@@ -119,20 +136,114 @@ export async function createTrip(input: CreateTripInput): Promise<Trip> {
   // below). Best-effort per contact — one bad phone number doesn't block
   // the rest.
   if (contacts && contacts.length > 0) {
-    await addContactsAsParticipants(data.id, contacts);
+    await addContactsAsParticipants(trip.id, contacts);
   }
 
   // Insert each opted-in poll. Best-effort: errors logged but don't
-  // block trip creation. The polls become LIVE immediately so the
+  // block activation. The polls become LIVE immediately so the
   // initial outreach SMS includes them.
   if (pollOptions && pollOptions.length > 0) {
-    await createLivePollsFromOptions(data.id, pollOptions);
+    await createLivePollsFromOptions(trip.id, pollOptions);
   }
 
   // Kick the nudge scheduler so any participants who joined above (or
   // who join via the share link before the next cron tick) get their
   // cadence rows + initial outreach SMS immediately.
-  if (data.book_by_date) pokeNudgeScheduler();
+  if (trip.book_by_date) pokeNudgeScheduler();
+}
+
+// ─── Drafts ────────────────────────────────────────────────────────────────
+// A draft is a trips row with status='draft' and the New Rally form
+// snapshot stored in form_draft. Drafts skip every side effect that
+// would notify the group (no SMS session, no participants, no polls,
+// no nudges) and aren't reachable via share_token. The planner resumes
+// editing from the New Rally screen and either saves again or promotes
+// to status='active' (which fires all the side effects).
+
+export interface SaveDraftInput {
+  /** Present = update an existing draft. Absent = create a new one. */
+  id?: string;
+  name: string;
+  form_draft: TripDraftFormState;
+}
+
+export async function saveDraftTrip(input: SaveDraftInput): Promise<Trip> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+
+  if (input.id) {
+    // Update existing draft. Refuse to overwrite a trip that's already
+    // been promoted — saveDraft is for drafts only.
+    const { data: existing, error: readErr } = await supabase
+      .from('trips')
+      .select('status')
+      .eq('id', input.id)
+      .single();
+    if (readErr) throw readErr;
+    if (existing.status !== 'draft') {
+      throw new Error('Cannot save draft on a non-draft trip');
+    }
+
+    const { data, error } = await supabase
+      .from('trips')
+      .update({ name: input.name, form_draft: input.form_draft })
+      .eq('id', input.id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  }
+
+  // New draft — minimum-viable trip row. Group size defaults to the
+  // smallest bucket; it'll be recomputed from the contact picker on
+  // promotion.
+  const { data, error } = await supabase
+    .from('trips')
+    .insert({
+      created_by: user.id,
+      name: input.name,
+      group_size_bucket: '0-4',
+      status: 'draft',
+      form_draft: input.form_draft,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+
+  // Auto-enroll the creator as the planner member so the draft shows up
+  // on their dashboard via the trip_members join.
+  await addPlannerMember(data.id, user.id);
+
+  return data;
+}
+
+/**
+ * Promote a draft to active. Updates the trip columns from `input`,
+ * flips status to 'active', clears form_draft, and runs every side
+ * effect createTrip would have fired (SMS session, participants, polls,
+ * nudges). The caller passes the same shape as createTrip — this
+ * function just doesn't insert the trip row first.
+ */
+export async function promoteDraftToActive(
+  draftId: string,
+  input: CreateTripInput,
+): Promise<Trip> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+
+  const { contacts, poll_options: pollOptions, ...tripFields } = input;
+
+  const { data, error } = await supabase
+    .from('trips')
+    .update({ ...tripFields, status: 'active', form_draft: null })
+    .eq('id', draftId)
+    .eq('status', 'draft')  // guard: refuse to "promote" a non-draft
+    .select()
+    .single();
+  if (error) throw error;
+  if (!data) throw new Error('Draft not found or already promoted');
+
+  await runActivationSideEffects(data, contacts, pollOptions);
 
   return data;
 }
@@ -304,7 +415,7 @@ export async function getTrips(): Promise<Trip[]> {
   const { data, error } = await supabase
     .from('trips')
     .select('*')
-    .eq('status', 'active')
+    .in('status', ['active', 'draft'])
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data ?? [];
@@ -316,7 +427,7 @@ export async function getTripsWithRespondentCounts(): Promise<TripWithRespondent
   const { data, error } = await supabase
     .from('trips')
     .select('*, respondents(count), trip_members(count)')
-    .eq('status', 'active')
+    .in('status', ['active', 'draft'])
     .order('created_at', { ascending: false });
   if (error) throw error;
 

@@ -6,9 +6,12 @@ import {
   getTrips,
   getTripsWithRespondentCounts,
   getTripById,
+  promoteDraftToActive,
+  saveDraftTrip,
   updateTrip,
   updateTripStatus,
   type CreateTripInput,
+  type SaveDraftInput,
 } from '../lib/api/trips';
 import { syncTripFieldsToPolls } from '../lib/api/polls';
 
@@ -64,6 +67,40 @@ export function useCreateTrip() {
         budget_per_person: data.budget_per_person,
       }).catch(() => {}); // non-blocking — don't fail trip creation if this errors
       qc.invalidateQueries({ queryKey: tripKeys.all });
+      qc.invalidateQueries({ queryKey: pollsForTrip(data.id) });
+    },
+  });
+}
+
+export function useSaveDraftTrip() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SaveDraftInput) => saveDraftTrip(input),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: tripKeys.all });
+      qc.invalidateQueries({ queryKey: tripKeys.allWithCounts });
+      qc.invalidateQueries({ queryKey: tripKeys.detail(data.id) });
+    },
+  });
+}
+
+export function usePromoteDraftToActive() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ draftId, input }: { draftId: string; input: CreateTripInput }) =>
+      promoteDraftToActive(draftId, input),
+    onSuccess: async (data) => {
+      // Match useCreateTrip's poll sync so 1-option fields set at promotion
+      // time become decided polls.
+      await syncTripFieldsToPolls(data.id, {
+        destination: data.destination,
+        start_date: data.start_date,
+        end_date: data.end_date,
+        budget_per_person: data.budget_per_person,
+      }).catch(() => {});
+      qc.invalidateQueries({ queryKey: tripKeys.all });
+      qc.invalidateQueries({ queryKey: tripKeys.allWithCounts });
+      qc.invalidateQueries({ queryKey: tripKeys.detail(data.id) });
       qc.invalidateQueries({ queryKey: pollsForTrip(data.id) });
     },
   });

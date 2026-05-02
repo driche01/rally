@@ -74,6 +74,8 @@ interface MemberRow {
    * is the default. Drives the "Declined" / "Opted out" pill on the row.
    */
   attendance: 'in' | 'declined' | 'opted_out';
+  /** Free-text the respondent left when declining. Only meaningful when attendance='declined'. */
+  declineReason: string | null;
 }
 
 export function GroupSection({ tripId }: { tripId: string }) {
@@ -152,6 +154,7 @@ export function GroupSection({ tripId }: { tripId: string }) {
         ),
         hasProfile: profileByPhone.get(norm) === true,
         attendance,
+        declineReason: attendance === 'declined' ? matchingResp?.decline_reason ?? null : null,
       });
     }
     for (const r of respondents) {
@@ -170,6 +173,7 @@ export function GroupSection({ tripId }: { tripId: string }) {
         hasResponded: Boolean(r.rsvp || r.preferences || respondedIds?.has(r.id)),
         hasProfile: profileByPhone.get(norm) === true,
         attendance: r.rsvp === 'out' ? 'declined' : 'in',
+        declineReason: r.rsvp === 'out' ? r.decline_reason ?? null : null,
       });
     }
     // Creator first, then other planners, then by name.
@@ -409,6 +413,14 @@ export function GroupSection({ tripId }: { tripId: string }) {
               {row.email ? (
                 <Text className="text-[12px] text-[#888]" numberOfLines={1}>
                   {row.email}
+                </Text>
+              ) : null}
+              {row.attendance === 'declined' && row.declineReason ? (
+                <Text
+                  style={{ fontSize: 12, color: '#5F685F', fontStyle: 'italic', marginTop: 4 }}
+                  numberOfLines={3}
+                >
+                  &ldquo;{row.declineReason}&rdquo;
                 </Text>
               ) : null}
               <View className="flex-row gap-1.5 mt-1">

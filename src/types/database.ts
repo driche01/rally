@@ -1,7 +1,7 @@
 // Database types matching the Supabase schema
 
 export type GroupSizeBucket = '0-4' | '5-8' | '9-12' | '13-20' | '20+';
-export type TripStatus = 'active' | 'closed';
+export type TripStatus = 'active' | 'closed' | 'draft';
 export type PollType = 'destination' | 'dates' | 'budget' | 'custom';
 export type PollStatus = 'draft' | 'live' | 'closed' | 'decided';
 
@@ -65,8 +65,41 @@ export interface Trip {
   /** Signature of the inputs used to compute `cached_travel_suggestions`. Cache is valid when this matches the client-side signature from `computeTravelSignature`. */
   cached_travel_suggestions_signature: string | null;
   cached_travel_suggestions_updated_at: string | null;
+  /** When status='draft', stores the New Rally form snapshot so the planner can resume editing. Cleared on promotion to 'active'. */
+  form_draft: TripDraftFormState | null;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * Snapshot of the New Rally form state that gets stored in trips.form_draft
+ * while the trip is in status='draft'. Mirrors the local useState shape in
+ * app/(app)/trips/new.tsx — kept loose (all fields optional) so older drafts
+ * keep loading after the form picks up new fields.
+ */
+export interface TripDraftFormState {
+  /** Mirrors SelectedContact (src/components/trips/ContactSelector.tsx) — id is a client-side picker key. */
+  contacts?: Array<{ id: string; name: string; phone: string; email?: string | null }>;
+  destinations?: Array<{ name: string; address: string }>;
+  selectedDays?: string[];
+  budgets?: string[];
+  customBudgets?: string[];
+  durations?: string[];
+  customDurations?: string[];
+  bookByDate?: string | null;
+  customIntroSms?: string | null;
+  customPolls?: unknown[];
+  /**
+   * Per-section opt-out flags. Default-on: undefined or false means the
+   * planner is asking the group; explicit true means the section was
+   * skipped at creation and no poll (or trip-level value) should land.
+   * Older drafts pre-Phase 16.2 lack these fields, so absence falls back
+   * to enabled.
+   */
+  destinationDisabled?: boolean;
+  durationDisabled?: boolean;
+  datesDisabled?: boolean;
+  budgetDisabled?: boolean;
 }
 
 export interface Poll {
@@ -112,6 +145,8 @@ export interface Respondent {
   is_planner: boolean;
   rsvp: 'in' | 'out' | null;
   preferences: RespondentPreferences | null;
+  /** Optional free-text the respondent leaves when declining. Capped at 280 chars by the DB. */
+  decline_reason: string | null;
   created_at: string;
 }
 

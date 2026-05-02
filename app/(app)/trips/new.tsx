@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -21,9 +21,11 @@ import { CustomPollsSection, cleanCustomPoll } from '@/components/trips/CustomPo
 import { FormSectionHeader } from '@/components/trips/FormSectionHeader';
 import { BookByPicker } from '@/components/trips/BookByPicker';
 import { LiveSmsPreview } from '@/components/trips/LiveSmsPreview';
+import { PollSectionHeader, SKIPPED_HINT_STYLE, computePollStatus } from '@/components/trips/PollSectionHeader';
 import { tapHaptic } from '@/lib/haptics';
 import type { CustomPoll } from '@/types/polls';
-import { useCreateTrip } from '@/hooks/useTrips';
+import { useCreateTrip, usePromoteDraftToActive, useSaveDraftTrip, useTrip } from '@/hooks/useTrips';
+import type { TripDraftFormState } from '@/types/database';
 import { useProfile } from '@/hooks/useProfile';
 import { useAuthStore } from '@/stores/authStore';
 import * as Notifications from 'expo-notifications';
@@ -149,7 +151,17 @@ export default function NewTripScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const createTrip = useCreateTrip();
+  const saveDraft = useSaveDraftTrip();
+  const promoteDraft = usePromoteDraftToActive();
   const { celebrate, CelebrationOverlay } = useCelebration();
+
+  // When opened with ?draftId=xxx the screen is editing an existing draft:
+  // pre-fill all form state from trips.form_draft, and "Create trip"
+  // promotes the draft to status='active' instead of inserting.
+  const params = useLocalSearchParams<{ draftId?: string }>();
+  const draftId = typeof params.draftId === 'string' ? params.draftId : null;
+  const { data: draftTrip } = useTrip(draftId ?? '');
+  const isEditingDraft = Boolean(draftId);
 
   const scrollRef = useRef<ScrollView>(null);
   const nameInputRef = useRef<TextInput>(null);
@@ -207,6 +219,16 @@ export default function NewTripScreen() {
   const [customDurations, setCustomDurations] = useState<string[]>([]);
   const [customDurationInput, setCustomDurationInput] = useState('');
   const [customDurationOpen, setCustomDurationOpen] = useState(false);
+  // Per-section "skip this question" flags. Default-off (every standard
+  // poll is asked). When true the section's body is hidden, validation
+  // skips it, no poll is created, and the trip-level field is set to
+  // null (so syncTripFieldsToPolls doesn't auto-create a decided poll
+  // either). Planner input state is preserved across enable/disable
+  // toggles so re-enabling restores what they typed.
+  const [destinationDisabled, setDestinationDisabled] = useState(false);
+  const [durationDisabled, setDurationDisabled] = useState(false);
+  const [datesDisabled, setDatesDisabled] = useState(false);
+  const [budgetDisabled, setBudgetDisabled] = useState(false);
   // Both fields are decided by the planner at creation when:
   //   - exactly 1 contiguous date range
   //   - exactly 1 duration option picked
@@ -214,15 +236,18 @@ export default function NewTripScreen() {
   // In that case start_date/end_date get written to the trip directly
   // and the dates poll is skipped (a decided dates poll auto-creates via
   // syncTripFieldsToPolls). The duration's 1-option decided poll is
-  // already handled by createLivePollsFromOptions.
+  // already handled by createLivePollsFromOptions. Suppressed when
+  // either section is skipped, since the planner has explicitly opted
+  // out of writing those trip-level values.
   const decidedDateRange = useMemo<{ start: string; end: string | null } | null>(() => {
+    if (datesDisabled || durationDisabled) return null;
     if (dateRanges.length !== 1 || durations.length !== 1) return null;
     const r = dateRanges[0];
     if (!r.start) return null;
     const nights = parseDurationNights(durations[0]);
     if (nights === null) return null;
     return nights === daysInRange(r) - 1 ? r : null;
-  }, [dateRanges, durations]);
+  }, [dateRanges, durations, datesDisabled, durationDisabled]);
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   // Smart default: 14 days out — matches the "In 2 weeks" pill on
   // BookByPicker. The planner can swap to any other pill (or Custom)
@@ -249,6 +274,11 @@ export default function NewTripScreen() {
   // Auto-clear field-level errors when the planner fixes the field.
   // Avoids having to update every setter call site individually.
   useEffect(() => {
+    if (errors.name && name.trim()) {
+      setErrors((e) => ({ ...e, name: undefined }));
+    }
+  }, [name, errors.name]);
+  useEffect(() => {
     if (errors.destination && destinations.some((d) => d.name.trim())) {
       setErrors((e) => ({ ...e, destination: undefined }));
     }
@@ -268,6 +298,95 @@ export default function NewTripScreen() {
   const { data: plannerProfile } = useProfile(currentUser?.id);
   const plannerFirstName = (plannerProfile?.name ?? '').split(/\s+/)[0] || null;
 
+  // One-shot hydration from the draft snapshot. Guarded by a ref so a
+  // late refetch (e.g. from React Query revalidation) can't overwrite
+  // edits the planner has made since opening the screen.
+  const hydratedFromDraftRef = useRef(false);
+  useEffect(() => {
+    if (!isEditingDraft) return;
+    if (hydratedFromDraftRef.current) return;
+    if (!draftTrip || draftTrip.status !== 'draft') return;
+    hydratedFromDraftRef.current = true;
+    const snap: TripDraftFormState = (draftTrip.form_draft ?? {}) as TripDraftFormState;
+    setName(draftTrip.name ?? '');
+    if (snap.contacts) {
+      // Older drafts may have stored contacts without an `id` (the picker
+      // uses it as a stable key). Fill in `manual_<i>` if missing so the
+      // ContactSelector can re-render without warnings.
+      setContacts(
+        snap.contacts.map((c, i) => ({
+          id: c.id ?? `manual_draft_${i}`,
+          name: c.name,
+          phone: c.phone,
+          email: c.email ?? null,
+        })),
+      );
+    }
+    if (snap.destinations && snap.destinations.length > 0) setDestinations(snap.destinations);
+    if (snap.selectedDays) setSelectedDays(snap.selectedDays);
+    if (snap.budgets) setBudgets(snap.budgets);
+    if (snap.customBudgets) setCustomBudgets(snap.customBudgets);
+    if (snap.durations) setDurations(snap.durations);
+    if (snap.customDurations) setCustomDurations(snap.customDurations);
+    if (snap.bookByDate !== undefined) setBookByDate(snap.bookByDate ?? null);
+    if (snap.customIntroSms !== undefined) setCustomIntroSms(snap.customIntroSms ?? null);
+    if (snap.customPolls) setCustomPolls(snap.customPolls as CustomPoll[]);
+    if (snap.destinationDisabled) setDestinationDisabled(true);
+    if (snap.durationDisabled) setDurationDisabled(true);
+    if (snap.datesDisabled) setDatesDisabled(true);
+    if (snap.budgetDisabled) setBudgetDisabled(true);
+  }, [isEditingDraft, draftTrip]);
+
+  function buildDraftSnapshot(): TripDraftFormState {
+    return {
+      contacts,
+      destinations,
+      selectedDays,
+      budgets,
+      customBudgets,
+      durations,
+      customDurations,
+      bookByDate,
+      customIntroSms,
+      customPolls,
+      destinationDisabled,
+      durationDisabled,
+      datesDisabled,
+      budgetDisabled,
+    };
+  }
+
+  async function handleSaveDraft() {
+    // Only the trip name is required to save a draft. Everything else
+    // can be filled in later when the planner resumes.
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setErrors((e) => ({ ...e, name: 'Trip name is required' }));
+      scrollToFirstError({ name: 'Trip name is required' });
+      return;
+    }
+    try {
+      await saveDraft.mutateAsync({
+        id: draftId ?? undefined,
+        name: trimmed,
+        form_draft: buildDraftSnapshot(),
+      });
+      router.back();
+    } catch (err) {
+      // Supabase's PostgrestError is a plain object (not an Error instance),
+      // so `err instanceof Error` is false and the real DB message gets lost.
+      // Pull `.message` off whatever shape we got so the alert is actionable.
+      let message = 'Please try again.';
+      if (err instanceof Error) {
+        message = err.message;
+      } else if (err && typeof err === 'object' && 'message' in err && typeof (err as { message: unknown }).message === 'string') {
+        message = (err as { message: string }).message;
+      }
+      log.error('saveDraft failed', { err, message });
+      Alert.alert("Couldn't save draft", message);
+    }
+  }
+
   // Cadence preview — recomputes whenever book-by changes.
   const responsesDueDate = deriveResponsesDue(bookByDate);
   const cadencePreview = bookByDate && responsesDueDate
@@ -280,13 +399,13 @@ export default function NewTripScreen() {
     const errs: typeof errors = {};
     if (!name.trim()) errs.name = 'Trip name is required';
     if (contacts.length === 0) errs.contacts = 'Add at least one person Rally should text';
-    if (destinations.filter((d) => d.name.trim()).length === 0) {
+    if (!destinationDisabled && destinations.filter((d) => d.name.trim()).length === 0) {
       errs.destination = 'Pick at least one destination';
     }
-    if (dateRanges.filter((r) => r.start).length === 0) {
+    if (!datesDisabled && dateRanges.filter((r) => r.start).length === 0) {
       errs.dates = 'Pick at least one trip date';
     }
-    if (budgets.length === 0) {
+    if (!budgetDisabled && budgets.length === 0) {
       errs.budget = 'Pick at least one budget option';
     }
     if (!bookByDate) errs.bookBy = 'Pick a date you need to book by';
@@ -332,25 +451,27 @@ export default function NewTripScreen() {
       allow_empty_options?: boolean;
       allow_write_ins?: boolean;
     }> = [];
-    if (cleanDestinations.length >= 2) {
-      pollOptions.push({
-        type: 'destination',
-        title: 'Where do you want to go?',
-        option_labels: cleanDestinations.map((d) => d.name),
-      });
-    } else if (cleanDestinations.length === 0) {
-      // Planner left destination blank → group fills it in. The poll is
-      // created with zero options + write-ins enabled, so respondents
-      // can add destinations via submit_poll_write_in.
-      pollOptions.push({
-        type: 'destination',
-        title: 'Where do you want to go?',
-        option_labels: [],
-        allow_empty_options: true,
-        allow_write_ins: true,
-      });
+    if (!destinationDisabled) {
+      if (cleanDestinations.length >= 2) {
+        pollOptions.push({
+          type: 'destination',
+          title: 'Where do you want to go?',
+          option_labels: cleanDestinations.map((d) => d.name),
+        });
+      } else if (cleanDestinations.length === 0) {
+        // Planner left destination blank → group fills it in. The poll is
+        // created with zero options + write-ins enabled, so respondents
+        // can add destinations via submit_poll_write_in.
+        pollOptions.push({
+          type: 'destination',
+          title: 'Where do you want to go?',
+          option_labels: [],
+          allow_empty_options: true,
+          allow_write_ins: true,
+        });
+      }
     }
-    if (cleanDateRanges.length >= 1 && !decidedDateRange) {
+    if (!datesDisabled && cleanDateRanges.length >= 1 && !decidedDateRange) {
       // The date range(s) are treated as a *window* — the planner is
       // committing to a window, not the trip's actual dates. Expand to
       // per-day options so the survey can show a calendar where
@@ -368,7 +489,8 @@ export default function NewTripScreen() {
         option_labels: expandRangesToDayLabels(cleanDateRanges),
       });
     }
-    // Duration is always asked.
+    // Duration is asked unless the planner explicitly skipped this
+    // section.
     //   • 0 chips → seed the 5 standard defaults + enable write-ins so
     //     the group can pick from defaults or type their own.
     //   • 1 chip  → decided (writes trips.trip_duration). Write-ins
@@ -380,14 +502,16 @@ export default function NewTripScreen() {
     const durationLabels =
       cleanDurations.length === 0 ? [...DURATION_OPTIONS] : cleanDurations;
     const durationDecided = cleanDurations.length === 1;
-    pollOptions.push({
-      type: 'custom',
-      title: DURATION_POLL_TITLE,
-      option_labels: durationLabels,
-      allow_multi_select: true,
-      allow_write_ins: !durationDecided,
-    });
-    if (cleanBudgets.length >= 2) {
+    if (!durationDisabled) {
+      pollOptions.push({
+        type: 'custom',
+        title: DURATION_POLL_TITLE,
+        option_labels: durationLabels,
+        allow_multi_select: true,
+        allow_write_ins: !durationDecided,
+      });
+    }
+    if (!budgetDisabled && cleanBudgets.length >= 2) {
       pollOptions.push({
         type: 'budget',
         title: "What's your budget? (travel + lodging only)",
@@ -408,8 +532,10 @@ export default function NewTripScreen() {
       });
     }
 
-    try {
-      const trip = await createTrip.mutateAsync({
+    // Disabled sections null out their trip-level values too — otherwise
+    // syncTripFieldsToPolls would auto-create a "decided" poll on save,
+    // which would defeat the point of skipping the question.
+    const tripInput = {
         name: name.trim(),
         group_size_bucket: bucket,
         group_size_precise: precise,
@@ -418,19 +544,24 @@ export default function NewTripScreen() {
         // equal (days − 1) of that range — see decidedDateRange. In every
         // other case the planner is committing to a window and the group
         // picks days they're free via the dates poll.
-        start_date: decidedDateRange?.start ?? null,
-        end_date: decidedDateRange ? (decidedDateRange.end ?? decidedDateRange.start) : null,
-        budget_per_person: cleanBudgets.length === 1 ? firstBudget : null,
-        destination: cleanDestinations.length === 1 ? firstDest!.name : null,
-        destination_address: cleanDestinations.length === 1 ? firstDest!.address : null,
+        start_date: datesDisabled ? null : (decidedDateRange?.start ?? null),
+        end_date: datesDisabled ? null : (decidedDateRange ? (decidedDateRange.end ?? decidedDateRange.start) : null),
+        budget_per_person: !budgetDisabled && cleanBudgets.length === 1 ? firstBudget : null,
+        destination: !destinationDisabled && cleanDestinations.length === 1 ? firstDest!.name : null,
+        destination_address: !destinationDisabled && cleanDestinations.length === 1 ? firstDest!.address : null,
         // Decided duration: only set when exactly ONE duration option
         // provided. 0 means free-form (group decides), 2+ means live poll.
-        trip_duration: cleanDurations.length === 1 ? cleanDurations[0] : null,
+        trip_duration: !durationDisabled && cleanDurations.length === 1 ? cleanDurations[0] : null,
         book_by_date: bookByDate,
         custom_intro_sms: customIntroSms,
         contacts: contacts.map((c) => ({ name: c.name, phone: c.phone, email: c.email ?? null })),
         poll_options: pollOptions,
-      });
+      };
+
+    try {
+      const trip = isEditingDraft && draftId
+        ? await promoteDraft.mutateAsync({ draftId, input: tripInput })
+        : await createTrip.mutateAsync(tripInput);
       capture(Events.TRIP_CREATED, { group_size_bucket: bucket });
       log.action(Events.TRIP_CREATED, { tripId: trip.id, group_size_bucket: bucket });
       celebrate();
@@ -469,8 +600,18 @@ export default function NewTripScreen() {
         <TouchableOpacity onPress={() => router.back()} accessibilityRole="button">
           <Text className="text-base text-green">Cancel</Text>
         </TouchableOpacity>
-        <Text className="text-lg font-semibold text-[#262626]">New rally</Text>
-        <View style={{ width: 60 }} />
+        <Text className="text-lg font-semibold text-[#262626]">{isEditingDraft ? 'Edit draft' : 'New rally'}</Text>
+        <TouchableOpacity
+          onPress={handleSaveDraft}
+          disabled={saveDraft.isPending}
+          accessibilityRole="button"
+          accessibilityLabel={isEditingDraft ? 'Save changes to draft' : 'Save as draft'}
+          style={{ minWidth: 60, alignItems: 'flex-end' }}
+        >
+          <Text className="text-base font-semibold text-green" style={{ opacity: saveDraft.isPending ? 0.5 : 1 }}>
+            {saveDraft.isPending ? 'Saving…' : 'Save draft'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -515,15 +656,18 @@ export default function NewTripScreen() {
 
           {/* Destination — option list. 0 = skip, 1 = decided, 2+ = poll. */}
           <View className="gap-2" onLayout={onFieldLayout('destination')}>
-            <View className="flex-row items-baseline justify-between">
-              <Text style={FORM_LABEL_STYLE}>Where to?</Text>
-              {(() => {
-                const filled = destinations.filter((d) => d.name.trim()).length;
-                if (filled >= 2) return <Text className="text-[11px] font-semibold text-green">Will be polled</Text>;
-                if (filled === 1) return <Text className="text-[11px] font-semibold text-green">Locked in</Text>;
-                return <Text className="text-[11px] font-semibold text-[#737373]">Group decides</Text>;
-              })()}
-            </View>
+            <PollSectionHeader
+              label="Where to?"
+              disabled={destinationDisabled}
+              onToggle={() => setDestinationDisabled((v) => !v)}
+              status={computePollStatus(destinations.filter((d) => d.name.trim()).length)}
+            />
+            {destinationDisabled ? (
+              <Text style={SKIPPED_HINT_STYLE}>
+                Skipped — Rally won't ask the group where to go.
+              </Text>
+            ) : (
+            <>
             {destinations.map((d, i) => (
               <View key={i} className="flex-row items-center gap-2">
                 <View className="flex-1">
@@ -569,6 +713,8 @@ export default function NewTripScreen() {
             {errors.destination ? (
               <Text className="text-[13px] text-red-500">{errors.destination}</Text>
             ) : null}
+            </>
+            )}
           </View>
 
           {/* How long? — multi-select duration chips. Asked BEFORE dates
@@ -576,16 +722,18 @@ export default function NewTripScreen() {
               trip itself. 0 = free-form poll, 1 = decided
               (writes trips.trip_duration), 2+ = live multi-select poll. */}
           <View className="gap-2">
-            <View className="flex-row items-baseline justify-between">
-              <Text style={FORM_LABEL_STYLE}>How long?</Text>
-              {durations.length >= 2 ? (
-                <Text className="text-[11px] font-semibold text-green">Will be polled</Text>
-              ) : durations.length === 1 ? (
-                <Text className="text-[11px] font-semibold text-green">Locked in</Text>
-              ) : (
-                <Text className="text-[11px] font-semibold text-[#737373]">Group decides</Text>
-              )}
-            </View>
+            <PollSectionHeader
+              label="How long?"
+              disabled={durationDisabled}
+              onToggle={() => setDurationDisabled((v) => !v)}
+              status={computePollStatus(durations.length)}
+            />
+            {durationDisabled ? (
+              <Text style={SKIPPED_HINT_STYLE}>
+                Skipped — Rally won't ask the group about trip length.
+              </Text>
+            ) : (
+            <>
             <Text style={{ fontSize: 13, color: '#737373', marginTop: -2 }}>
               Pick durations to vote on.
             </Text>
@@ -680,6 +828,8 @@ export default function NewTripScreen() {
                 <Text className="text-[13px] font-semibold text-green">Add custom duration</Text>
               </Pressable>
             )}
+            </>
+            )}
           </View>
 
           {/* Trip dates — single picker, multi-day taps. Consecutive days
@@ -688,16 +838,18 @@ export default function NewTripScreen() {
               tap which days inside that window they're free, and the
               planner picks actual trip dates from the heat map later. */}
           <View className="gap-2" onLayout={onFieldLayout('dates')}>
-            <View className="flex-row items-baseline justify-between">
-              <Text style={FORM_LABEL_STYLE}>When?</Text>
-              {decidedDateRange ? (
-                <Text className="text-[11px] font-semibold text-green">Locked in</Text>
-              ) : dateRanges.length >= 1 ? (
-                <Text className="text-[11px] font-semibold text-green">Will be polled</Text>
-              ) : (
-                <Text className="text-[11px] font-semibold text-[#737373]">Group decides</Text>
-              )}
-            </View>
+            <PollSectionHeader
+              label="When?"
+              disabled={datesDisabled}
+              onToggle={() => setDatesDisabled((v) => !v)}
+              status={computePollStatus(dateRanges.length, Boolean(decidedDateRange))}
+            />
+            {datesDisabled ? (
+              <Text style={SKIPPED_HINT_STYLE}>
+                Skipped — Rally won't ask the group when they're free.
+              </Text>
+            ) : (
+            <>
             <Text style={{ fontSize: 13, color: '#737373', marginTop: -2 }}>
               {decidedDateRange
                 ? 'Duration matches — these dates are locked in.'
@@ -766,20 +918,24 @@ export default function NewTripScreen() {
             {errors.dates ? (
               <Text className="text-[13px] text-red-500">{errors.dates}</Text>
             ) : null}
+            </>
+            )}
           </View>
 
           {/* Spend per person — multi-select. 0 = skip, 1 = decided, 2+ = poll. */}
           <View className="gap-2" onLayout={onFieldLayout('budget')}>
-            <View className="flex-row items-baseline justify-between">
-              <Text style={FORM_LABEL_STYLE}>Spend per person?</Text>
-              {budgets.length >= 2 ? (
-                <Text className="text-[11px] font-semibold text-green">Will be polled</Text>
-              ) : budgets.length === 1 ? (
-                <Text className="text-[11px] font-semibold text-green">Locked in</Text>
-              ) : (
-                <Text className="text-[11px] font-semibold text-[#737373]">Group decides</Text>
-              )}
-            </View>
+            <PollSectionHeader
+              label="Spend per person?"
+              disabled={budgetDisabled}
+              onToggle={() => setBudgetDisabled((v) => !v)}
+              status={computePollStatus(budgets.length)}
+            />
+            {budgetDisabled ? (
+              <Text style={SKIPPED_HINT_STYLE}>
+                Skipped — Rally won't ask the group about budget.
+              </Text>
+            ) : (
+            <>
             <Text style={{ fontSize: 13, color: '#737373', marginTop: -2 }}>Travel + lodging only.</Text>
             <View className="flex-row flex-wrap gap-2">
               {BUDGET_OPTIONS.map((opt) => {
@@ -875,6 +1031,8 @@ export default function NewTripScreen() {
             {errors.budget ? (
               <Text className="text-[13px] text-red-500">{errors.budget}</Text>
             ) : null}
+            </>
+            )}
           </View>
 
           {/* Custom polls — compact "Anything else for the group?" zero-state
@@ -927,7 +1085,7 @@ export default function NewTripScreen() {
           <LiveSmsPreview
             plannerFirstName={plannerFirstName}
             destination={
-              destinations.filter((d) => d.name.trim()).length === 1
+              !destinationDisabled && destinations.filter((d) => d.name.trim()).length === 1
                 ? destinations.find((d) => d.name.trim())!.name.trim()
                 : null
             }
@@ -936,8 +1094,12 @@ export default function NewTripScreen() {
             onChange={setCustomIntroSms}
           />
 
-          <Button onPress={handleCreate} loading={createTrip.isPending} fullWidth>
-            Create trip
+          <Button
+            onPress={handleCreate}
+            loading={createTrip.isPending || promoteDraft.isPending}
+            fullWidth
+          >
+            {isEditingDraft ? 'Send invites' : 'Create trip'}
           </Button>
         </View>
       </ScrollView>
