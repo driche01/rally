@@ -4,7 +4,6 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
-import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Text, View } from 'react-native';
@@ -87,6 +86,22 @@ export default function AccountScreen() {
   const [avatarBusy, setAvatarBusy] = useState(false);
 
   async function pickAndUpload(source: 'library' | 'camera') {
+    // Lazy-require expo-image-picker so older binaries (TestFlight builds /
+    // dev clients without the native module compiled in) don't crash on
+    // mount of this screen. The picker is only actually invoked when the
+    // user taps the avatar, so we can surface a clear "update the app"
+    // message at that moment instead of an uncaught native-module error.
+    let ImagePicker: typeof import('expo-image-picker');
+    try {
+      ImagePicker = require('expo-image-picker') as typeof import('expo-image-picker');
+    } catch {
+      Alert.alert(
+        'Update Rally to upload a photo',
+        'Profile photos require the latest app build. Update from TestFlight (or wait for the next release) and try again.',
+      );
+      return;
+    }
+
     try {
       const perm = source === 'camera'
         ? await ImagePicker.requestCameraPermissionsAsync()
