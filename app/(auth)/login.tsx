@@ -35,6 +35,7 @@ import { BrandMark, Button, Input } from '@/components/ui';
 import { useGoogleSignIn, useSignIn } from '@/hooks/useAuth';
 import { log } from '@/lib/logger';
 import { normalizePhone } from '@/lib/phone';
+import { supabase } from '@/lib/supabase';
 import { T, headlineFont } from '@/theme';
 
 type Mode = 'email' | 'phone';
@@ -100,12 +101,29 @@ export default function LoginScreen() {
   async function handleEmailLogin() {
     if (!validateEmail()) return;
     setLoading(true);
+    const cleanEmail = email.trim().toLowerCase();
     try {
-      await signIn(email.trim().toLowerCase(), password);
+      await signIn(cleanEmail, password);
       log.action('signed_in', { method: 'email' });
       router.replace('/(app)/(tabs)');
     } catch (err) {
       log.error('sign_in_failed', err, { method: 'email' });
+      // signInWithPassword returns the same generic error for both
+      // wrong-password and no-such-account. Probe via account_exists_for_email
+      // to distinguish: if no account exists, route the user to signup
+      // with the email pre-filled instead of dead-ending on a generic alert.
+      const { data: exists } = await supabase.rpc('account_exists_for_email', {
+        p_email: cleanEmail,
+      });
+      if (exists === false) {
+        router.replace({
+          pathname: '/(auth)/signup' as Parameters<typeof router.replace>[0] extends string
+            ? string
+            : never,
+          params: { email: cleanEmail },
+        } as unknown as Parameters<typeof router.replace>[0]);
+        return;
+      }
       Alert.alert('Login failed', 'Incorrect email or password.');
     } finally {
       setLoading(false);
@@ -130,14 +148,29 @@ export default function LoginScreen() {
           body: JSON.stringify({ phone: normalized }),
         },
       );
-      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean; error?: string; sent?: boolean; registered?: boolean;
+      };
       if (!res.ok || !data.ok) {
         if (data.error === 'rate_limited') {
           Alert.alert('Too many requests', 'Try again in a few minutes.');
-        } else {
-          // Don't leak whether the phone is on file. Always pretend it sent.
-          // The OTP screen will surface a generic error if verification fails.
+          return;
         }
+        Alert.alert('Could not send code', 'Try again in a moment.');
+        return;
+      }
+      // Edge fn explicitly tells us this phone has no profile — route to
+      // signup with the phone pre-filled instead of pushing the user to
+      // a code-entry screen waiting on an SMS that won't arrive.
+      if (data.registered === false) {
+        log.action('phone_login_no_account');
+        router.replace({
+          pathname: '/(auth)/signup' as Parameters<typeof router.replace>[0] extends string
+            ? string
+            : never,
+          params: { phone: normalized },
+        } as unknown as Parameters<typeof router.replace>[0]);
+        return;
       }
       log.action('phone_login_code_requested');
       router.push({

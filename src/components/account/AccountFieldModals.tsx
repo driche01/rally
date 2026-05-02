@@ -141,6 +141,12 @@ export function EditNameModal({
           .from('profiles')
           .update({ name: cleanFirst, last_name: cleanLast || null })
           .eq('id', user.id);
+        // Propagate the new full name to users.display_name and every
+        // trip_session_participants row tied to this account so the
+        // planner row on existing trips re-renders with the right
+        // name. Best-effort — a failure here just means the SMS-side
+        // identity stays stale until the next session-create.
+        await supabase.rpc('app_sync_my_display_name');
       }
       onSaved();
       onClose();

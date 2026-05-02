@@ -236,9 +236,17 @@ export default function AccountScreen() {
           Authorization: `Bearer ${token}`,
         },
       });
-      const json = (await res.json().catch(() => null)) as { ok?: boolean; reason?: string } | null;
+      const json = (await res.json().catch(() => null)) as {
+        ok?: boolean; reason?: string; detail?: string;
+      } | null;
       if (!json?.ok) {
-        Alert.alert('Could not delete', json?.reason ?? 'Try again.');
+        // Surface the SQL detail when the edge function passes one back —
+        // without it, "cleanup_failed" alone gives no clue which step
+        // tripped a constraint, leaving us guessing at root cause.
+        const message = json?.detail
+          ? `${json.reason ?? 'Error'} — ${json.detail}`
+          : json?.reason ?? 'Try again.';
+        Alert.alert('Could not delete', message);
         return;
       }
       // Account deleted server-side. Sign out locally to clear cached state

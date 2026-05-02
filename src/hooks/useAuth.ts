@@ -128,13 +128,36 @@ export function useSignOut() {
   };
 }
 
+/**
+ * Trigger the Google OAuth flow.
+ *
+ * `withCalendarScope` opts in to the additional `calendar.events` scope
+ * required for the itinerary → Google Calendar export. Default is off so
+ * regular sign-up / sign-in only asks for basic profile + email — adding
+ * a sensitive scope to every auth request makes Google reject the whole
+ * request when the OAuth consent screen hasn't declared that scope, which
+ * would block sign-in entirely. The export flow opts in explicitly when
+ * it actually needs Calendar access.
+ */
 export function useGoogleSignIn() {
-  return async () => {
+  return async (opts: { withCalendarScope?: boolean } = {}) => {
     const redirectTo = makeRedirectUri({ scheme: 'rally', path: 'auth/callback' });
+
+    const oauthOptions: Parameters<typeof supabase.auth.signInWithOAuth>[0]['options'] = {
+      redirectTo,
+      skipBrowserRedirect: true,
+    };
+    if (opts.withCalendarScope) {
+      oauthOptions.scopes = 'https://www.googleapis.com/auth/calendar.events';
+      // access_type=offline + prompt=consent ensures Google issues a
+      // refresh token (Supabase exposes it as provider_refresh_token)
+      // for future server-side refresh of the Calendar access token.
+      oauthOptions.queryParams = { access_type: 'offline', prompt: 'consent' };
+    }
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo, skipBrowserRedirect: true },
+      options: oauthOptions,
     });
     if (error) throw error;
     if (!data.url) throw new Error('No OAuth URL returned');

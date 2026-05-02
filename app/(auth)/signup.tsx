@@ -9,7 +9,7 @@
  * staggered fade-in matching the welcome and login screens.
  */
 import { Ionicons } from '@expo/vector-icons';
-import { Link, useRouter } from 'expo-router';
+import { Link, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   Alert,
@@ -52,12 +52,18 @@ export default function SignupScreen() {
   const signUp = useSignUp();
   const googleSignIn = useGoogleSignIn();
 
+  // Pre-fill from route params — set when the login screen redirects
+  // someone whose email/phone has no account. Saves them re-typing.
+  const params = useLocalSearchParams<{ email?: string; phone?: string }>();
+  const prefillEmail = typeof params.email === 'string' ? params.email : '';
+  const prefillPhone = typeof params.phone === 'string' ? params.phone : '';
+
   const [googleLoading, setGoogleLoading] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState(prefillEmail);
+  const [phone, setPhone] = useState(prefillPhone);
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{
