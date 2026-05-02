@@ -1,5 +1,6 @@
 import '../global.css';
 import { QueryClientProvider } from '@tanstack/react-query';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -17,7 +18,7 @@ import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
-import { queryClient } from '@/lib/queryClient';
+import { queryClient, queryPersister, QUERY_PERSIST_MAX_AGE } from '@/lib/queryClient';
 import { initAnalytics } from '@/lib/analytics';
 import { initSentry, setUser, clearUser } from '@/lib/sentry';
 import { useAuthListener } from '@/hooks/useAuth';
@@ -89,11 +90,41 @@ export default function RootLayout() {
           provider measures them. */}
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <ErrorBoundary>
-          <QueryClientProvider client={queryClient}>
-            <AppInitializer>
-              <Stack screenOptions={{ headerShown: false }} />
-            </AppInitializer>
-          </QueryClientProvider>
+          {/* On web, plain QueryClientProvider — AsyncStorage shims to
+              localStorage there and the web surfaces (respond, landing)
+              don't benefit from cross-session persistence anyway. On
+              native, hydrate the in-memory cache from AsyncStorage so a
+              cold start renders cached trip / itinerary / lodging data
+              without network round-trips. */}
+          {Platform.OS === 'web' ? (
+            <QueryClientProvider client={queryClient}>
+              <AppInitializer>
+                <Stack screenOptions={{ headerShown: false }} />
+              </AppInitializer>
+            </QueryClientProvider>
+          ) : (
+            <PersistQueryClientProvider
+              client={queryClient}
+              persistOptions={{
+                persister: queryPersister,
+                maxAge: QUERY_PERSIST_MAX_AGE,
+                // Bump this when the cache shape changes incompatibly
+                // (e.g. signature format updates) so old persisted state
+                // is discarded on launch instead of rehydrating into a
+                // newer schema. Keep in sync with `queryPersister.key`.
+                buster: 'rally-rq-cache-v1',
+                dehydrateOptions: {
+                  // Don't persist mutation state — only completed query data.
+                  shouldDehydrateMutation: () => false,
+                  shouldDehydrateQuery: (q) => q.state.status === 'success',
+                },
+              }}
+            >
+              <AppInitializer>
+                <Stack screenOptions={{ headerShown: false }} />
+              </AppInitializer>
+            </PersistQueryClientProvider>
+          )}
         </ErrorBoundary>
       </SafeAreaProvider>
     </GestureHandlerRootView>
