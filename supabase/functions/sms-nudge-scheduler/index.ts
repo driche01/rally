@@ -302,14 +302,16 @@ function buildSmsBody(
     const customSms = trip.custom_intro_sms?.trim();
     // The default `initialOutreachSms` already weaves recipient name in
     // server-side. The custom override is whatever the planner typed —
-    // resolve all four supported placeholders so literal tokens never
-    // go out as SMS body text.
+    // resolve all supported placeholders (including the TKTK survey-link
+    // placeholder shown in LiveSmsPreview) so literal tokens never go
+    // out as SMS body text.
     if (customSms) {
       return personalizeBody(customSms, {
         recipientName: participant.display_name,
         plannerName,
         destination: trip.destination,
         tripName: trip.name,
+        surveyUrl: opts.surveyUrl,
       });
     }
     return initialOutreachSms(opts);

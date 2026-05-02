@@ -8,6 +8,11 @@
  *   [Planner]     → planner's first name
  *   [Destination] → trip destination
  *   [Trip]        → trip name (falls back to destination, then "the trip")
+ *   TKTK          → trip survey link (the same literal the planner sees
+ *                   in LiveSmsPreview's default body — substituted at
+ *                   send time so a custom intro that keeps the placeholder
+ *                   still goes out with a working link). Only fires when
+ *                   the caller supplies `surveyUrl`.
  *
  * Each placeholder falls back gracefully when the value isn't on file
  * so messages never go out with a literal "[Name]" or "undefined".
@@ -24,6 +29,11 @@ const RECIPIENT_PLACEHOLDER = /\[(?:Name|Their name)\]/gi;
 const PLANNER_PLACEHOLDER = /\[Planner\]/gi;
 const DESTINATION_PLACEHOLDER = /\[Destination\]/gi;
 const TRIP_PLACEHOLDER = /\[Trip\]/gi;
+// Word boundaries on both sides so a participant whose name happens to
+// contain "TKTK" (extremely unlikely, but cheap to guard) doesn't trip
+// the swap. Case-sensitive — the preview shows uppercase so that's the
+// canonical form.
+const SURVEY_PLACEHOLDER = /\bTKTK\b/g;
 
 function firstName(name: string | null | undefined): string | null {
   if (!name) return null;
@@ -37,6 +47,8 @@ export interface PersonalizeContext {
   plannerName?: string | null;
   destination?: string | null;
   tripName?: string | null;
+  /** Survey link substituted in for the literal `TKTK` placeholder. */
+  surveyUrl?: string | null;
 }
 
 /**
@@ -60,10 +72,16 @@ export function personalizeBody(
   const trip = (ctx.tripName ?? '').trim()
     || (ctx.destination ?? '').trim()
     || 'the trip';
+  const survey = (ctx.surveyUrl ?? '').trim();
 
-  return body
+  let out = body
     .replace(RECIPIENT_PLACEHOLDER, recipient)
     .replace(PLANNER_PLACEHOLDER, planner)
     .replace(DESTINATION_PLACEHOLDER, destination)
     .replace(TRIP_PLACEHOLDER, trip);
+  // Only swap TKTK when we actually have a URL — otherwise leave the
+  // literal so a misconfigured caller is obvious in the outbound body
+  // rather than silently dropping the link.
+  if (survey) out = out.replace(SURVEY_PLACEHOLDER, survey);
+  return out;
 }

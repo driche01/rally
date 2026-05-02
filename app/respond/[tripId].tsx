@@ -36,6 +36,7 @@ import {
   getExistingResponses,
   getExistingNumericResponses,
   submitPollResponses,
+  setRespondentRsvp,
   clearTripSession,
   sendSurveyConfirmationSms,
   optOutFromTrip,
@@ -1536,6 +1537,18 @@ export default function RespondScreen() {
         // per poll per respondent.
         await submitPollResponses(poll.id, respondent.id, optionIds, numeric);
       }
+      // Submitting through the yes-path is the canonical signal that the
+      // respondent is in. Without this write, anyone who previously
+      // declined (rsvp='out') would keep showing as DECLINED on the
+      // planner's roster even after re-entering the survey and answering
+      // polls.
+      await setRespondentRsvp(respondent.id, 'in');
+      // Always overwrite the note (even with null) so the latest text on
+      // the rsvp screen wins. Without this, a stale decline reason from
+      // a prior session would persist on the planner's roster after a
+      // change of mind. The handleRsvpYes path saves notes eagerly for
+      // the bail-before-polls case, but never overwrites with empty.
+      await saveRespondentNote(respondent.id, note.trim() || null);
       capture(Events.RESPONDENT_SUBMITTED, { trip_id: trip.id, poll_count: polls.length });
       log.action(Events.RESPONDENT_SUBMITTED, { trip_id: trip.id, poll_count: polls.length });
 

@@ -506,6 +506,23 @@ export async function saveRespondentRsvpAndPreferences(
 }
 
 /**
+ * Update only the `rsvp` column. Used by the survey's poll-submit path
+ * to flip a previously-declined respondent back to 'in' when they come
+ * back to the link and answer polls — without clobbering preferences or
+ * notes the way `saveRespondentRsvpAndPreferences` does.
+ */
+export async function setRespondentRsvp(
+  respondentId: string,
+  rsvp: 'in' | 'out',
+): Promise<void> {
+  const { error } = await supabase
+    .from('respondents')
+    .update({ rsvp })
+    .eq('id', respondentId);
+  if (error) throw error;
+}
+
+/**
  * Mark a respondent as opted-out (rsvp='out') and fire the post-submit
  * confirmation SMS — used by the survey screen when someone answers "no"
  * to the "can you make this trip?" question. Does NOT submit poll

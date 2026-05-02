@@ -143,3 +143,55 @@ Deno.test('personalizeBody — does not mangle similar-but-unsupported tokens', 
     '[Names] [Plan] [Tripadvisor]',
   );
 });
+
+// ─── TKTK survey-link placeholder ─────────────────────────────────────────
+
+Deno.test('personalizeBody — TKTK swapped for surveyUrl when provided', () => {
+  assertEquals(
+    personalizeBody('Quick survey: TKTK', {
+      surveyUrl: 'https://rallysurveys.netlify.app/respond/abc123',
+    }),
+    'Quick survey: https://rallysurveys.netlify.app/respond/abc123',
+  );
+});
+
+Deno.test('personalizeBody — multiple TKTKs all substituted', () => {
+  assertEquals(
+    personalizeBody('Link: TKTK or TKTK', { surveyUrl: 'https://x' }),
+    'Link: https://x or https://x',
+  );
+});
+
+Deno.test('personalizeBody — TKTK left literal when no surveyUrl supplied', () => {
+  // Surfacing the broken link in the outbound body is loud — better than
+  // silently dropping it and shipping "Link: " with nothing after.
+  assertEquals(
+    personalizeBody('Link: TKTK', { recipientName: 'Alex' }),
+    'Link: TKTK',
+  );
+});
+
+Deno.test('personalizeBody — TKTK swap is case-sensitive (lowercase passes through)', () => {
+  assertEquals(
+    personalizeBody('try tktk', { surveyUrl: 'https://x' }),
+    'try tktk',
+  );
+});
+
+Deno.test('personalizeBody — TKTK requires word boundaries (substrings ignored)', () => {
+  assertEquals(
+    personalizeBody('TKTKK and XTKTK', { surveyUrl: 'https://x' }),
+    'TKTKK and XTKTK',
+  );
+});
+
+Deno.test('personalizeBody — TKTK runs alongside other tokens', () => {
+  assertEquals(
+    personalizeBody('Hey [Name] — [Planner] needs your input: TKTK', {
+      recipientName: 'Alex',
+      plannerName: 'Maya',
+      surveyUrl: 'https://x',
+    }),
+    'Hey Alex — Maya needs your input: https://x',
+  );
+});
