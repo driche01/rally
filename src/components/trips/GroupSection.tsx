@@ -27,15 +27,17 @@ import {
   View,
 } from 'react-native';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { Avatar } from '@/components/ui';
 import { usePermissions } from '@/hooks/usePermissions';
 import {
+  respondentKeys,
   useRespondents,
   useSetPlannerForPhone,
 } from '@/hooks/useRespondents';
 import {
+  tripSessionKeys,
   useTripSession,
   useSessionParticipants,
 } from '@/hooks/useTripSession';
@@ -96,6 +98,24 @@ export function GroupSection({ tripId }: { tripId: string }) {
   const removeMember = useRemoveTripMember(tripId, tripSession?.id);
   const setPlanner = useSetPlannerForPhone(tripId, tripSession?.id);
   const { canDesignatePlanners } = usePermissions(tripId);
+
+  // While the planner is on this screen, poll the three roster-driving
+  // queries every 5s so a freshly-submitted respondent flips from
+  // "Polls" empty → checked without a manual refresh. Cheap queries; the
+  // interval clears on unmount.
+  const qc = useQueryClient();
+  const sessionId = tripSession?.id;
+  useEffect(() => {
+    if (!tripId) return;
+    const id = setInterval(() => {
+      qc.invalidateQueries({ queryKey: respondentKeys.forTrip(tripId) });
+      qc.invalidateQueries({ queryKey: ['responded_respondent_ids', tripId] });
+      if (sessionId) {
+        qc.invalidateQueries({ queryKey: tripSessionKeys.participants(sessionId) });
+      }
+    }, 5000);
+    return () => clearInterval(id);
+  }, [qc, tripId, sessionId]);
 
   // The trip creator's SMS-side identity is stored on the session as
   // planner_user_id (= users.id, not auth.uid). Matching participants by
