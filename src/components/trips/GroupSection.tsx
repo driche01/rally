@@ -166,13 +166,31 @@ export function GroupSection({ tripId }: { tripId: string }) {
 
   function handleSubmitAdd(opts: { firstName: string; lastName: string; phone: string }) {
     const composed = [opts.firstName.trim(), opts.lastName.trim()].filter(Boolean).join(' ');
+    const normInput = normalizePhone(opts.phone);
+
+    // Block re-adds of a phone that's already an active member of this
+    // trip — keeps the planner from accidentally re-firing the welcome
+    // SMS to someone who's already in the thread. We only block when
+    // attendance === 'in'; declined / opted-out members fall through to
+    // the priorOptOut re-add prompt below.
+    const existingActive = members.find((m) => {
+      const norm = normalizePhone(m.phone) ?? m.phone;
+      return norm === normInput && m.attendance === 'in';
+    });
+    if (existingActive) {
+      const who = existingActive.name?.trim() || existingActive.phone;
+      Alert.alert(
+        'Already on the trip',
+        `${who} is already on this trip — no need to add them again.`,
+      );
+      return;
+    }
 
     // Phase 4.6 — warn-on-re-add. If this phone already matches a participant
     // who's been opted out (either via the survey rsvp='out' path which flips
     // is_attending=false, or via global STOP), confirm before re-enabling
     // them. The mutation itself flips is_attending back to true server-side,
     // so this is purely a "did you mean to do this?" prompt.
-    const normInput = normalizePhone(opts.phone);
     const priorOptOut = participants.find((p: TripSessionParticipant) => {
       const norm = normalizePhone(p.phone) ?? p.phone;
       if (norm !== normInput) return false;

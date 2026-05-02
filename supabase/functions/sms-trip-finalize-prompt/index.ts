@@ -12,9 +12,10 @@
  * trips.finalize_prompt_sent_at, stamped server-side after the SMS goes
  * out (migration 083).
  *
- * Body links the planner to a universal URL `/t/<tripId>` which routes
- * into the in-app trip dashboard (app/t/[tripId].tsx redirects when the
- * planner is signed in).
+ * Body links the planner to `rally://t/<tripId>` — the app's custom-scheme
+ * deep link, which iMessage autolinks and which always launches the app
+ * directly (no Universal-Link / AASA hop). Once open, app/t/[tripId].tsx
+ * redirects the signed-in planner into the trip dashboard.
  *
  *   POST /sms-trip-finalize-prompt
  *   { trip_id }
@@ -33,8 +34,7 @@ const CORS_HEADERS = {
 };
 
 function tripUrl(tripId: string): string {
-  const base = Deno.env.get('PUBLIC_SURVEY_BASE_URL') ?? 'https://rallysurveys.netlify.app';
-  return `${base}/t/${tripId}`;
+  return `rally://t/${tripId}`;
 }
 
 Deno.serve(async (req: Request) => {

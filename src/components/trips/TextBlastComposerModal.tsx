@@ -4,8 +4,8 @@
  * the trip-hero "Text blast" pill can reuse the same flow.
  *
  * Self-contained: holds its own body state + mutation lifecycle, fires
- * a confirm-alert before sending, surfaces a brief success Alert on
- * delivery. The owner only wires up `visible` + `onClose`.
+ * a confirm-alert before sending. On success, fires `onSent({sent,failed})`
+ * so the parent can render a transient toast; errors stay as Alert.alert.
  */
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
@@ -31,9 +31,12 @@ interface Props {
   /** Active+attending head-count, drives the "to N people" copy. */
   recipientCount: number;
   onClose: () => void;
+  /** Fired after a successful send. Parent shows a transient toast;
+   *  errors stay as Alert.alert so they don't auto-dismiss. */
+  onSent?: (result: { sent: number; failed: number }) => void;
 }
 
-export function TextBlastComposerModal({ visible, sessionId, recipientCount, onClose }: Props) {
+export function TextBlastComposerModal({ visible, sessionId, recipientCount, onClose, onSent }: Props) {
   const [body, setBody] = useState('');
   const broadcast = useBroadcastToSession(sessionId);
 
@@ -66,10 +69,7 @@ export function TextBlastComposerModal({ visible, sessionId, recipientCount, onC
       return;
     }
     onClose();
-    Alert.alert(
-      'Sent',
-      `Text blast delivered to ${result.sent ?? 0} ${result.sent === 1 ? 'person' : 'people'}.`,
-    );
+    onSent?.({ sent: result.sent ?? 0, failed: result.failed ?? 0 });
   }
 
   const sendDisabled = !body.trim() || broadcast.isPending;
@@ -112,7 +112,12 @@ export function TextBlastComposerModal({ visible, sessionId, recipientCount, onC
             maxLength={1000}
             autoFocus
           />
-          <Text style={styles.charCount}>{body.length} / 1000</Text>
+          <View style={styles.footerRow}>
+            <Text style={styles.placeholderHint}>
+              Use [Name], [Planner], [Destination], or [Trip] — each invitee gets their own values filled in.
+            </Text>
+            <Text style={styles.charCount}>{body.length} / 1000</Text>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -135,5 +140,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, color: '#163026',
     minHeight: 160, textAlignVertical: 'top',
   },
-  charCount: { fontSize: 12, color: '#999', textAlign: 'right' },
+  footerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  placeholderHint: { flex: 1, fontSize: 11, color: '#737373', lineHeight: 15 },
+  charCount: { fontSize: 11, color: '#888' },
 });

@@ -16,6 +16,7 @@ import { FirstTripOnboardingModal } from '@/components/trips/FirstTripOnboarding
 import { useTripSession, useSessionParticipants } from '@/hooks/useTripSession';
 import { useTripAuditEvents } from '@/hooks/useTripAuditEvents';
 import { TextBlastComposerModal } from '@/components/trips/TextBlastComposerModal';
+import { BroadcastSentToast, type BroadcastSentState } from '@/components/trips/BroadcastSentToast';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePolls, pollKeys } from '@/hooks/usePolls';
 import { useRespondents, respondentKeys } from '@/hooks/useRespondents';
@@ -158,11 +159,14 @@ export default function TripDashboard() {
   const { data: expenses = [] } = useExpenses(id);
   const [linkCopied, setLinkCopied] = useState(false);
   const [textBlastVisible, setTextBlastVisible] = useState(false);
+  const [broadcastSent, setBroadcastSent] = useState<BroadcastSentState | null>(null);
 
   // Active+attending recipient count drives the "Text blast · N" pill
-  // visibility and the composer's "to N people" copy.
+  // visibility and the composer's "to N people" copy. Excludes the
+  // planner — they're the sender, and sms-broadcast filters them out
+  // server-side via excludeUserId, so the UI count must match.
   const textBlastRecipientCount = sessionParticipants.filter(
-    (p) => p.status === 'active' && p.is_attending,
+    (p) => p.status === 'active' && p.is_attending && !p.is_planner,
   ).length;
   const showTextBlast = canDesignatePlanners && Boolean(tripSession?.id) && textBlastRecipientCount > 0;
 
@@ -578,6 +582,11 @@ const stage = trip ? getTripStage(trip) : 'deciding';
         sessionId={tripSession?.id}
         recipientCount={textBlastRecipientCount}
         onClose={() => setTextBlastVisible(false)}
+        onSent={setBroadcastSent}
+      />
+      <BroadcastSentToast
+        state={broadcastSent}
+        onDismiss={() => setBroadcastSent(null)}
       />
     </View>
 

@@ -14,7 +14,11 @@
  *
  * Body:
  *   "Heads up — only 2 of 6 have responded to your Cancun survey so far.
- *    Want to nudge them yourself? rally.../t/<tripId>"
+ *    Want to nudge them yourself? rally://t/<tripId>"
+ *
+ * The trip link uses the app's custom URL scheme so iMessage launches the
+ * Rally app directly (the universal-link form was unreliable — iOS would
+ * sometimes route to Safari instead of the app).
  *
  * Deploy: supabase functions deploy sms-stuck-trip-alert --no-verify-jwt
  */
@@ -29,8 +33,7 @@ const CORS_HEADERS = {
 };
 
 function tripUrl(tripId: string): string {
-  const base = Deno.env.get('PUBLIC_SURVEY_BASE_URL') ?? 'https://rallysurveys.netlify.app';
-  return `${base}/t/${tripId}`;
+  return `rally://t/${tripId}`;
 }
 
 Deno.serve(async (req: Request) => {
