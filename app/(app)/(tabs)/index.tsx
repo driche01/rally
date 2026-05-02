@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, FlatList, ImageBackground, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
@@ -186,10 +186,25 @@ function TripCard({
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const qc = useQueryClient();
   const { data: trips, isLoading, refetch } = useTripsWithRespondentCounts();
   const deleteTrip = useDeleteTrip();
   const updateTrip = useUpdateTrip();
   const currentUserId = useAuthStore((s) => s.user?.id ?? null);
+
+  // Eagerly warm every visible trip's dashboard caches as soon as the list
+  // resolves, so opening any trip skips the cards' loading flash entirely.
+  // Per-trip-id ref so we only warm each trip once per list mount; pull-to-
+  // refresh resets the list and re-warms naturally on the next render.
+  const warmedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!trips) return;
+    for (const t of trips) {
+      if (warmedRef.current.has(t.id)) continue;
+      warmedRef.current.add(t.id);
+      void prefetchTripDetail(qc, t.id);
+    }
+  }, [trips, qc]);
 
   function handleDelete(id: string) {
     deleteTrip.mutate(id, {
