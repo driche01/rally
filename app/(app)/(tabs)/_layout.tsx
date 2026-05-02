@@ -50,7 +50,10 @@ function AppTabBar({ state, navigation }: BottomTabBarProps) {
       <Pressable
         key={route.key}
         onPress={() => navigation.navigate(route.name)}
-        style={{ flex: 1, alignItems: 'center', paddingVertical: 8 }}
+        // justifyContent: center vertically centers the icon at the row's
+        // vertical midpoint. The label hangs off via `position: absolute`
+        // so it doesn't pull the icon centroid upward.
+        style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
         accessibilityRole="tab"
         accessibilityState={{ selected: isFocused }}
         accessibilityLabel={tab.label}
@@ -62,7 +65,8 @@ function AppTabBar({ state, navigation }: BottomTabBarProps) {
         />
         <Text
           style={{
-            marginTop: 2,
+            position: 'absolute',
+            bottom: 4,
             fontSize: 10,
             fontWeight: isFocused ? '600' : '400',
             color: isFocused ? '#0F3F2E' : '#9DA8A0',
@@ -76,11 +80,15 @@ function AppTabBar({ state, navigation }: BottomTabBarProps) {
 
   return (
     <View style={{ paddingBottom: insets.bottom, borderTopWidth: 1, borderTopColor: '#E7DDCF', backgroundColor: '#FFFAF2' }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      {/* Explicit row height + justifyContent: center on each cell puts
+          every icon (and the + button) at y = ROW_HEIGHT/2 — the row's
+          vertical center. Tab labels sit absolutely below the icons via
+          `bottom: 4` and don't affect the icon centering math. */}
+      <View style={{ flexDirection: 'row', height: 60 }}>
         {leftRoutes.map((route, i) => renderTab(route, i))}
 
-        {/* Center + button */}
-        <View style={{ flex: 1, alignItems: 'center', paddingVertical: 8 }}>
+        {/* Center + button — vertically centered the same way. */}
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <Pressable
             onPress={() => router.push('/(app)/trips/new')}
             style={{
@@ -96,7 +104,6 @@ function AppTabBar({ state, navigation }: BottomTabBarProps) {
           >
             <Ionicons name="add" size={22} color="white" />
           </Pressable>
-          <Text style={{ marginTop: 2, fontSize: 10, color: '#9DA8A0' }}> </Text>
         </View>
 
         {rightRoutes.map((route, i) => renderTab(route, mid + i))}

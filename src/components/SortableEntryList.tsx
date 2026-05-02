@@ -11,13 +11,12 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 
-export type CardKey = 'activity' | 'itinerary' | 'lodging' | 'travel' | 'expenses';
+export type CardKey = 'itinerary' | 'lodging' | 'travel' | 'expenses';
 
 export const ALL_CARD_KEYS: CardKey[] = [
-  'activity',
   'itinerary',
-  'lodging',
   'travel',
+  'lodging',
   'expenses',
 ];
 
@@ -185,7 +184,7 @@ export function SortableEntryList({ tripId, renderCard, reorderEnabled = true }:
       .then((val) => {
         if (!val) return;
         const saved = JSON.parse(val) as CardKey[];
-        if (saved.length !== 6 || !ALL_CARD_KEYS.every((k) => saved.includes(k))) return;
+        if (saved.length !== ALL_CARD_KEYS.length || !ALL_CARD_KEYS.every((k) => saved.includes(k))) return;
         // Apply saved order: map visualSlot → cardIdx → SharedValues
         const svTop = [top0, top1, top2, top3, top4, top5];
         const svSlot = [slot0, slot1, slot2, slot3, slot4, slot5];
@@ -285,7 +284,7 @@ export function SortableEntryList({ tripId, renderCard, reorderEnabled = true }:
         </View>
       )}
 
-      <View style={{ height: 6 * STEP - GAP }}>
+      <View style={{ height: ALL_CARD_KEYS.length * STEP - GAP }}>
         {ALL_CARD_KEYS.map((key, idx) => {
           const topSVs = [top0, top1, top2, top3, top4, top5];
           const scaleSVs = [scale0, scale1, scale2, scale3, scale4, scale5];

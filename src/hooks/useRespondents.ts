@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getRespondentsForTrip,
+  getRespondentsWithTravelInfo,
   getOrCreateRespondent,
   createRespondentManually,
   deleteRespondent,
   submitPollResponses,
-  setRespondentPlanner,
+  setPlannerForPhone,
 } from '../lib/api/respondents';
+import { tripSessionKeys } from './useTripSession';
 
 export const respondentKeys = {
   forTrip: (tripId: string) => ['respondents', tripId] as const,
@@ -20,12 +22,32 @@ export function useRespondents(tripId: string) {
   });
 }
 
-export function useSetRespondentPlanner(tripId: string) {
+export function useRespondentsWithTravelInfo(tripId: string) {
+  return useQuery({
+    queryKey: ['respondents', 'with-travel-info', tripId],
+    queryFn: () => getRespondentsWithTravelInfo(tripId),
+    enabled: Boolean(tripId),
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * Toggle planner status for a trip member by phone.
+ *
+ * Wraps the `set_planner_for_phone` RPC which keeps respondents and
+ * trip_session_participants in sync. Invalidates both query caches so
+ * the UI reflects the new state immediately. Pass `sessionId` so the
+ * participant cache (keyed by session) gets refreshed too.
+ */
+export function useSetPlannerForPhone(tripId: string, sessionId: string | undefined) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ respondentId, isPlanner }: { respondentId: string; isPlanner: boolean }) =>
-      setRespondentPlanner(respondentId, isPlanner),
-    onSuccess: () => qc.invalidateQueries({ queryKey: respondentKeys.forTrip(tripId) }),
+    mutationFn: ({ phone, isPlanner }: { phone: string; isPlanner: boolean }) =>
+      setPlannerForPhone(tripId, phone, isPlanner),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: respondentKeys.forTrip(tripId) });
+      if (sessionId) qc.invalidateQueries({ queryKey: tripSessionKeys.participants(sessionId) });
+    },
   });
 }
 

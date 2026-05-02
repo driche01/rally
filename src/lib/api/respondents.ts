@@ -313,6 +313,59 @@ export async function getRespondentsForTrip(tripId: string): Promise<Respondent[
   return data ?? [];
 }
 
+/**
+ * Compact respondent list joined with each member's `home_airport` from
+ * `traveler_profiles`. Used by the per-member travel suggestions section so
+ * the planner can see at a glance who has an airport saved (eligible for
+ * "Suggest route") and who hasn't filled in their profile yet.
+ */
+export interface RespondentWithTravelInfo {
+  id: string;
+  name: string;
+  phone: string | null;
+  home_airport: string | null;
+}
+
+export async function getRespondentsWithTravelInfo(
+  tripId: string,
+): Promise<RespondentWithTravelInfo[]> {
+  const { data: respondents, error } = await supabase
+    .from('respondents')
+    .select('id, name, phone')
+    .eq('trip_id', tripId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+
+  const phones = (respondents ?? [])
+    .map((r) => r.phone)
+    .filter((p): p is string => !!p);
+  if (phones.length === 0) {
+    return (respondents ?? []).map((r) => ({
+      id: r.id,
+      name: r.name,
+      phone: r.phone,
+      home_airport: null,
+    }));
+  }
+
+  const { data: profiles } = await supabase
+    .from('traveler_profiles')
+    .select('phone, home_airport')
+    .in('phone', phones);
+
+  const airportByPhone = new Map<string, string | null>();
+  for (const p of (profiles ?? []) as Array<{ phone: string; home_airport: string | null }>) {
+    airportByPhone.set(p.phone, p.home_airport);
+  }
+
+  return (respondents ?? []).map((r) => ({
+    id: r.id,
+    name: r.name,
+    phone: r.phone,
+    home_airport: r.phone ? airportByPhone.get(r.phone) ?? null : null,
+  }));
+}
+
 export async function createRespondentManually(
   tripId: string,
   name: string,
@@ -474,17 +527,50 @@ export async function optOutFromTrip(
 
 // ─── Planner designation ──────────────────────────────────────────────────────
 
+export type SetPlannerReason =
+  | 'invalid_phone'
+  | 'forbidden'
+  | 'phone_not_on_trip'
+  | 'cannot_demote_creator'
+  | 'trip_not_found'
+  | 'not_authenticated'
+  | 'unknown';
+
+export type SetPlannerResult =
+  | { ok: true; respondentUpdated: boolean; participantUpdated: boolean }
+  | { ok: false; reason: SetPlannerReason };
+
 /**
- * Promote or demote a respondent to/from planner status.
- * Only the trip owner (authenticated) can call this.
+ * Promote or demote a trip member to/from planner status by phone.
+ *
+ * Wraps the `set_planner_for_phone` SECURITY DEFINER RPC (migration 094)
+ * which flips is_planner on BOTH respondents and trip_session_participants
+ * in one transaction. Phone is the canonical identity on a trip — same
+ * value used by member-add/member-remove — so the toggle works whether or
+ * not the target has filled out the survey yet.
  */
-export async function setRespondentPlanner(
-  respondentId: string,
+export async function setPlannerForPhone(
+  tripId: string,
+  phone: string,
   isPlanner: boolean,
-): Promise<void> {
-  const { error } = await supabase
-    .from('respondents')
-    .update({ is_planner: isPlanner })
-    .eq('id', respondentId);
+): Promise<SetPlannerResult> {
+  const { data, error } = await supabase.rpc('set_planner_for_phone', {
+    p_trip_id: tripId,
+    p_phone: phone,
+    p_is_planner: isPlanner,
+  });
   if (error) throw error;
+  const row = data as
+    | { ok: true; respondent_updated: boolean; participant_updated: boolean }
+    | { ok: false; reason: string }
+    | null;
+  if (!row) return { ok: false, reason: 'unknown' };
+  if (row.ok) {
+    return {
+      ok: true,
+      respondentUpdated: row.respondent_updated,
+      participantUpdated: row.participant_updated,
+    };
+  }
+  return { ok: false, reason: (row.reason as SetPlannerReason) || 'unknown' };
 }

@@ -135,6 +135,14 @@ export async function getNudgeSchedule(sessionId: string): Promise<NudgeSchedule
       scheduled_for, sent_at, skipped_at, skip_reason
     `)
     .eq('trip_session_id', sessionId)
+    // Initial outreach is a system-automatic first-contact step — Rally
+    // sends it the moment a member is added (via member-add directly, or
+    // the scheduler tick after trip creation). The planner can't usefully
+    // approve / skip / send-now an initial; surfacing it on the dashboard
+    // as "overdue" between seed-time and the next cron fire is just
+    // noise. Hide it here so the schedule reflects only nudges the
+    // planner actually acts on (d1 / d3 / heartbeat / rd_minus_*).
+    .neq('nudge_type', 'initial')
     .order('scheduled_for', { ascending: true })
     .limit(NUDGE_LIMIT);
   if (error) {
@@ -150,14 +158,16 @@ export async function getNudgeSchedule(sessionId: string): Promise<NudgeSchedule
   if (rows.length === 0) return [];
 
   const partIds = Array.from(new Set(rows.map((r) => r.participant_id).filter((x): x is string => !!x)));
-  let nameByPart = new Map<string, { display_name: string | null; phone: string }>();
+  let nameByPart = new Map<string, { display_name: string | null; phone: string; is_planner: boolean }>();
   if (partIds.length > 0) {
     const { data: pData } = await supabase
       .from('trip_session_participants')
-      .select('id, display_name, phone')
+      .select('id, display_name, phone, is_planner')
       .in('id', partIds);
-    for (const p of (pData ?? []) as { id: string; display_name: string | null; phone: string }[]) {
-      nameByPart.set(p.id, { display_name: p.display_name, phone: p.phone });
+    for (const p of (pData ?? []) as {
+      id: string; display_name: string | null; phone: string; is_planner: boolean;
+    }[]) {
+      nameByPart.set(p.id, { display_name: p.display_name, phone: p.phone, is_planner: p.is_planner });
     }
   }
 
@@ -204,9 +214,14 @@ export async function getNudgeSchedule(sessionId: string): Promise<NudgeSchedule
       }
 
       for (const r of respList) {
+        // "Responded" = any of: explicit decline, preferences submitted,
+        // or at least one poll vote. Earlier this required rsvp='in'
+        // alongside preferences, which dropped people who completed the
+        // survey but never had rsvp set explicitly — leaving their stale
+        // pending nudges to render as "overdue" on the dashboard.
         const done =
           r.rsvp === 'out'
-          || (r.rsvp === 'in' && r.preferences != null)
+          || r.preferences != null
           || votedRespondentIds.has(r.id);
         if (!done || !r.phone) continue;
         const norm = normalizePhone(r.phone) ?? r.phone;
@@ -234,6 +249,13 @@ export async function getNudgeSchedule(sessionId: string): Promise<NudgeSchedule
     .filter((it) => {
       // Keep historical context (sent or skipped rows) regardless.
       if (it.sent_at || it.skipped_at) return true;
+      // Hide pending nudges aimed at the planner themselves — the seed
+      // step inserts d1/d3 inside a small inclusion window after the
+      // planner joins, but the planner is never the audience for their
+      // own outreach, so a stale row sitting pending past scheduled_for
+      // shouldn't render as "overdue" on their own dashboard.
+      const meta = it.participant_id ? nameByPart.get(it.participant_id) ?? null : null;
+      if (meta?.is_planner) return false;
       if (!it.participant_phone) return true;
       const norm = normalizePhone(it.participant_phone) ?? it.participant_phone;
       return !respondedPhones.has(norm);

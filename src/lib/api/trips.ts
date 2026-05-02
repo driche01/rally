@@ -39,6 +39,8 @@ export interface CreateTripInput {
   responses_due_date?: string | null;
   /** Planner override for the initial outreach SMS body. */
   custom_intro_sms?: string | null;
+  /** USD per-person flight estimate; subtracted from per-person budget when sizing lodging suggestions. */
+  estimated_flight_cost_per_person?: number | null;
   /**
    * Participants picked from the planner's contacts at trip creation.
    * Each one becomes a `users` row + `trip_session_participants` row, and

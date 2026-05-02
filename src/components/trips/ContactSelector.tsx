@@ -92,16 +92,26 @@ function formatPhoneForDisplay(raw: string): string {
  */
 async function fetchAllPhoneContacts(): Promise<PickerContact[]> {
   if (!Contacts) return [];
-  const { data } = await Contacts.getContactsAsync({
-    fields: [
-      Contacts.Fields.Name,
-      Contacts.Fields.FirstName,
-      Contacts.Fields.LastName,
-      Contacts.Fields.PhoneNumbers,
-      Contacts.Fields.Emails,
-    ],
-    sort: Contacts.SortTypes.FirstName,
-  });
+  // Native module not linked in the running binary throws here. Catching
+  // turns a hard crash into a typed result the modal can surface as a
+  // friendly empty state instead of a red overlay / app exit.
+  let data: Awaited<ReturnType<typeof Contacts.getContactsAsync>>['data'] = [];
+  try {
+    const result = await Contacts.getContactsAsync({
+      fields: [
+        Contacts.Fields.Name,
+        Contacts.Fields.FirstName,
+        Contacts.Fields.LastName,
+        Contacts.Fields.PhoneNumbers,
+        Contacts.Fields.Emails,
+      ],
+      sort: Contacts.SortTypes.FirstName,
+    });
+    data = result.data;
+  } catch (err) {
+    console.warn('[ContactSelector] getContactsAsync failed:', err);
+    throw err;
+  }
   const out: PickerContact[] = [];
   for (const c of data ?? []) {
     const phone = c.phoneNumbers?.[0]?.number;
@@ -130,7 +140,24 @@ export function ContactSelector({ value, onChange, plannerLabel, error }: Props)
       );
       return;
     }
-    const { status } = await Contacts.requestPermissionsAsync();
+    // Probe the native side via try/catch — when the binary on-device
+    // doesn't have the expo-contacts module compiled in (typical after a
+    // stale dev/TestFlight build), the bridge call throws here instead
+    // of dropping the whole app. The app used to crash because this
+    // line was unwrapped.
+    let status: Awaited<ReturnType<typeof Contacts.requestPermissionsAsync>>['status'];
+    try {
+      const result = await Contacts.requestPermissionsAsync();
+      status = result.status;
+    } catch (err) {
+      console.warn('[ContactSelector] requestPermissionsAsync failed:', err);
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      Alert.alert(
+        "Can't open contacts",
+        `Rally couldn't reach your contacts (${message}). Use "Add by phone" instead, or rebuild the app and try again.`,
+      );
+      return;
+    }
     if (status !== 'granted') {
       Alert.alert(
         'Contacts permission needed',
@@ -202,11 +229,17 @@ export function ContactSelector({ value, onChange, plannerLabel, error }: Props)
         </Pressable>
       </View>
 
-      {/* Selected list */}
-      {value.length > 0 ? (
+      {/* Selected list — planner always shows; contacts append below. */}
+      {plannerLabel || value.length > 0 ? (
         <View style={styles.list}>
           {plannerLabel ? (
-            <View style={[styles.row, styles.rowPlanner]}>
+            <View
+              style={[
+                styles.row,
+                styles.rowPlanner,
+                value.length === 0 && styles.rowLast,
+              ]}
+            >
               <View style={styles.avatar}>
                 <Ionicons name="ribbon" size={14} color="#D97706" />
               </View>
@@ -216,8 +249,11 @@ export function ContactSelector({ value, onChange, plannerLabel, error }: Props)
               </View>
             </View>
           ) : null}
-          {value.map((c) => (
-            <View key={c.id} style={styles.row}>
+          {value.map((c, idx) => (
+            <View
+              key={c.id}
+              style={[styles.row, idx === value.length - 1 && styles.rowLast]}
+            >
               <Pressable
                 style={{ flex: 1, flexDirection: 'row', gap: 10, alignItems: 'center' }}
                 onPress={() => { setEditTarget(c); setManualOpen(true); }}
@@ -243,13 +279,7 @@ export function ContactSelector({ value, onChange, plannerLabel, error }: Props)
             </View>
           ))}
         </View>
-      ) : (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>
-            No one added yet. Pick from your contacts or add a phone number to get started.
-          </Text>
-        </View>
-      )}
+      ) : null}
 
       {/* Native contacts multi-select */}
       <NativeContactPickerModal
@@ -295,7 +325,19 @@ function NativeContactPickerModal({ visible, excludePhones, onDone, onClose }: P
     setLoading(true);
     fetchAllPhoneContacts()
       .then((list) => setContacts(list))
-      .catch(() => setContacts([]))
+      .catch((err) => {
+        // Bridge-level failure (e.g. native module missing). Close the
+        // modal and surface the actual error so the planner knows to
+        // fall back to Add-by-phone — without an Alert here the modal
+        // would just sit empty forever.
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        setContacts([]);
+        onClose();
+        Alert.alert(
+          "Can't load contacts",
+          `Rally couldn't read your contacts (${message}). Use "Add by phone" instead.`,
+        );
+      })
       .finally(() => setLoading(false));
   }, [visible]);
 
@@ -565,6 +607,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F0F0F0',
   },
   rowPlanner: { backgroundColor: '#FAF5EA' },
+  rowLast: { borderBottomWidth: 0 },
   avatar: {
     width: 32,
     height: 32,
@@ -576,15 +619,6 @@ const styles = StyleSheet.create({
   avatarInitial: { fontSize: 13, fontWeight: '700', color: '#0F3F2E' },
   name: { fontSize: 14, fontWeight: '600', color: '#163026' },
   subline: { fontSize: 12, color: '#737373', marginTop: 1 },
-
-  emptyState: {
-    backgroundColor: '#FAF5EA',
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    marginTop: 6,
-  },
-  emptyText: { fontSize: 13, color: '#5F685F', lineHeight: 19, textAlign: 'center' },
 
   modalHeader: {
     flexDirection: 'row',

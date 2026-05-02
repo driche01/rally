@@ -21,6 +21,8 @@ import {
   useHoldRecommendation,
   useUndoPollLock,
 } from '@/hooks/useRecommendations';
+import { useTrip } from '@/hooks/useTrips';
+import { daysUntil } from '@/lib/cadence';
 import type { PollRecommendation } from '@/lib/api/recommendations';
 import { DateHeatmap } from '@/components/trips/DateHeatmap';
 import { parseDateRangeLabel } from '@/lib/pollFormUtils';
@@ -42,6 +44,7 @@ function confidencePill(confidence: number | null): { label: string; tone: 'high
 
 export function DecisionQueueCard({ tripId }: Props) {
   const { data: recs = [] } = usePendingRecommendations(tripId);
+  const { data: trip } = useTrip(tripId ?? '');
   const approve = useApproveRecommendation(tripId);
   const approveDates = useApproveRecommendationWithDates(tripId);
   const hold = useHoldRecommendation(tripId);
@@ -60,17 +63,32 @@ export function DecisionQueueCard({ tripId }: Props) {
     if (!r.planner_action_at) return false;
     return Date.now() - new Date(r.planner_action_at).getTime() < UNDO_GRACE_MS;
   });
-  if (pending.length === 0 && held.length === 0 && recentlyLocked.length === 0) return null;
+
+  // Gate: don't surface pending decisions until either we're within
+  // 3 days of the book-by date, or every pending poll has been answered
+  // by every relevant member. The held / recently-locked sub-sections
+  // remain visible regardless — the planner needs the undo affordance
+  // and the "revisit held" entry point any time those rows exist.
+  const allPollsFullyResponded =
+    pending.length > 0 && pending.every((r) => r.holdout_participant_ids.length === 0);
+  const bookByDays = daysUntil(trip?.book_by_date ?? null);
+  const withinBookByWindow = bookByDays !== null && bookByDays <= 3;
+  const shouldShowPending = allPollsFullyResponded || withinBookByWindow;
+  const visiblePending = shouldShowPending ? pending : [];
+
+  if (visiblePending.length === 0 && held.length === 0 && recentlyLocked.length === 0) return null;
 
   return (
     <View style={styles.card}>
-      <View style={styles.header}>
-        <Ionicons name="alert-circle" size={18} color="#D85A30" />
-        <Text style={styles.title}>Pending decisions</Text>
-        <Text style={styles.count}>· {pending.length}</Text>
-      </View>
+      {visiblePending.length > 0 ? (
+        <View style={styles.header}>
+          <Ionicons name="alert-circle" size={18} color="#D85A30" />
+          <Text style={styles.title}>Pending decisions</Text>
+          <Text style={styles.count}>· {visiblePending.length}</Text>
+        </View>
+      ) : null}
 
-      {pending.map((rec) => (
+      {visiblePending.map((rec) => (
         <RecommendationRow
           key={rec.id}
           rec={rec}

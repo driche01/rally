@@ -128,8 +128,8 @@ function buildMarkedDates(days: string[]): MarkedDates {
 type SelectMode = 'day' | 'weekend' | 'week' | 'month';
 
 const MODE_HINTS: Record<SelectMode, string> = {
-  day:     "Tap two days to make a range. Tap more days for additional ranges.",
-  weekend: "Tap any day to add the Sat + Sun of that weekend.",
+  day:     "Tap two days to make a range.",
+  weekend: "Tap any day to add the Fri–Sun weekend.",
   week:    "Tap any day to add the full Sun–Sat week.",
   month:   "Tap any day to add the entire month.",
 };

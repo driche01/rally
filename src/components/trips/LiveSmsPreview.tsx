@@ -138,8 +138,7 @@ export function LiveSmsPreview({
           <Text style={{ color: '#404040' }}>[Name]</Text>,{' '}
           <Text style={{ color: '#404040' }}>[Planner]</Text>,{' '}
           <Text style={{ color: '#404040' }}>[Destination]</Text>, or{' '}
-          <Text style={{ color: '#404040' }}>[Trip]</Text>{' '}
-          — each invitee gets their own values filled in.
+          <Text style={{ color: '#404040' }}>[Trip]</Text>
         </Text>
         <Text style={{ fontSize: 11, color: '#888' }}>{value.length}/{MAX_LENGTH}</Text>
       </View>
