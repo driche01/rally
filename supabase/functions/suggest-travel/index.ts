@@ -88,7 +88,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = await req.json();
-    const { trip_id, origin, respondent_phone, warm } = body as {
+    const { trip_id, origin, respondent_phone, warm, note: noteRaw } = body as {
       trip_id: string;
       origin?: string;
       /**
@@ -99,7 +99,12 @@ Deno.serve(async (req: Request) => {
       respondent_phone?: string;
       /** True when invoked by the trip_warm_travel_cache trigger. */
       warm?: boolean;
+      /** Planner-supplied steering note ("more direct flights", "no red-eyes").
+       *  Bypasses cache (read AND write) so the canonical row stays untainted. */
+      note?: string;
     };
+    const note = typeof noteRaw === 'string' ? noteRaw.trim() : '';
+    const hasNote = note.length > 0;
     if (!trip_id) {
       return new Response(JSON.stringify({ error: 'trip_id required' }), {
         status: 400,
@@ -163,9 +168,14 @@ Deno.serve(async (req: Request) => {
       tripType: trip.trip_type,
     });
 
+    // Cache short-circuits ONLY when there's no steering note. With a note
+    // we always recompute — the note isn't part of the signature, so a
+    // hit would serve stale "no-note" suggestions, and a writeback would
+    // poison the canonical row for the next planner without a note.
     if (
       isGroupScope &&
       !warm &&
+      !hasNote &&
       Array.isArray(trip.cached_travel_suggestions) &&
       trip.cached_travel_suggestions_signature === expectedSignature
     ) {
@@ -310,7 +320,7 @@ ${budget ? `- Total trip budget per person: ${budget} (travel should fit within 
 ${tripType ? `- Trip type: ${tripType}` : ''}
 ${constraintLine}
 ${styleLine}
-
+${hasNote ? `\nPlanner steering note (apply this directly — it overrides any prior leaning): "${note}"\n` : ''}
 ${taskLine}
 
 Respond with ONLY a JSON array, no markdown, no explanation:
@@ -420,9 +430,11 @@ Respond with ONLY a JSON array, no markdown, no explanation:
 
     // Write back to the cache for the group scope so the next open is
     // instant. Per-member generations skip the cache (different scope, not
-    // covered by the trip-level signature). Best-effort: a write failure
-    // shouldn't fail the whole request.
-    if (isGroupScope) {
+    // covered by the trip-level signature). Note-tuned generations also
+    // skip the writeback — the note isn't part of the signature, so caching
+    // would poison the canonical row for the next planner without a note.
+    // Best-effort: a write failure shouldn't fail the whole request.
+    if (isGroupScope && !hasNote) {
       const { error: cacheError } = await supabaseAdmin
         .from('trips')
         .update({

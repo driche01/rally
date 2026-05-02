@@ -53,6 +53,18 @@ export interface Trip {
   book_by_date: string | null;        // ISO date 'YYYY-MM-DD' — external deadline (book by)
   responses_due_date: string | null;  // ISO date 'YYYY-MM-DD' — internal deadline (book_by - 3 by default)
   custom_intro_sms: string | null;    // planner override for the initial outreach SMS body
+  /** USD per-person estimate populated by the flights card; subtracted from per-person budget when sizing lodging suggestions. */
+  estimated_flight_cost_per_person: number | null;
+  /** Server-cached lodging-suggestions payload (LodgingSuggestionsResult). Populated by the suggest-lodging edge function and the trip_warm_lodging_cache trigger. */
+  cached_lodging_suggestions: unknown;
+  /** Signature of the inputs used to compute `cached_lodging_suggestions`. Cache is valid when this matches the current input signature computed client-side. */
+  cached_lodging_suggestions_signature: string | null;
+  cached_lodging_suggestions_updated_at: string | null;
+  /** Server-cached group-scope travel suggestions (TravelSuggestion[]). Populated by suggest-travel + the trip_warm_travel_cache trigger; read directly by the client for instant Travel-tab render. */
+  cached_travel_suggestions: unknown;
+  /** Signature of the inputs used to compute `cached_travel_suggestions`. Cache is valid when this matches the client-side signature from `computeTravelSignature`. */
+  cached_travel_suggestions_signature: string | null;
+  cached_travel_suggestions_updated_at: string | null;
   created_at: string;
   updated_at: string;
 }

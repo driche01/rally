@@ -85,6 +85,10 @@ export interface TravelSuggestionsOpts {
    * of the group-wide aggregation.
    */
   respondentPhone?: string;
+  /** Planner-supplied steering note ("more direct flights", "no red-eyes").
+   *  When set, the edge function bypasses the trip-row cache (read AND write)
+   *  and applies the note as an extra prompt directive. */
+  note?: string;
 }
 
 export interface TravelSuggestionsResult {
@@ -105,12 +109,16 @@ export async function getTravelSuggestions(
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) throw new Error('No active session');
 
+  const note = opts.note?.trim() ?? '';
+  const body: { trip_id: string; origin: string | null; respondent_phone: string | null; note?: string } = {
+    trip_id: tripId,
+    origin: opts.origin ?? null,
+    respondent_phone: opts.respondentPhone ?? null,
+  };
+  if (note.length > 0) body.note = note;
+
   const { data, error } = await supabase.functions.invoke('suggest-travel', {
-    body: {
-      trip_id: tripId,
-      origin: opts.origin ?? null,
-      respondent_phone: opts.respondentPhone ?? null,
-    },
+    body,
     headers: { Authorization: `Bearer ${session.access_token}` },
   });
   if (error) throw error;

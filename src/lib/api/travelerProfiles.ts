@@ -11,7 +11,7 @@
  *      direct table SELECT. RLS gates the access.
  */
 import { supabase } from '@/lib/supabase';
-import type { TravelerProfile, TravelerProfileDraft } from '@/types/profile';
+import type { LodgingPref, SleepPref, TravelerProfile, TravelerProfileDraft } from '@/types/profile';
 
 /**
  * Fetch the respondent's own profile via the share_token + phone
@@ -165,6 +165,66 @@ export interface ParticipantWithProfile {
   phone: string;
   display_name: string | null;
   profile: TravelerProfile | null;
+}
+
+/**
+ * Lightweight summary of the trip's traveler-profile lodging preferences.
+ * Used as a query-key dependency for the lodging-suggestions query so that
+ * suggestions auto-refetch when a respondent updates their lodging_pref.
+ *
+ * Returns counts per option plus the latest `updated_at` across the
+ * matched profiles — that timestamp is the change-detection signal.
+ */
+export interface GroupLodgingPrefSummary {
+  total: number;
+  counts: Record<LodgingPref, number>;
+  /** Sleep-pref answers across the group's traveler profiles — drives bedroom-count heuristics. */
+  sleepCounts: Record<SleepPref, number>;
+  lastUpdatedAt: string | null;
+}
+
+export async function getGroupLodgingPrefSummary(
+  tripId: string,
+): Promise<GroupLodgingPrefSummary> {
+  const empty: GroupLodgingPrefSummary = {
+    total: 0,
+    counts: { hotel: 0, rental: 0, either: 0 },
+    sleepCounts: { own_room: 0, own_bed: 0, share_bed: 0, flexible: 0 },
+    lastUpdatedAt: null,
+  };
+  if (!tripId) return empty;
+
+  const { data: respondents, error: respErr } = await supabase
+    .from('respondents')
+    .select('phone')
+    .eq('trip_id', tripId);
+  if (respErr) {
+    console.warn('[traveler-profile] respondent phones fetch failed:', respErr.message);
+    return empty;
+  }
+  const phones = (respondents ?? [])
+    .map((r: { phone: string | null }) => r.phone)
+    .filter((p): p is string => !!p);
+  if (phones.length === 0) return empty;
+
+  const { data: profiles, error: profErr } = await supabase
+    .from('traveler_profiles')
+    .select('lodging_pref, sleep_pref, updated_at')
+    .in('phone', phones);
+  if (profErr) {
+    console.warn('[traveler-profile] summary fetch failed:', profErr.message);
+    return empty;
+  }
+
+  const counts: Record<LodgingPref, number> = { hotel: 0, rental: 0, either: 0 };
+  const sleepCounts: Record<SleepPref, number> = { own_room: 0, own_bed: 0, share_bed: 0, flexible: 0 };
+  let lastUpdatedAt: string | null = null;
+  for (const p of (profiles ?? []) as Array<{ lodging_pref: LodgingPref | null; sleep_pref: SleepPref | null; updated_at: string }>) {
+    if (p.lodging_pref) counts[p.lodging_pref]++;
+    if (p.sleep_pref) sleepCounts[p.sleep_pref]++;
+    if (!lastUpdatedAt || p.updated_at > lastUpdatedAt) lastUpdatedAt = p.updated_at;
+  }
+  return { total: profiles?.length ?? 0, counts, sleepCounts, lastUpdatedAt };
 }
 
 export async function getProfilesForTripSession(

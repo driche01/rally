@@ -117,59 +117,12 @@ export async function removeLodgingVote(
   if (error) throw error;
 }
 
-// ─── Deep-link URL builders ───────────────────────────────────────────────────
+// ─── Deep-link URL parsing ────────────────────────────────────────────────────
 //
-// All URLs are constructed client-side — no API calls, no keys.
-// Parameters are tested against live platform URLs and may change;
-// degrade gracefully to base search URL if parameters stop working.
-
-export interface LodgingSearchParams {
-  destination: string;
-  checkIn: string;   // 'YYYY-MM-DD'
-  checkOut: string;  // 'YYYY-MM-DD'
-  guests: number;
-  minBedrooms: number;
-}
-
-export function buildAirbnbUrl(params: LodgingSearchParams): string {
-  const { destination, checkIn, checkOut, guests, minBedrooms } = params;
-  const base = 'https://www.airbnb.com/s';
-  const q = encodeURIComponent(destination);
-  return (
-    `${base}/${q}/homes` +
-    `?checkin=${checkIn}` +
-    `&checkout=${checkOut}` +
-    `&adults=${guests}` +
-    `&min_bedrooms=${minBedrooms}`
-  );
-}
-
-export function buildVrboUrl(params: LodgingSearchParams): string {
-  const { destination, checkIn, checkOut, guests, minBedrooms } = params;
-  const q = encodeURIComponent(destination);
-  return (
-    `https://www.vrbo.com/search/keywords:${q}` +
-    `?arrival=${checkIn}` +
-    `&departure=${checkOut}` +
-    `&numAdults=${guests}` +
-    `&minBedrooms=${minBedrooms}`
-  );
-}
-
-export function buildBookingUrl(params: LodgingSearchParams): string {
-  const { destination, checkIn, checkOut, guests } = params;
-  const q = encodeURIComponent(destination);
-  const [checkInYear, checkInMonth, checkInDay] = checkIn.split('-');
-  const [checkOutYear, checkOutMonth, checkOutDay] = checkOut.split('-');
-  return (
-    `https://www.booking.com/searchresults.html` +
-    `?ss=${q}` +
-    `&checkin_year=${checkInYear}&checkin_month=${checkInMonth}&checkin_monthday=${checkInDay}` +
-    `&checkout_year=${checkOutYear}&checkout_month=${checkOutMonth}&checkout_monthday=${checkOutDay}` +
-    `&group_adults=${guests}` +
-    `&no_rooms=1`
-  );
-}
+// Note: the matching client-side URL *builders* lived here pre-cache. They
+// were retired when per-suggestion deep-links moved server-side into
+// `suggest-lodging` (which mirrors the Airbnb/VRBO/Booking formats inline).
+// Parsing the planner's pasted URLs still happens here.
 
 /**
  * Parses a pasted Airbnb/VRBO/Booking.com listing URL and extracts the platform
