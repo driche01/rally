@@ -18,6 +18,8 @@ import { EmptyState, FormField, Input, Pill, Sheet, Spinner } from '@/components
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTrip } from '@/hooks/useTrips';
+import { usePolls } from '@/hooks/usePolls';
+import { getEffectiveTripDates } from '@/lib/tripDates';
 import {
   useLodgingOptions,
   useCreateLodgingOption,
@@ -591,10 +593,17 @@ function propertyVisual(propertyType: string): { icon: React.ComponentProps<type
 function LodgingAiSuggestionCard({
   tripId,
   trip,
+  effectiveStartDate,
+  effectiveEndDate,
   onSelect,
 }: {
   tripId: string;
   trip: ReturnType<typeof useTrip>['data'];
+  /** Locked trip dates (null while a date-range poll is still up for vote).
+   *  Used in place of trip.start_date/end_date so a planner's pre-poll seed
+   *  doesn't unlock suggestions before the dates are actually decided. */
+  effectiveStartDate: string | null;
+  effectiveEndDate: string | null;
   onSelect: (s: LodgingSuggestion) => void;
 }) {
   // Destination + dates are the only inputs the suggestions actually need.
@@ -602,7 +611,7 @@ function LodgingAiSuggestionCard({
   // so this is effectively "polls decided." Don't gate on budget/trip_type —
   // those aren't required for sensible recommendations and the trip may have
   // skipped those screens.
-  const stageReady = !!trip?.destination && !!trip?.start_date && !!trip?.end_date;
+  const stageReady = !!trip?.destination && !!effectiveStartDate && !!effectiveEndDate;
 
   const { data: prefSummary } = useGroupLodgingPrefSummary(tripId);
 
@@ -618,8 +627,8 @@ function LodgingAiSuggestionCard({
 
   const deps: LodgingSuggestionsKeyDeps = {
     destination: trip?.destination ?? null,
-    startDate: trip?.start_date ?? null,
-    endDate: trip?.end_date ?? null,
+    startDate: effectiveStartDate,
+    endDate: effectiveEndDate,
     groupSize,
     budgetPerPerson: trip?.budget_per_person ?? null,
     estimatedFlightCostPerPerson: trip?.estimated_flight_cost_per_person ?? null,
@@ -650,8 +659,8 @@ function LodgingAiSuggestionCard({
   const expectedSignature = stageReady && prefSummary
     ? computeLodgingSignature({
         destination: trip?.destination ?? null,
-        startDate: trip?.start_date ?? null,
-        endDate: trip?.end_date ?? null,
+        startDate: effectiveStartDate,
+        endDate: effectiveEndDate,
         groupSize,
         budgetPerPerson: trip?.budget_per_person ?? null,
         flightCostPerPerson: trip?.estimated_flight_cost_per_person ?? null,
@@ -908,7 +917,13 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
   const insets = useSafeAreaInsets();
 
   const { data: trip } = useTrip(tripId);
+  const { data: polls = [] } = usePolls(tripId);
   const { data: options = [], isSuccess: optionsLoaded } = useLodgingOptions(tripId);
+
+  // Effective dates: null while a date-range dates-poll is still up for vote,
+  // even when trips.start_date / end_date hold a planner's seed value.
+  const { startDate: effectiveStartDate, endDate: effectiveEndDate } =
+    getEffectiveTripDates(trip, polls);
   const createOption = useCreateLodgingOption(tripId);
   const updateOption = useUpdateLodgingOption(tripId);
   const deleteOption = useDeleteLodgingOption(tripId);
@@ -1021,14 +1036,14 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
           setBookingSheet(DEFAULT_BOOKING_SHEET);
           deleteBlocksByType.mutate('accommodation', {
             onSuccess: () => {
-              if (!trip?.start_date) return;
-              const start = new Date(trip.start_date + 'T12:00:00');
-              const end = trip.end_date ? new Date(trip.end_date + 'T12:00:00') : start;
+              if (!effectiveStartDate) return;
+              const start = new Date(effectiveStartDate + 'T12:00:00');
+              const end = effectiveEndDate ? new Date(effectiveEndDate + 'T12:00:00') : start;
               const cur = new Date(start);
               while (cur <= end) {
                 const dateStr = cur.toISOString().slice(0, 10);
-                const isFirst = dateStr === trip.start_date;
-                const isLast = dateStr === (trip.end_date ?? trip.start_date);
+                const isFirst = dateStr === effectiveStartDate;
+                const isLast = dateStr === (effectiveEndDate ?? effectiveStartDate);
                 const blockTitle = isFirst
                   ? `Check in: ${bookedTitle}`
                   : isLast
@@ -1054,14 +1069,12 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
 
   // Pre-stage empty state — no destination/dates yet AND no manually-added
   // lodging. Mirrors the Itinerary empty state so the page reads
-  // consistently across tabs while details are still being decided.
-  const stageReady = !!trip?.destination && !!trip?.start_date && !!trip?.end_date;
+  // consistently across tabs while details are still being decided. Uses
+  // effective dates so a stale planner seed doesn't unlock the page.
+  const stageReady = !!trip?.destination && !!effectiveStartDate && !!effectiveEndDate;
   if (!stageReady && options.length === 0) {
     return (
       <View className="flex-1 bg-cream">
-        <View className="flex-row items-center justify-between px-5 pt-4 pb-3">
-          <Text className="text-base font-bold text-ink">Lodging</Text>
-        </View>
         <View className="flex-1 justify-center">
           <EmptyState
             icon="bed-outline"
@@ -1080,21 +1093,23 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
-        <View className="flex-row items-center justify-between pt-4 pb-3">
-          <Text className="text-base font-bold text-ink">Lodging</Text>
-          {atLimit ? (
+        {/* Header — title moved to the hub header; this row keeps the
+            "Limit reached" indicator when present. */}
+        {atLimit ? (
+          <View className="flex-row items-center justify-end pt-4 pb-3">
             <View className="rounded-xl bg-cream-warm px-3 py-1">
               <Text className="text-xs font-medium text-muted">Limit reached (5/5)</Text>
             </View>
-          ) : null}
-        </View>
+          </View>
+        ) : null}
 
         {/* ── AI Suggestions ── */}
         {isPlanner ? (
           <LodgingAiSuggestionCard
             tripId={tripId}
             trip={trip}
+            effectiveStartDate={effectiveStartDate}
+            effectiveEndDate={effectiveEndDate}
             onSelect={(s) => {
               setAddSectionExpanded(false);
               createOption.mutate({
@@ -1108,8 +1123,8 @@ export function LodgingTab({ tripId, isPlanner = true }: { tripId: string; isPla
                   `Ideal for: ${s.idealFor}`,
                   s.estimatedNightlyRate ? `Estimated: ${s.estimatedNightlyRate}` : null,
                 ].filter(Boolean).join('\n'),
-                check_in_date: trip?.start_date ?? null,
-                check_out_date: trip?.end_date ?? null,
+                check_in_date: effectiveStartDate,
+                check_out_date: effectiveEndDate,
               });
             }}
           />

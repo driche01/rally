@@ -18,6 +18,8 @@ import {
 import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { useTrip, useUpdateTrip } from '@/hooks/useTrips';
+import { usePolls } from '@/hooks/usePolls';
+import { getEffectiveTripDates } from '@/lib/tripDates';
 import { DateRangePicker } from '@/components/DateRangePicker';
 import {
   useCreateTravelLeg,
@@ -768,6 +770,8 @@ const MODE_ICON_BG: Record<TransportMode, string> = {
 function TravelSuggestionCard({
   tripId,
   trip,
+  effectiveStartDate,
+  effectiveEndDate,
   enabled,
   /** When set, suggestions are scoped to this single traveler (their home airport + dealbreakers). */
   respondentPhone = null,
@@ -778,6 +782,12 @@ function TravelSuggestionCard({
   tripId: string;
   /** Trip row — used to read the `cached_travel_suggestions` payload directly for instant render. */
   trip: Trip | undefined;
+  /** Locked trip dates (null while a dates poll is still up for vote). The
+   *  signature/staleness compute uses these instead of trip.start_date so a
+   *  planner's pre-poll seed value doesn't trigger fetches against unlocked
+   *  dates. */
+  effectiveStartDate: string | null;
+  effectiveEndDate: string | null;
   /** Auto-fire on mount only when the trip has the inputs it needs (destination + dates). */
   enabled: boolean;
   respondentPhone?: string | null;
@@ -810,8 +820,8 @@ function TravelSuggestionCard({
     isGroupScope && trip
       ? computeTravelSignature({
           destination: trip.destination,
-          startDate: trip.start_date,
-          endDate: trip.end_date,
+          startDate: effectiveStartDate,
+          endDate: effectiveEndDate,
           groupSize: trip.group_size_precise ?? 4,
           budgetPerPerson: trip.budget_per_person,
           tripType: trip.trip_type,
@@ -1213,11 +1223,17 @@ function PerMemberRoutesSection({
 
 export function TravelTab({ tripId, isPlanner = true }: { tripId: string; isPlanner?: boolean }) {
   const { data: trip } = useTrip(tripId);
+  const { data: polls = [] } = usePolls(tripId);
   const { data: legs = [], isLoading } = useTravelLegs(tripId);
   const { data: memberLegs = [] } = useSharedMemberLegs(tripId);
   // Personalized suggestions for the non-planner view need the viewer's phone.
   const { data: myProfile } = useMyProfile();
   const myPhone = myProfile?.phone ?? null;
+
+  // Effective dates: null while a date-range dates-poll is still live,
+  // even when trips.start_date / end_date hold a planner seed value.
+  const { startDate: effectiveStartDate, endDate: effectiveEndDate } =
+    getEffectiveTripDates(trip, polls);
 
   const createMutation = useCreateTravelLeg(tripId);
   const updateMutation = useUpdateTravelLeg(tripId);
@@ -1229,8 +1245,10 @@ export function TravelTab({ tripId, isPlanner = true }: { tripId: string; isPlan
   const [appliedSuggestion, setAppliedSuggestion] = useState<TravelSuggestion | null>(null);
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
-  // Auto-fire suggestions only when the trip has the inputs the prompt needs.
-  const canAutoSuggest = Boolean(trip?.destination && trip?.start_date);
+  // Auto-fire suggestions only when the trip has the inputs the prompt needs —
+  // and only after dates are actually locked (not a stale seed sitting on the
+  // trip row while the dates poll is still up for vote).
+  const canAutoSuggest = Boolean(trip?.destination && effectiveStartDate);
 
   async function handleAdd(values: LegFormValues) {
     try {
@@ -1308,16 +1326,6 @@ export function TravelTab({ tripId, isPlanner = true }: { tripId: string; isPlan
   if (!canAutoSuggest && legs.length === 0 && memberLegs.length === 0 && !isLoading) {
     return (
       <View style={{ flex: 1, padding: 16, gap: 12 }}>
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 4,
-          }}
-        >
-          <Text style={{ fontSize: 20, fontWeight: '700', color: '#163026' }}>Travel</Text>
-        </View>
         <View style={{ flex: 1, justifyContent: 'center' }}>
           <EmptyState
             icon="airplane-outline"
@@ -1335,17 +1343,17 @@ export function TravelTab({ tripId, isPlanner = true }: { tripId: string; isPlan
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
-      {/* Header */}
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: 4,
-        }}
-      >
-        <Text style={{ fontSize: 20, fontWeight: '700', color: '#163026' }}>Travel</Text>
-        {legs.length > 0 ? (
+      {/* Header — title moved to the hub header; this row keeps the
+          "Share all" affordance when the trip has legs. */}
+      {legs.length > 0 ? (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            marginBottom: 4,
+          }}
+        >
           <Pressable
             onPress={async () => {
               const text = legs.map(buildShareText).join('\n\n');
@@ -1367,8 +1375,8 @@ export function TravelTab({ tripId, isPlanner = true }: { tripId: string; isPlan
             <Ionicons name="share-outline" size={15} color="#737373" />
             <Text style={{ fontSize: 13, fontWeight: '600', color: '#737373' }}>Share all</Text>
           </Pressable>
-        ) : null}
-      </View>
+        </View>
+      ) : null}
 
       {/* Travel suggestions — pinned to top.
           Planners see the group-wide card + a per-member breakdown.
@@ -1378,6 +1386,8 @@ export function TravelTab({ tripId, isPlanner = true }: { tripId: string; isPlan
           <TravelSuggestionCard
             tripId={tripId}
             trip={trip}
+            effectiveStartDate={effectiveStartDate}
+            effectiveEndDate={effectiveEndDate}
             enabled={canAutoSuggest && legs.length === 0}
             onApply={(s) => { setAppliedSuggestion(s); setShowAddForm(true); }}
           />
@@ -1392,6 +1402,8 @@ export function TravelTab({ tripId, isPlanner = true }: { tripId: string; isPlan
         <TravelSuggestionCard
           tripId={tripId}
           trip={trip}
+          effectiveStartDate={effectiveStartDate}
+          effectiveEndDate={effectiveEndDate}
           enabled={canAutoSuggest && legs.length === 0 && !!myPhone}
           respondentPhone={myPhone}
           title="Your route"
@@ -1482,8 +1494,8 @@ export function TravelTab({ tripId, isPlanner = true }: { tripId: string; isPlan
         visible={showAddForm}
         initialValues={appliedSuggestion ? { mode: appliedSuggestion.mode, label: appliedSuggestion.label } as TravelLeg : undefined}
         tripName={trip?.name ?? ''}
-        tripStartDate={trip?.start_date ?? null}
-        tripEndDate={trip?.end_date ?? null}
+        tripStartDate={effectiveStartDate}
+        tripEndDate={effectiveEndDate}
         saving={isSaving}
         onSave={handleAdd}
         onClose={handleCancel}
@@ -1494,8 +1506,8 @@ export function TravelTab({ tripId, isPlanner = true }: { tripId: string; isPlan
         visible={editingLeg !== null}
         initialValues={editingLeg ?? undefined}
         tripName={trip?.name ?? ''}
-        tripStartDate={trip?.start_date ?? null}
-        tripEndDate={trip?.end_date ?? null}
+        tripStartDate={effectiveStartDate}
+        tripEndDate={effectiveEndDate}
         saving={isSaving}
         onSave={handleUpdate}
         onClose={handleCancel}

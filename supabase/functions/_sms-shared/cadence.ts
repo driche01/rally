@@ -93,3 +93,38 @@ export function deriveResponsesDue(bookByDate: string | null): string | null {
   d.setUTCDate(d.getUTCDate() - 3);
   return d.toISOString().slice(0, 10);
 }
+
+/**
+ * Default grace window for the late-joiner cadence filter. Items whose
+ * `scheduledFor` falls within this window of the participant's join
+ * time still fire. A new member added 6 hours after launch should still
+ * get d1 even if d1 technically fell a few hours before they joined.
+ */
+export const LATE_JOINER_GRACE_MS = 12 * 60 * 60 * 1000;
+
+/**
+ * Filter trip-anchored cadence items down to those that still apply to a
+ * participant given when they joined. Used by `seedSession` to keep the
+ * group's cadence in lockstep (everyone shares the same launch anchor)
+ * while not firing stale nudges to a late-add member.
+ *
+ * - For a planner / fresh-trip member, joinedAt ≈ launchAt → all items
+ *   pass through (the filter window includes everything from
+ *   joinedAt - 12h forward).
+ * - For a late joiner, items already in the past (e.g. an `initial`
+ *   anchored at launch when they joined 5 days later) are dropped — the
+ *   welcome SMS is the responsibility of `member-add`, not the cadence.
+ *
+ * Returns the input items unchanged when joinedAt is missing/invalid.
+ */
+export function filterCadenceForJoiner(
+  items: CadenceItem[],
+  joinedAt: Date | string | null | undefined,
+  graceMs: number = LATE_JOINER_GRACE_MS,
+): CadenceItem[] {
+  if (!joinedAt) return items;
+  const joinedMs = (joinedAt instanceof Date ? joinedAt : new Date(joinedAt)).getTime();
+  if (Number.isNaN(joinedMs)) return items;
+  const cutoff = joinedMs - graceMs;
+  return items.filter((it) => new Date(it.scheduledFor).getTime() >= cutoff);
+}

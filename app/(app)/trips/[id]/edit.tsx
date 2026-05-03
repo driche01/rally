@@ -712,10 +712,10 @@ export default function EditTripScreen() {
             <Input
               placeholder="e.g. Bali 2026, Jake's 30th, Ski Weekend"
               value={name}
-              onChangeText={(t) => { if (t.length <= 60) setName(t); }}
-              maxLength={60}
+              onChangeText={(t) => { if (t.length <= 30) setName(t); }}
+              maxLength={30}
               error={errors.name}
-              hint={`${name.length}/60`}
+              hint={`${name.length}/30`}
               autoFocus={false}
             />
           </View>

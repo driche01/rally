@@ -43,7 +43,6 @@ import {
   saveRespondentNote,
 } from '@/lib/api/respondents';
 import { daysUntil, formatCadenceDate } from '@/lib/cadence';
-import { getTripStage } from '@/lib/tripStage';
 import { getResponseCountsForTrip } from '@/lib/api/responses';
 import { comparePollsByFormOrder } from '@/lib/pollFormUtils';
 import { getProfileByToken, upsertProfileByToken } from '@/lib/api/travelerProfiles';
@@ -52,6 +51,7 @@ import type { TravelerProfile } from '@/types/profile';
 import { capture, Events } from '@/lib/analytics';
 import { log } from '@/lib/logger';
 import type { TripWithPolls, PollWithOptions, Respondent } from '@/types/database';
+import { getEffectiveTripDates } from '@/lib/tripDates';
 import { supabase } from '@/lib/supabase';
 import { getBlocksForTrip, upsertDayRsvp, formatDayLabel, formatTime } from '@/lib/api/itinerary';
 import type { ItineraryBlock, DayRsvpStatus } from '@/types/database';
@@ -1059,9 +1059,12 @@ function ItineraryRsvpSection({
   onRsvpChange: (dayDate: string, status: DayRsvpStatus) => void;
   rsvpSaving: string | null;
 }) {
-  if (!trip.start_date || !trip.end_date || blocks.length === 0) return null;
+  // Use effective dates so a planner's pre-poll seed value doesn't render
+  // a day-by-day RSVP UI against unlocked dates.
+  const { startDate, endDate } = getEffectiveTripDates(trip, trip.polls ?? []);
+  if (!startDate || !endDate || blocks.length === 0) return null;
 
-  const days = getDaysInRange(trip.start_date, trip.end_date);
+  const days = getDaysInRange(startDate, endDate);
   if (days.length === 0) return null;
 
   return (
@@ -1605,8 +1608,11 @@ export default function RespondScreen() {
       } catch {
         // non-fatal — confirmation screen will just show empty bars
       }
-      // Fetch itinerary + existing RSVPs for this respondent if Phase 2 is active
-      if (trip.phase2_unlocked && trip.start_date && trip.end_date) {
+      // Fetch itinerary + existing RSVPs for this respondent if Phase 2 is active.
+      // Gate on effective dates so we don't fan out to a day-RSVP UI keyed on
+      // a planner's stale seed when the dates poll is still open.
+      const { startDate: effStart, endDate: effEnd } = getEffectiveTripDates(trip, trip.polls ?? []);
+      if (trip.phase2_unlocked && effStart && effEnd) {
         try {
           const [blocks, rsvpResult] = await Promise.all([
             getBlocksForTrip(trip.id),
@@ -2153,17 +2159,23 @@ export default function RespondScreen() {
           </View>
         ) : null}
 
-        {/* Itinerary RSVP section (Phase 2 only) */}
-        {trip.phase2_unlocked && trip.start_date && trip.end_date && respondentId && (
-          <ItineraryRsvpSection
-            trip={trip}
-            blocks={itineraryBlocks}
-            dayRsvps={dayRsvps}
-            respondentId={respondentId}
-            onRsvpChange={handleRsvpChange}
-            rsvpSaving={rsvpSaving}
-          />
-        )}
+        {/* Itinerary RSVP section (Phase 2 only). Gated on effective dates
+            (not trip.start_date directly) so a planner-seed pre-poll value
+            doesn't trigger the per-day RSVP grid. */}
+        {(() => {
+          const { startDate, endDate } = getEffectiveTripDates(trip, trip.polls ?? []);
+          if (!trip.phase2_unlocked || !startDate || !endDate || !respondentId) return null;
+          return (
+            <ItineraryRsvpSection
+              trip={trip}
+              blocks={itineraryBlocks}
+              dayRsvps={dayRsvps}
+              respondentId={respondentId}
+              onRsvpChange={handleRsvpChange}
+              rsvpSaving={rsvpSaving}
+            />
+          );
+        })()}
 
         {/* Download prompt */}
         <DownloadPrompt tripName={trip.name} tripId={trip.id} />

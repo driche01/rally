@@ -18,6 +18,10 @@ const MEMBER_REMOVE_URL = `${SUPABASE_URL}/functions/v1/member-remove`;
 export interface AddMemberResult {
   ok: boolean;
   reason?: string;
+  /** When `ok=false`, free-text detail from the underlying error (e.g. the
+   * Postgres error message). Surfaced for telemetry — not for direct
+   * display to the planner; map `reason` to friendly copy at the call site. */
+  detail?: string;
   respondent_id?: string;
   sms_sent?: boolean;
   sms_error?: string | null;

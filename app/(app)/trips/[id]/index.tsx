@@ -31,10 +31,12 @@ import { supabase } from '@/lib/supabase';
 import { getShareUrl } from '@/lib/api/trips';
 import { capture, Events } from '@/lib/analytics';
 import { queryClient } from '@/lib/queryClient';
-import { getTripStage, type TripStage } from '@/lib/tripStage';
+import { getTripStage, STAGE_BADGE_LABEL, type TripStage } from '@/lib/tripStage';
 import { parseDateRangeLabel } from '@/lib/pollFormUtils';
+import { getEffectiveTripDates } from '@/lib/tripDates';
 import { GROUP_SIZE_MIDPOINTS } from '@/types/database';
 import type { Respondent, Trip } from '@/types/database';
+import { computeMemberAttendanceCounts, formatGroupBreakdownLabel } from '@/lib/memberAttendance';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -55,18 +57,23 @@ function calcNights(start: string | null, end: string | null): number | null {
 }
 
 function formatWhoIsIn(respondents: Respondent[]): string | null {
-  if (respondents.length === 0) return null;
-  const names = respondents.map((r) => r.name);
+  // Only include people who explicitly said yes — rsvp must be 'in'.
+  // 'out' = declined, null = added but hasn't responded yet (e.g. a
+  // late-add member who just got the welcome SMS). Both belong off the
+  // hero "are in" line; otherwise the planner sees newly-added members
+  // listed as "in" before they've replied.
+  const inRespondents = respondents.filter((r) => r.rsvp === 'in');
+  if (inRespondents.length === 0) return null;
+  const names = inRespondents.map((r) => r.name);
   if (names.length === 1) return `${names[0]} is in`;
   const last = names[names.length - 1];
-  return `${names.slice(0, -1).join(', ')} and ${last} are all in`;
+  return `${names.slice(0, -1).join(', ')} and ${last} are in`;
 }
 
 // ─── Stage-aware hero config ──────────────────────────────────────────────────
 
 const HERO_CONFIG: Record<TripStage, {
   bg: string;
-  badge: string;
   badgeColor: string;
   titleColor: string;
   subtitleColor: string;
@@ -78,12 +85,15 @@ const HERO_CONFIG: Record<TripStage, {
   // primary family. ctaLabel was dropped when the per-stage CTA was
   // collapsed into a single "Poll link" pill — but each stage still
   // tints the pill via ctaBg.
-  deciding:     { bg: '#174F3C', badge: 'FIGURING IT OUT', badgeColor: 'rgba(255,255,255,0.45)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaBg: '#0F3F2E' },
-  confirmed:    { bg: '#0C2218', badge: 'CONFIRMED',        badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.65)', pillBg: 'rgba(255,255,255,0.1)', ctaBg: '#0F3F2E' },
-  planning:     { bg: '#0F2620', badge: 'PLANNING',        badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.65)', pillBg: 'rgba(255,255,255,0.1)', ctaBg: '#0F3F2E' },
-  experiencing: { bg: '#042E26', badge: 'TRIP IS ON!',     badgeColor: 'rgba(255,255,255,0.7)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.75)', pillBg: 'rgba(255,255,255,0.15)', ctaBg: 'rgba(255,255,255,0.2)' },
-  reconciling:  { bg: '#174F3C', badge: 'SORTING IT OUT',  badgeColor: 'rgba(255,255,255,0.45)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaBg: '#555552' },
-  done:         { bg: '#174F3C', badge: 'WHAT A TRIP!',    badgeColor: 'rgba(255,255,255,0.5)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaBg: 'rgba(255,255,255,0.15)' },
+  //
+  // The narrative `badge` text moved to STAGE_BADGE_LABEL in tripStage.ts
+  // so the trip-list cards can share the exact same wording.
+  deciding:     { bg: '#174F3C', badgeColor: 'rgba(255,255,255,0.45)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaBg: '#0F3F2E' },
+  confirmed:    { bg: '#0C2218', badgeColor: 'rgba(255,255,255,0.5)',  titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.65)', pillBg: 'rgba(255,255,255,0.1)', ctaBg: '#0F3F2E' },
+  planning:     { bg: '#0F2620', badgeColor: 'rgba(255,255,255,0.5)',  titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.65)', pillBg: 'rgba(255,255,255,0.1)', ctaBg: '#0F3F2E' },
+  experiencing: { bg: '#042E26', badgeColor: 'rgba(255,255,255,0.7)',  titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.75)', pillBg: 'rgba(255,255,255,0.15)', ctaBg: 'rgba(255,255,255,0.2)' },
+  reconciling:  { bg: '#174F3C', badgeColor: 'rgba(255,255,255,0.45)', titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaBg: '#555552' },
+  done:         { bg: '#174F3C', badgeColor: 'rgba(255,255,255,0.5)',  titleColor: '#FFFFFF', subtitleColor: 'rgba(255,255,255,0.6)', pillBg: 'rgba(255,255,255,0.1)', ctaBg: 'rgba(255,255,255,0.15)' },
 };
 
 // ─── Activity entry-card ──────────────────────────────────────────────────────
@@ -148,18 +158,26 @@ export default function TripDashboard() {
 
   const { data: trip } = useTrip(id);
   const { data: tripSession } = useTripSession(id);
+  const { data: sessionParticipants = [] } = useSessionParticipants(tripSession?.id);
+  const { data: polls = [] } = usePolls(id);
 
   // Lodging prefetch — opens the Lodging tab with results already in
   // cache. Needs destination + both dates because suggest-lodging keys on
-  // them and the prefSummary is fetched as part of the prefetch.
+  // them and the prefSummary is fetched as part of the prefetch. Uses
+  // effective dates so we don't prefetch with a planner's stale seed
+  // while the dates poll is still live.
+  const prefetchDates = useMemo(
+    () => getEffectiveTripDates(trip, polls),
+    [trip, polls],
+  );
   useEffect(() => {
-    if (!trip?.id || !trip.destination || !trip.start_date || !trip.end_date) return;
+    if (!trip?.id || !trip.destination || !prefetchDates.startDate || !prefetchDates.endDate) return;
     const groupSize =
       trip.group_size_precise ?? GROUP_SIZE_MIDPOINTS[trip.group_size_bucket ?? '5-8'];
     void prefetchLodgingSuggestions(queryClient, trip.id, {
       destination: trip.destination,
-      startDate: trip.start_date,
-      endDate: trip.end_date,
+      startDate: prefetchDates.startDate,
+      endDate: prefetchDates.endDate,
       groupSize,
       budgetPerPerson: trip.budget_per_person ?? null,
       estimatedFlightCostPerPerson: trip.estimated_flight_cost_per_person ?? null,
@@ -167,15 +185,13 @@ export default function TripDashboard() {
   }, [
     trip?.id,
     trip?.destination,
-    trip?.start_date,
-    trip?.end_date,
+    prefetchDates.startDate,
+    prefetchDates.endDate,
     trip?.group_size_precise,
     trip?.group_size_bucket,
     trip?.budget_per_person,
     trip?.estimated_flight_cost_per_person,
   ]);
-  const { data: sessionParticipants = [] } = useSessionParticipants(tripSession?.id);
-  const { data: polls = [] } = usePolls(id);
   const { data: respondents = [] } = useRespondents(id);
   const { data: auditEvents = [] } = useTripAuditEvents(id);
   const latestAuditEventAt = auditEvents[0]?.created_at ?? null;
@@ -216,7 +232,7 @@ export default function TripDashboard() {
 
   const decidedPolls = useMemo(() => polls.filter((p) => p.status === 'decided'), [polls]);
 
-const stage = trip ? getTripStage(trip) : 'deciding';
+const stage = trip ? getTripStage(trip, polls) : 'deciding';
   const hero = HERO_CONFIG[stage];
 
   // Hero content
@@ -240,19 +256,35 @@ const stage = trip ? getTripStage(trip) : 'deciding';
   const decidedDurationLabel  = decidedDurationPoll?.poll_options.find((o) => o.id === decidedDurationPoll.decided_option_id)?.label ?? null;
   const decidedBudgetLabel    = budgetPoll?.poll_options.find((o) => o.id === budgetPoll.decided_option_id)?.label ?? null;
 
+  // Effective dates resolve through getEffectiveTripDates so seed values
+  // entered at trip-create time don't masquerade as locked when a dates
+  // poll is still up for vote. See src/lib/tripDates.ts for the truth
+  // table.
+  const { startDate: effectiveStartDate, endDate: effectiveEndDate } =
+    getEffectiveTripDates(trip, polls);
+
   // Only set when the destination is actually confirmed — either the
   // planner entered one directly or the destination poll has been
   // decided. We deliberately do NOT fall back to trip.name here so the
   // hero card hides the location row until it's locked. The trip name
   // is shown separately (heroTripName).
   const destination = trip?.destination ?? decidedDestination2 ?? '';
-  const dateRange = formatDateRange(trip?.start_date ?? null, trip?.end_date ?? null);
-  const nights = calcNights(trip?.start_date ?? null, trip?.end_date ?? null);
+  const dateRange = formatDateRange(effectiveStartDate, effectiveEndDate);
+  const nights = calcNights(effectiveStartDate, effectiveEndDate);
   const whoIsIn = formatWhoIsIn(respondents);
 
   // If we have explicit dates, show those; otherwise fall back to decided dates poll label
   const dateDisplay = dateRange ?? decidedDatesLabel ?? null;
-  const sizeLabel = trip?.group_size_precise != null ? `${trip.group_size_precise} people` : `${trip?.group_size_bucket ?? ''} people`;
+
+  // Live group breakdown shown inline in a single pill so the planner can
+  // read state at a glance — "8 people · 2 in, 5 pending, 1 declined".
+  // Falls back to group_size_precise / bucket when the SMS session hasn't
+  // produced any participants yet (brand-new trips / drafts).
+  const attendanceCounts = computeMemberAttendanceCounts(sessionParticipants, respondents);
+  const sizeLabel = formatGroupBreakdownLabel(attendanceCounts)
+    ?? (trip?.group_size_precise != null
+      ? `${trip.group_size_precise} people`
+      : `${trip?.group_size_bucket ?? ''} people`);
 
   // Budget / duration: explicit trip field takes precedence, then decided poll
   const budgetDisplay   = trip?.budget_per_person ?? decidedBudgetLabel ?? null;
@@ -480,7 +512,7 @@ const stage = trip ? getTripStage(trip) : 'deciding';
           {/* Top row: stage eyebrow on the left, chevron cue on the right
               for planners (signals the whole card is tappable → edit). */}
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={[styles.heroBadge, { color: hero.badgeColor }]}>{hero.badge}</Text>
+            <Text style={[styles.heroBadge, { color: hero.badgeColor }]}>{STAGE_BADGE_LABEL[stage]}</Text>
             {canEditTrip ? (
               <Ionicons name="chevron-forward" size={18} color={hero.badgeColor} />
             ) : null}

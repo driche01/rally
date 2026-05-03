@@ -29,7 +29,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { computeCadence, type NudgeKind } from '../_sms-shared/cadence.ts';
+import { computeCadence, filterCadenceForJoiner, type NudgeKind } from '../_sms-shared/cadence.ts';
 import {
   initialOutreachSms,
   nudgeBody,
@@ -188,15 +188,25 @@ async function seedSession(
         continue;
       }
     }
-    // Use the participant's joined_at as launch (so late joiners get a
-    // fresh d0/d1/d3 from when they joined, not when the trip started).
-    const launchAt = p.joined_at;
+    // Anchor the cadence on the trip session's creation, NOT the
+    // participant's joined_at. This keeps every member's d1/d3/heartbeat/
+    // rd_minus_2/rd_minus_1 in lockstep with the rest of the group, so a
+    // late-add member slots into the same nudge timeline as everyone
+    // else instead of getting their own private cadence calibrated to
+    // when they joined.
+    //
+    // For late joiners, items already in the past are filtered out (with
+    // a 12h grace window) so we don't fire stale "initial" / "d1" / "d3"
+    // SMS that would either duplicate the welcome (member-add already
+    // sent one) or text them about a deadline they couldn't have met.
+    const launchAt = session.created_at;
     const items = computeCadence({
       launchAt,
       responsesDueDate: trip.responses_due_date,
     });
+    const filteredItems = filterCadenceForJoiner(items, p.joined_at);
 
-    if (items.length === 0) continue;
+    if (filteredItems.length === 0) continue;
 
     // Postgres `INSERT ... ON CONFLICT DO NOTHING` against a *partial*
     // unique index requires specifying the index_predicate, which the
@@ -210,7 +220,7 @@ async function seedSession(
     // sent_at-set) and re-fire the welcome SMS. One-row-per-tuple is
     // the correct invariant — if a planner needs to re-fire something,
     // they should explicitly reset, not have it happen by side effect.
-    for (const it of items) {
+    for (const it of filteredItems) {
       const { data: existing } = await admin
         .from('nudge_sends')
         .select('id')

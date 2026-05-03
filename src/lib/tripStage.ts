@@ -1,4 +1,5 @@
 import type { Trip } from '@/types/database';
+import { getEffectiveTripDates, type DatePollLike } from './tripDates';
 
 export type TripStage =
   | 'deciding'
@@ -17,13 +18,19 @@ export const STAGES: TripStage[] = [
   'done',
 ];
 
-export const STAGE_LABEL: Record<TripStage, string> = {
-  deciding:     'Deciding',
-  confirmed:    "It's On!",
-  planning:     'Planning',
-  experiencing: "We're Here",
-  reconciling:  'Wrapping Up',
-  done:         'Done',
+/**
+ * Narrative stage badges shown on the hero card and the trip-list cards
+ * — the all-caps "story" copy. Single source of truth so the trip
+ * detail screen and the trip-list dashboard read the same language at a
+ * glance.
+ */
+export const STAGE_BADGE_LABEL: Record<TripStage, string> = {
+  deciding:     'FIGURING IT OUT',
+  confirmed:    'CONFIRMED',
+  planning:     'PLANNING',
+  experiencing: 'TRIP IS ON!',
+  reconciling:  'SORTING IT OUT',
+  done:         'WHAT A TRIP!',
 };
 
 /**
@@ -36,16 +43,34 @@ export const STAGE_LABEL: Record<TripStage, string> = {
  *   planning     → phase2_unlocked && trip hasn't started yet
  *   confirmed    → start_date + destination + budget_per_person + trip_type all set, phase2 not yet unlocked
  *   deciding     → default (still missing one or more of the above)
+ *
+ * `polls` is optional. When provided, the stage's date checks gate
+ * through `getEffectiveTripDates` so a planner's pre-poll seed value on
+ * trip.start_date doesn't prematurely flip the stage to `confirmed` /
+ * `experiencing` while a date-range dates-poll is still up for vote. List
+ * surfaces that don't have polls in scope (the trip-list dashboard) can
+ * keep calling without polls; they'll see the slightly looser behavior,
+ * which is fine for a card-level summary.
  */
-export function getTripStage(trip: Pick<Trip, 'status' | 'start_date' | 'end_date' | 'phase2_unlocked' | 'destination' | 'budget_per_person' | 'trip_type'>): TripStage {
+export function getTripStage(
+  trip: Pick<Trip, 'status' | 'start_date' | 'end_date' | 'phase2_unlocked' | 'destination' | 'budget_per_person' | 'trip_type'>,
+  polls?: DatePollLike[],
+): TripStage {
   if (trip.status === 'closed') return 'done';
 
   const today = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
 
-  if (trip.end_date && trip.end_date < today) return 'reconciling';
-  if (trip.start_date && trip.start_date <= today && (!trip.end_date || trip.end_date >= today)) return 'experiencing';
+  // When polls are passed, use the date-locking gate so a planner-seed
+  // value doesn't drive stage transitions before the dates poll decides.
+  // Without polls we fall back to the raw trip-row dates (legacy callers).
+  const { startDate: effStart, endDate: effEnd } = polls
+    ? getEffectiveTripDates(trip, polls)
+    : { startDate: trip.start_date, endDate: trip.end_date };
+
+  if (effEnd && effEnd < today) return 'reconciling';
+  if (effStart && effStart <= today && (!effEnd || effEnd >= today)) return 'experiencing';
   if (trip.phase2_unlocked) return 'planning';
-  if (trip.start_date && trip.destination && trip.budget_per_person && trip.trip_type) return 'confirmed';
+  if (effStart && trip.destination && trip.budget_per_person && trip.trip_type) return 'confirmed';
 
   return 'deciding';
 }

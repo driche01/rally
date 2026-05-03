@@ -52,6 +52,17 @@ export function CadenceCard({ sessionId, hideWhenEmpty }: Props) {
   const next = pending[0] ?? null;
   const upcoming = pending.slice(0, 8);
 
+  // Header count is "rounds" not raw rows — a single send to the whole
+  // group on the same day reads to the planner as one upcoming nudge,
+  // not N. Collapse on (nudge_type, scheduled-for date) so a manual
+  // one-off + the regularly-scheduled d3 still count separately if
+  // they happen to share a kind on different days.
+  const pendingRoundCount = useMemo(() => {
+    const seen = new Set<string>();
+    for (const p of pending) seen.add(`${p.nudge_type}|${p.scheduled_for.slice(0, 10)}`);
+    return seen.size;
+  }, [pending]);
+
   if (!sessionId) return null;
   if (pending.length === 0 && hideWhenEmpty) return null;
 
@@ -109,7 +120,7 @@ export function CadenceCard({ sessionId, hideWhenEmpty }: Props) {
       <View style={styles.row}>
         <Ionicons name="time-outline" size={16} color="#163026" />
         <Text style={styles.title}>Nudge schedule</Text>
-        <Text style={styles.count}>· {pending.length} upcoming</Text>
+        <Text style={styles.count}>· {pendingRoundCount} upcoming</Text>
       </View>
 
       {next ? (

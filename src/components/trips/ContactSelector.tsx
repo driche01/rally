@@ -49,7 +49,7 @@ if (IS_NATIVE) {
   }
 }
 
-interface PickerContact {
+export interface PickerContact {
   id: string;
   name: string;
   phone: string;
@@ -127,44 +127,56 @@ async function fetchAllPhoneContacts(): Promise<PickerContact[]> {
   return out;
 }
 
+/**
+ * Ask for contacts permission, surfacing the same fallback alerts the
+ * new-trip flow uses. Returns true when granted; false (with an alert
+ * already shown) on any failure path. Exported so other planner-side
+ * surfaces — e.g. GroupSection's "Add from contacts" — can reuse the
+ * dance without duplicating the messaging.
+ */
+export async function ensureContactsPermission(): Promise<boolean> {
+  if (!IS_NATIVE || !Contacts) {
+    Alert.alert(
+      "Can't open contacts here",
+      "Native contacts aren't available in this build. Use 'Add by phone' instead, or open Rally on your phone.",
+    );
+    return false;
+  }
+  // Probe the native side via try/catch — when the binary on-device
+  // doesn't have the expo-contacts module compiled in (typical after a
+  // stale dev/TestFlight build), the bridge call throws here instead
+  // of dropping the whole app.
+  let status: Awaited<ReturnType<typeof Contacts.requestPermissionsAsync>>['status'];
+  try {
+    const result = await Contacts.requestPermissionsAsync();
+    status = result.status;
+  } catch (err) {
+    console.warn('[ContactSelector] requestPermissionsAsync failed:', err);
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    Alert.alert(
+      "Can't open contacts",
+      `Rally couldn't reach your contacts (${message}). Use "Add by phone" instead, or rebuild the app and try again.`,
+    );
+    return false;
+  }
+  if (status !== 'granted') {
+    Alert.alert(
+      'Contacts permission needed',
+      'Rally needs access to your contacts to add people without typing every phone number. Enable in Settings → Rally → Contacts.',
+    );
+    return false;
+  }
+  return true;
+}
+
 export function ContactSelector({ value, onChange, plannerLabel, error }: Props) {
   const [manualOpen, setManualOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<SelectedContact | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
 
   async function handleOpenContactsPicker() {
-    if (!IS_NATIVE || !Contacts) {
-      Alert.alert(
-        "Can't open contacts here",
-        "Native contacts aren't available in this build. Use 'Add by phone' instead, or open Rally on your phone.",
-      );
-      return;
-    }
-    // Probe the native side via try/catch — when the binary on-device
-    // doesn't have the expo-contacts module compiled in (typical after a
-    // stale dev/TestFlight build), the bridge call throws here instead
-    // of dropping the whole app. The app used to crash because this
-    // line was unwrapped.
-    let status: Awaited<ReturnType<typeof Contacts.requestPermissionsAsync>>['status'];
-    try {
-      const result = await Contacts.requestPermissionsAsync();
-      status = result.status;
-    } catch (err) {
-      console.warn('[ContactSelector] requestPermissionsAsync failed:', err);
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      Alert.alert(
-        "Can't open contacts",
-        `Rally couldn't reach your contacts (${message}). Use "Add by phone" instead, or rebuild the app and try again.`,
-      );
-      return;
-    }
-    if (status !== 'granted') {
-      Alert.alert(
-        'Contacts permission needed',
-        'Rally needs access to your contacts to add people without typing every phone number. Enable in Settings → Rally → Contacts.',
-      );
-      return;
-    }
+    const ok = await ensureContactsPermission();
+    if (!ok) return;
     setPickerOpen(true);
   }
 
@@ -309,7 +321,7 @@ interface PickerProps {
   onClose: () => void;
 }
 
-function NativeContactPickerModal({ visible, excludePhones, onDone, onClose }: PickerProps) {
+export function NativeContactPickerModal({ visible, excludePhones, onDone, onClose }: PickerProps) {
   const insets = useSafeAreaInsets();
   const [contacts, setContacts] = useState<PickerContact[] | null>(null);
   const [loading, setLoading] = useState(false);

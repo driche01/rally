@@ -10,6 +10,8 @@ export { Button } from './Button';
 export { Card, PressableCard } from './Card';
 export { CelebrationBurst, useCelebration } from './CelebrationBurst';
 export { Divider } from './Divider';
+export { DotTitle } from './DotTitle';
+export type { DotTitleSize } from './DotTitle';
 export { EmptyState } from './EmptyState';
 export { FormField } from './FormField';
 export { Input } from './Input';

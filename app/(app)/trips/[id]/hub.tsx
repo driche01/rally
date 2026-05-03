@@ -16,8 +16,11 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTrip } from '@/hooks/useTrips';
+import { usePolls } from '@/hooks/usePolls';
 import { usePermissions } from '@/hooks/usePermissions';
 import { getTripStage, STAGE_ACCENT } from '@/lib/tripStage';
+import { getEffectiveTripDates } from '@/lib/tripDates';
+import { DotTitle } from '@/components/ui';
 
 // Tab content components
 import { ItineraryTab } from '@/components/hub/ItineraryTab';
@@ -29,6 +32,13 @@ import { ExpensesTab } from '@/components/hub/ExpensesTab';
 
 type TabId = 'itinerary' | 'lodging' | 'travel' | 'expenses';
 
+const TAB_LABELS: Record<TabId, string> = {
+  itinerary: 'Itinerary',
+  lodging:   'Lodging',
+  travel:    'Travel',
+  expenses:  'Expenses',
+};
+
 // ─── Hub screen ──────────────────────────────────────────────────────────────
 
 export default function TripHubScreen() {
@@ -36,7 +46,10 @@ export default function TripHubScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { data: trip } = useTrip(id);
-  const accentColor = STAGE_ACCENT[trip ? getTripStage(trip) : 'deciding'];
+  const { data: polls = [] } = usePolls(id);
+  const { startDate: effectiveStartDate, endDate: effectiveEndDate } =
+    getEffectiveTripDates(trip, polls);
+  const accentColor = STAGE_ACCENT[trip ? getTripStage(trip, polls) : 'deciding'];
   const {
     canManageItinerary,
     canManageLodging,
@@ -70,12 +83,10 @@ export default function TripHubScreen() {
           <Text className="text-base" style={{ color: accentColor }}>← Back</Text>
         </Pressable>
         <View className="flex-1 items-center px-4">
-          <Text className="text-base text-ink" style={{ fontFamily: 'SpaceGrotesk_700Bold' }} numberOfLines={1}>
-            {trip?.name ?? ''}
-          </Text>
-          {trip?.start_date && trip?.end_date ? (
-            <Text className="text-xs text-muted">
-              {formatDateRange(trip.start_date, trip.end_date)}
+          <DotTitle label={TAB_LABELS[activeTab]} />
+          {effectiveStartDate && effectiveEndDate ? (
+            <Text className="text-xs text-muted mt-0.5">
+              {formatDateRange(effectiveStartDate, effectiveEndDate)}
             </Text>
           ) : null}
         </View>

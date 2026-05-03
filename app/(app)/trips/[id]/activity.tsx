@@ -23,7 +23,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DotTitle } from '@/components/ui';
 import { useTrip } from '@/hooks/useTrips';
+import { usePolls } from '@/hooks/usePolls';
 import { useTripAuditEvents } from '@/hooks/useTripAuditEvents';
 import { useTripSession, useSessionParticipants } from '@/hooks/useTripSession';
 import { getTripStage, STAGE_ACCENT } from '@/lib/tripStage';
@@ -40,7 +42,32 @@ interface RenderedEvent {
   icon: keyof typeof Ionicons.glyphMap;
   primary: string;
   secondary: string | null;
+  /** Circular icon-bg tint. Pulled from KIND_ICON_BG (same palette the
+   *  TravelTab/ItineraryTab use) so the activity log reads as part of the
+   *  same product, not a one-off list. */
+  iconBg: string;
 }
+
+// Icon-bg palette per event kind. Mirrors MODE_ICON_BG in TravelTab —
+// brand-coherent neutrals (gold for milestones, green for additions,
+// peach for removals, sand/teal for edits + neutral changes). Glyph
+// color stays deep-green for all kinds, matching the hub tabs.
+const KIND_ICON_BG: Record<TripAuditEventKind, string> = {
+  trip_created:              '#F1E2A8', // gold — milestone
+  member_joined:             '#DFE8D2', // green — addition
+  member_added_by_planner:   '#DFE8D2', // green — addition
+  member_opted_out:          '#FFF4F2', // peach — departure
+  member_removed_by_planner: '#FFF4F2', // peach — removal
+  traveler_profile_updated:  '#EFE3D0', // sand — neutral edit
+  survey_completed:          '#DFE8D2', // green — completion
+  poll_added:                '#D8E8E0', // soft teal — neutral question
+  poll_removed:              '#FFF4F2', // peach — removal
+  poll_decided:              '#F1E2A8', // gold — decision locked
+  trip_field_changed:        '#EFE3D0', // sand — neutral edit
+};
+
+const KIND_ICON_BG_FALLBACK = '#EFE3D0';
+const ICON_GLYPH_COLOR = '#0F3F2E';
 
 function renderEvent(ev: TripAuditEvent): RenderedEvent {
   const p = ev.payload ?? {};
@@ -51,46 +78,54 @@ function renderEvent(ev: TripAuditEvent): RenderedEvent {
         ? p.phone
         : 'Someone';
 
-  switch (ev.kind as TripAuditEventKind) {
+  const kind = ev.kind as TripAuditEventKind;
+  const iconBg = KIND_ICON_BG[kind] ?? KIND_ICON_BG_FALLBACK;
+
+  switch (kind) {
     case 'trip_created':
       return {
         icon: 'sparkles-outline',
         primary: 'Trip created',
         secondary: typeof p.name === 'string' ? p.name : null,
+        iconBg,
       };
     case 'member_joined':
-      return { icon: 'person-add-outline', primary: `${name} joined`, secondary: null };
+      return { icon: 'person-add-outline', primary: `${name} joined`, secondary: null, iconBg };
     case 'member_added_by_planner':
-      return { icon: 'person-add-outline', primary: `${name} was added`, secondary: null };
+      return { icon: 'person-add-outline', primary: `${name} was added`, secondary: null, iconBg };
     case 'member_opted_out':
-      return { icon: 'log-out-outline', primary: `${name} opted out`, secondary: null };
+      return { icon: 'log-out-outline', primary: `${name} opted out`, secondary: null, iconBg };
     case 'member_removed_by_planner':
-      return { icon: 'person-remove-outline', primary: `${name} was removed`, secondary: null };
+      return { icon: 'person-remove-outline', primary: `${name} was removed`, secondary: null, iconBg };
     case 'traveler_profile_updated':
       return {
         icon: 'options-outline',
         primary: `${name} updated travel preferences`,
         secondary: null,
+        iconBg,
       };
     case 'survey_completed':
-      return { icon: 'checkmark-done-outline', primary: `${name} finished the survey`, secondary: null };
+      return { icon: 'checkmark-done-outline', primary: `${name} finished the survey`, secondary: null, iconBg };
     case 'poll_added':
       return {
         icon: 'help-circle-outline',
         primary: 'Poll added',
         secondary: typeof p.title === 'string' ? p.title : null,
+        iconBg,
       };
     case 'poll_removed':
       return {
         icon: 'close-circle-outline',
         primary: 'Poll removed',
         secondary: typeof p.title === 'string' ? p.title : null,
+        iconBg,
       };
     case 'poll_decided':
       return {
         icon: 'lock-closed-outline',
         primary: typeof p.title === 'string' ? `Locked: ${p.title}` : 'Decision locked',
         secondary: typeof p.decided_value === 'string' ? p.decided_value : null,
+        iconBg,
       };
     case 'trip_field_changed': {
       const field = typeof p.field_name === 'string' ? p.field_name : 'Detail';
@@ -101,10 +136,11 @@ function renderEvent(ev: TripAuditEvent): RenderedEvent {
         icon: 'create-outline',
         primary: `${field} changed`,
         secondary: arrow,
+        iconBg,
       };
     }
     default:
-      return { icon: 'ellipse-outline', primary: ev.kind, secondary: null };
+      return { icon: 'ellipse-outline', primary: ev.kind, secondary: null, iconBg };
   }
 }
 
@@ -188,7 +224,8 @@ export default function TripActivityScreen() {
   const insets = useSafeAreaInsets();
 
   const { data: trip } = useTrip(id);
-  const accentColor = STAGE_ACCENT[trip ? getTripStage(trip) : 'deciding'];
+  const { data: polls = [] } = usePolls(id);
+  const accentColor = STAGE_ACCENT[trip ? getTripStage(trip, polls) : 'deciding'];
   const { data: events = [], isLoading } = useTripAuditEvents(id);
   const { data: tripSession } = useTripSession(id);
   const { data: participants = [] } = useSessionParticipants(tripSession?.id);
@@ -313,7 +350,7 @@ export default function TripActivityScreen() {
         <TouchableOpacity onPress={() => router.back()} accessibilityRole="button">
           <Text style={[styles.backBtn, { color: accentColor }]}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Activity Log</Text>
+        <DotTitle label="Activity Log" />
         <View style={{ width: 60 }} />
       </View>
 
@@ -374,8 +411,8 @@ export default function TripActivityScreen() {
                 key={ev.id}
                 style={[styles.row, i < rendered.length - 1 && styles.rowBorder]}
               >
-                <View style={styles.rowIcon}>
-                  <Ionicons name={view.icon} size={16} color="#5F685F" />
+                <View style={[styles.rowIcon, { backgroundColor: view.iconBg }]}>
+                  <Ionicons name={view.icon} size={16} color={ICON_GLYPH_COLOR} />
                 </View>
                 <View style={{ flex: 1, gap: 2 }}>
                   <Text style={styles.rowPrimary}>{view.primary}</Text>
@@ -447,7 +484,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20, paddingVertical: 12,
   },
   backBtn: { fontSize: 15, width: 60 },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: '#163026' },
   scroll: { paddingHorizontal: 16, paddingTop: 8 },
 
   filterBar: {
@@ -490,7 +526,9 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 14 },
   rowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#F0F0F0' },
   rowIcon: {
-    width: 28, height: 28, borderRadius: 14, backgroundColor: '#F3F1EC',
+    // backgroundColor set per row from KIND_ICON_BG so each event kind
+    // is visually distinct (mirrors MODE_ICON_BG on the Travel tab).
+    width: 28, height: 28, borderRadius: 14,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   rowPrimary: { fontSize: 14, color: '#163026', lineHeight: 20 },

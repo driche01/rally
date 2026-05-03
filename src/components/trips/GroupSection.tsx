@@ -45,6 +45,11 @@ import { useAddTripMember, useRemoveTripMember } from '@/hooks/useTripMembers';
 import { getProfilesForTripSession } from '@/lib/api/travelerProfiles';
 import { getRespondedRespondentIds } from '@/lib/api/responses';
 import { normalizePhone } from '@/lib/phone';
+import {
+  NativeContactPickerModal,
+  ensureContactsPermission,
+  type PickerContact,
+} from '@/components/trips/ContactSelector';
 import type { Respondent, TripSessionParticipant } from '@/types/database';
 
 const FORM_LABEL_STYLE = { fontSize: 14, fontWeight: '500' as const, color: '#404040' };
@@ -124,6 +129,11 @@ export function GroupSection({ tripId }: { tripId: string }) {
   const creatorUserId = tripSession?.planner_user_id ?? null;
 
   const [addModalVisible, setAddModalVisible] = useState(false);
+  const [contactPickerVisible, setContactPickerVisible] = useState(false);
+  /** Tracks the bulk-add fired by the contacts picker so we can show a
+   *  single "saving…" state on the Add member control instead of a row of
+   *  per-mutation flickers. */
+  const [bulkAdding, setBulkAdding] = useState(false);
 
   // Merge participants + respondents into a single deduped list keyed by
   // normalized phone. Participants take precedence (richer status). The
@@ -244,8 +254,10 @@ export function GroupSection({ tripId }: { tripId: string }) {
           if (!result.ok) {
             const reason = result.reason ?? 'unknown';
             const message =
-              reason === 'invalid_phone' ? "That phone number doesn't look right." :
-              reason === 'forbidden'     ? 'Only the planner can add members.' :
+              reason === 'invalid_phone'             ? "That phone number doesn't look right." :
+              reason === 'forbidden'                 ? 'Only the planner can add members.' :
+              reason === 'participant_upsert_failed' ? "Couldn't fully add — try again." :
+              reason === 'no_active_session'         ? "This trip isn't ready for new members yet — try again in a moment." :
               `Could not add member (${reason}).`;
             Alert.alert('Could not add member', message);
             return;
@@ -278,6 +290,107 @@ export function GroupSection({ tripId }: { tripId: string }) {
     }
 
     proceed();
+  }
+
+  /**
+   * Tapped "Add member" → ask the planner whether they want to pick from
+   * their phone contacts or type a phone manually. iOS uses
+   * ActionSheetIOS for the native sheet; Android falls back to Alert.
+   * Mirrors the language used by ContactSelector on the new-trip flow.
+   */
+  function openAddMemberMenu() {
+    type Choice = 'contacts' | 'manual';
+    const opts: Array<{ label: string; value: Choice }> = [
+      { label: 'Choose from contacts', value: 'contacts' },
+      { label: 'Add by phone',          value: 'manual'   },
+    ];
+    const run = async (choice: Choice) => {
+      if (choice === 'contacts') {
+        const ok = await ensureContactsPermission();
+        if (!ok) return;
+        setContactPickerVisible(true);
+      } else {
+        setAddModalVisible(true);
+      }
+    };
+    if (Platform.OS === 'ios') {
+      const labels = [...opts.map((o) => o.label), 'Cancel'];
+      const cancelIdx = labels.length - 1;
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title: 'Add a member',
+          options: labels,
+          cancelButtonIndex: cancelIdx,
+          userInterfaceStyle: 'light',
+        },
+        (i) => {
+          if (i === cancelIdx || i === undefined) return;
+          void run(opts[i].value);
+        },
+      );
+    } else {
+      Alert.alert('Add a member', undefined, [
+        ...opts.map((o) => ({ text: o.label, onPress: () => void run(o.value) })),
+        { text: 'Cancel', style: 'cancel' as const },
+      ]);
+    }
+  }
+
+  /**
+   * Bulk-add path: planner picked one or more contacts. Skip anyone
+   * already on the trip (active member) silently — a member showing up in
+   * the picker after dedup means the picker's exclude list lagged the
+   * trip's roster (rare). Other failures are aggregated into a single
+   * "couldn't add N" alert at the end.
+   */
+  async function handleContactsPicked(picked: PickerContact[]) {
+    setContactPickerVisible(false);
+    if (picked.length === 0) return;
+
+    // Filter out anyone already an active member. Same dedup the manual
+    // path uses (handleSubmitAdd).
+    const activePhones = new Set(
+      members
+        .filter((m) => m.attendance === 'in')
+        .map((m) => normalizePhone(m.phone) ?? m.phone),
+    );
+    const toAdd = picked.filter((p) => {
+      const norm = normalizePhone(p.phone) ?? p.phone;
+      return !activePhones.has(norm);
+    });
+    if (toAdd.length === 0) {
+      Alert.alert('Already added', "Those contacts are already on the trip.");
+      return;
+    }
+
+    setBulkAdding(true);
+    const failures: string[] = [];
+    for (const c of toAdd) {
+      try {
+        const result = await addMember.mutateAsync({ phone: c.phone, name: c.name || null });
+        if (!result.ok) {
+          const reason = result.reason ?? 'unknown';
+          const label =
+            reason === 'invalid_phone'             ? `${c.name}: invalid phone` :
+            reason === 'forbidden'                 ? `${c.name}: not allowed`   :
+            reason === 'participant_upsert_failed' ? `${c.name}: couldn't save — try again` :
+            reason === 'no_active_session'         ? `${c.name}: trip not ready` :
+            `${c.name}: ${reason}`;
+          failures.push(label);
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'unknown error';
+        failures.push(`${c.name}: ${message}`);
+      }
+    }
+    setBulkAdding(false);
+
+    if (failures.length > 0) {
+      Alert.alert(
+        failures.length === toAdd.length ? "Couldn't add" : 'Some couldn\'t be added',
+        failures.join('\n'),
+      );
+    }
   }
 
   // Direct mutation — the ActionSheet itself acts as the confirm prompt,
@@ -388,13 +501,21 @@ export function GroupSection({ tripId }: { tripId: string }) {
     );
   }
 
+  // Invited count = currently-in-the-group members (in + declined). Mirrors
+  // the trip card / hero pills so "7 + 1 = 8" math is consistent. Members
+  // who texted STOP or were removed by the planner aren't counted as invited
+  // any more — they're shown in the list with their own pill instead.
+  const invitedCount = members.filter(
+    (r) => r.attendance === 'in' || r.attendance === 'declined',
+  ).length;
+
   return (
     <View className="gap-2">
       <View className="flex-row items-baseline justify-between">
         <Text style={FORM_LABEL_STYLE}>Who's invited?</Text>
-        {members.length > 0 ? (
+        {invitedCount > 0 ? (
           <Text className="text-[11px] text-[#888]">
-            {members.length} {members.length === 1 ? 'person' : 'people'}
+            {invitedCount} invited
           </Text>
         ) : null}
       </View>
@@ -426,6 +547,10 @@ export function GroupSection({ tripId }: { tripId: string }) {
                 ) : row.attendance === 'opted_out' ? (
                   <View style={{ backgroundColor: '#FCE8E8', borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2 }}>
                     <Text style={{ fontSize: 10, fontWeight: '700', color: '#9A2A2A' }}>OPTED OUT</Text>
+                  </View>
+                ) : row.hasResponded ? (
+                  <View style={{ backgroundColor: '#D7EFDB', borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2 }}>
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#1A5A2D' }}>IN</Text>
                   </View>
                 ) : null}
               </View>
@@ -476,13 +601,23 @@ export function GroupSection({ tripId }: { tripId: string }) {
         ))}
 
         <Pressable
-          onPress={() => setAddModalVisible(true)}
+          onPress={openAddMemberMenu}
+          disabled={bulkAdding}
           className="flex-row items-center gap-2 px-3.5 py-3 border-t border-line"
           accessibilityRole="button"
           accessibilityLabel="Add member"
         >
-          <Ionicons name="add-circle-outline" size={18} color="#0F3F2E" />
-          <Text className="text-[14px] font-semibold text-green">Add member</Text>
+          <Ionicons
+            name="add-circle-outline"
+            size={18}
+            color={bulkAdding ? '#A8C2B6' : '#0F3F2E'}
+          />
+          <Text
+            className="text-[14px] font-semibold"
+            style={{ color: bulkAdding ? '#A8C2B6' : '#0F3F2E' }}
+          >
+            {bulkAdding ? 'Adding…' : 'Add member'}
+          </Text>
         </Pressable>
       </View>
 
@@ -491,6 +626,18 @@ export function GroupSection({ tripId }: { tripId: string }) {
         pending={addMember.isPending}
         onClose={() => setAddModalVisible(false)}
         onSubmit={handleSubmitAdd}
+      />
+
+      {/* Native multi-select contacts picker — same component the
+          new-trip flow uses; we only feed it the active-member phone
+          list so it doesn't surface people who are already on the trip. */}
+      <NativeContactPickerModal
+        visible={contactPickerVisible}
+        excludePhones={members
+          .filter((m) => m.attendance === 'in')
+          .map((m) => m.phone)}
+        onDone={handleContactsPicked}
+        onClose={() => setContactPickerVisible(false)}
       />
     </View>
   );

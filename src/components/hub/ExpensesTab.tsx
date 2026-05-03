@@ -566,9 +566,9 @@ export function ExpensesTab({ tripId, isPlanner = true }: { tripId: string; isPl
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
-        <View className="flex-row items-center justify-between pt-4 pb-3">
-          <Text className="text-base font-bold text-ink">Expenses</Text>
+        {/* Header — title moved to the hub header; this row keeps the
+            Share / Export CSV controls when expenses exist. */}
+        <View className="flex-row items-center justify-end pt-4 pb-3">
           {hasExpenses ? (
             <View className="flex-row items-center gap-2">
               <Pressable

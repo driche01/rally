@@ -41,32 +41,10 @@ export function isAppKeyword(body: string): boolean {
 
 
 // ─── Planner-managed roster templates ─────────────────────────────────────
-// Used when the planner adds or removes a member from the trip-edit screen
-// (or the Group Dashboard). Unlike the join-handshake confirmation, these
-// don't require a YES reply — they go out as one-shot informational texts.
-
-/**
- * Sent when a planner adds someone to the trip from inside the app. The
- * recipient gets the survey link directly so they can respond without
- * waiting for the YES handshake. Always closes with STOP wording for
- * carrier compliance.
- */
-export function addedToTripSms(opts: {
-  recipientName: string | null;
-  plannerName: string | null;
-  destination?: string | null;
-  surveyUrl: string;
-}): string {
-  const planner = firstName(opts.plannerName) ?? 'A friend';
-  const dest = opts.destination ? ` to ${opts.destination}` : '';
-  const recipient = firstName(opts.recipientName);
-  const greet = recipient ? `Hey ${recipient} — ` : '';
-  return (
-    `${greet}${planner} added you to a trip${dest}. ` +
-    `Take 30 seconds to share what works for you: ${opts.surveyUrl}. ` +
-    `Reply STOP to opt out.`
-  );
-}
+// Used when the planner removes a member from the trip-edit screen.
+// (Adds now route through initialOutreachSms so late-add members get the
+// same first text the original group received — see member-add/index.ts
+// + project_phase_16_5_nudges.md.)
 
 /**
  * Sent when a planner removes someone from the trip. Best-effort

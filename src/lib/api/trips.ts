@@ -1,6 +1,7 @@
 import { supabase, supabaseAnon } from '../supabase';
 import type { GroupSizeBucket, Trip, TripDraftFormState, TripWithPolls } from '../../types/database';
 import { addPlannerMember } from './members';
+import { computeMemberAttendanceCounts } from '../memberAttendance';
 
 /**
  * Fire-and-forget kick to the nudge scheduler. Useful right after a
@@ -8,7 +9,7 @@ import { addPlannerMember } from './members';
  * appear on the dashboard until the next 15-min cron tick. Best-effort:
  * never throws, never awaits the actual seed/fire work.
  */
-function pokeNudgeScheduler(): void {
+export function pokeNudgeScheduler(): void {
   // Don't await — the scheduler can take a few seconds and the user is
   // about to navigate. We just want to nudge it; the cron is the
   // source-of-truth fallback.
@@ -18,7 +19,35 @@ function pokeNudgeScheduler(): void {
 export interface TripWithRespondentCount extends Trip {
   respondentCount: number;
   memberCount: number;
+  /** Planner + members who explicitly RSVP'd 'in'. */
+  acceptedCount: number;
+  /** Active members with no RSVP decision yet. */
+  pendingCount: number;
+  /** Active members who explicitly RSVP'd 'out'. */
+  declinedCount: number;
+  /** accepted + pending + declined — "people currently in the group". */
+  invitedCount: number;
+  /**
+   * Compact poll shape feeding `getTripStage` / `getEffectiveTripDates`
+   * so the trip-list cards show the same gated stage as the trip-detail
+   * hero. Only the fields the helpers read are carried — the full
+   * Poll/PollWithOptions shape isn't needed here.
+   */
+  polls: Array<{
+    type: string;
+    status: string;
+    decided_option_id: string | null;
+    poll_options: { id: string; label: string }[];
+  }>;
 }
+
+/** Statuses that count as "currently the live SMS session" — mirrors dashboard.ts. */
+const ACTIVE_SESSION_STATUSES = new Set([
+  'ACTIVE',
+  'PAUSED',
+  'RE_ENGAGEMENT_PENDING',
+  'FIRST_BOOKING_REACHED',
+]);
 
 export interface CreateTripInput {
   name: string;
@@ -422,11 +451,32 @@ export async function getTrips(): Promise<Trip[]> {
 }
 
 export async function getTripsWithRespondentCounts(): Promise<TripWithRespondentCount[]> {
-  // Supabase PostgREST returns embedded relations as { count: number } when only
-  // the aggregate alias is selected.
+  // Embed:
+  //   - respondents(count)         — kept for legacy callers
+  //   - trip_members(count)        — kept for legacy callers
+  //   - respondents(phone, rsvp)   — drives the in/declined breakdown
+  //   - trip_sessions(...participants) — drives the in/declined breakdown
+  //   - polls(type, status, decided_option_id, poll_options(id, label))
+  //     — feeds getTripStage so the trip-list cards show the same gated
+  //     stage as the trip-detail hero (e.g. "Figuring it out" stays
+  //     "deciding" while a date-range dates-poll is still up for vote,
+  //     even when trip.start_date holds a planner seed value).
+  // PostgREST returns count-only embeds as { count: number }. Named-alias
+  // embeds return rows. The two coexist on the same select string.
   const { data, error } = await supabase
     .from('trips')
-    .select('*, respondents(count), trip_members(count)')
+    .select(`
+      *,
+      respondents_count:respondents(count),
+      trip_members_count:trip_members(count),
+      respondents(phone, rsvp, is_planner),
+      trip_sessions(
+        status,
+        last_message_at,
+        trip_session_participants(status, is_attending, is_planner, phone)
+      ),
+      polls(type, status, decided_option_id, poll_options(id, label))
+    `)
     .in('status', ['active', 'draft'])
     .order('created_at', { ascending: false });
   if (error) throw error;
@@ -436,12 +486,85 @@ export async function getTripsWithRespondentCounts(): Promise<TripWithRespondent
     return Array.isArray(raw) ? (raw[0]?.count ?? 0) : (raw?.count ?? 0);
   }
 
-  type TripRow = Trip & { respondents: CountShape; trip_members: CountShape };
+  type RespondentRow = {
+    phone: string | null;
+    rsvp: string | null;
+    is_planner: boolean | null;
+  };
+  type ParticipantRow = {
+    status: string;
+    is_attending: boolean | null;
+    is_planner: boolean | null;
+    phone: string;
+  };
+  type SessionRow = {
+    status: string;
+    last_message_at: string | null;
+    trip_session_participants: ParticipantRow[] | null;
+  };
+  type StagePollRow = {
+    type: string;
+    status: string;
+    decided_option_id: string | null;
+    poll_options: { id: string; label: string }[] | null;
+  };
+
+  type TripRow = Trip & {
+    respondents_count: CountShape;
+    trip_members_count: CountShape;
+    respondents: RespondentRow[] | null;
+    trip_sessions: SessionRow[] | null;
+    polls: StagePollRow[] | null;
+  };
+
   return (data ?? []).map((row: TripRow) => {
-    const respondentCount = extractCount(row.respondents);
-    const memberCount = extractCount(row.trip_members);
-    const { respondents: _r, trip_members: _m, ...tripData } = row;
-    return { ...tripData, respondentCount, memberCount } satisfies TripWithRespondentCount;
+    const respondentCount = extractCount(row.respondents_count);
+    const memberCount = extractCount(row.trip_members_count);
+
+    // Pick the most-recently-active session, matching dashboard.ts's
+    // getActiveTripSession filter so the count lines up with what the
+    // hub shows. Drafts and brand-new trips have no active session yet —
+    // their breakdown is all zeros and the UI falls back to group_size_*.
+    const activeSession = (row.trip_sessions ?? [])
+      .filter((s) => ACTIVE_SESSION_STATUSES.has(s.status))
+      .sort((a, b) =>
+        (b.last_message_at ?? '').localeCompare(a.last_message_at ?? ''),
+      )[0];
+    const participants = activeSession?.trip_session_participants ?? [];
+    const respondents = row.respondents ?? [];
+    const { acceptedCount, pendingCount, declinedCount, invitedCount } =
+      computeMemberAttendanceCounts(participants, respondents);
+
+    const {
+      respondents_count: _rc,
+      trip_members_count: _mc,
+      respondents: _r,
+      trip_sessions: _ts,
+      polls: stagePolls,
+      ...tripData
+    } = row;
+
+    // Normalize the embedded polls into the DatePollLike shape that
+    // getTripStage / getEffectiveTripDates accept. Only the fields they
+    // touch (type/status/decided_option_id + poll_options{id,label})
+    // are carried — keeps the per-row payload small.
+    const polls = (stagePolls ?? []).map((p) => ({
+      type: p.type,
+      status: p.status,
+      decided_option_id: p.decided_option_id,
+      poll_options: (p.poll_options ?? []).map((o) => ({ id: o.id, label: o.label })),
+    }));
+
+    return {
+      ...tripData,
+      respondentCount,
+      memberCount,
+      acceptedCount,
+      pendingCount,
+      declinedCount,
+      invitedCount,
+      polls,
+    } satisfies TripWithRespondentCount;
   });
 }
 

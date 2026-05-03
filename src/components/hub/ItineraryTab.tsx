@@ -36,7 +36,7 @@ import {
   formatTime,
   generateIcal,
 } from '@/lib/api/itinerary';
-import { parseDateRangeLabel } from '@/lib/pollFormUtils';
+import { getEffectiveTripDates } from '@/lib/tripDates';
 import { getShareUrl } from '@/lib/api/trips';
 import { lookupRestaurantDetails, type RestaurantDetails } from '@/lib/api/restaurantDetails';
 import { useAuthStore } from '@/stores/authStore';
@@ -106,12 +106,6 @@ const TP_MINUTES = Array.from({ length: 12 }, (_, i) => i * 5);
 
 function pad2(n: number): string {
   return String(n).padStart(2, '0');
-}
-
-/** Local-date → 'YYYY-MM-DD'. Mirrors the trips-table format so derived
- *  itinerary dates use the same string shape as canonical trip.start_date. */
-function toIsoDay(d: Date): string {
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
 function parseTimeToIndices(time: string): { hi: number; mi: number } {
@@ -1019,26 +1013,14 @@ export function ItineraryTab({ tripId, isPlanner = true }: { tripId: string; isP
   const [altSheetBlock, setAltSheetBlock] = useState<ItineraryBlock | null>(null);
   const [applyingAlt, setApplyingAlt] = useState(false);
 
-  // Effective trip dates. Canonical source is trips.start_date / end_date,
-  // written by the trip-create flow and by approve_poll_recommendation_with_dates
-  // (the date-heatmap "Pick" path). When a planner approves a dates poll
-  // via the regular "Approve" button instead, the RPC currently only writes
-  // trip_duration — leaving start/end_date null even though the group
-  // decided. Fall back to the decided dates poll's option label so the
-  // itinerary tab inherits whatever the trip actually decided, instead of
-  // asking the planner to re-enter dates a second time.
-  const datesPollDecision = useMemo(() => {
-    const decided = polls.find((p) =>
-      p.type === 'dates' && p.status === 'decided' && p.decided_option_id,
-    );
-    if (!decided) return null;
-    const opt = decided.poll_options.find((o) => o.id === decided.decided_option_id);
-    if (!opt) return null;
-    return parseDateRangeLabel(opt.label);
-  }, [polls]);
-
-  const effectiveStartDate = trip?.start_date ?? (datesPollDecision ? toIsoDay(datesPollDecision.start) : null);
-  const effectiveEndDate   = trip?.end_date   ?? (datesPollDecision ? toIsoDay(datesPollDecision.end)   : null);
+  // Effective trip dates: gated through getEffectiveTripDates so seed
+  // dates entered at trip-create time don't masquerade as locked when a
+  // dates poll is still live. See src/lib/tripDates.ts for the full
+  // truth table.
+  const { startDate: effectiveStartDate, endDate: effectiveEndDate } = useMemo(
+    () => getEffectiveTripDates(trip, polls),
+    [trip, polls],
+  );
 
   // Build itinerary days
   const days = useMemo(() => {
@@ -1361,22 +1343,16 @@ export function ItineraryTab({ tripId, isPlanner = true }: { tripId: string; isP
   // — that input would just get clobbered the moment the poll locks.
   const liveDatesPoll = polls.find((p) => p.type === 'dates' && p.status === 'live');
 
-  return (
-    <View className="flex-1 bg-cream">
-      {/* Header */}
-      <View className="flex-row items-center justify-between px-6 pt-4 pb-3">
-        <Text className="text-base font-bold text-ink">Itinerary</Text>
-        <Pressable onPress={handleShare} className="p-1 active:opacity-60">
-          <Ionicons name="share-outline" size={20} color="#5F685F" />
-        </Pressable>
-      </View>
-
-      {!hasDates ? (
-        /* Empty state — no dates */
+  // Empty state — early-return without the share-button row, mirroring
+  // Lodging/Travel's pattern so the icon + text sit at true vertical
+  // center instead of being pushed down by the header row.
+  if (!hasDates) {
+    return (
+      <View className="flex-1 bg-cream">
         <View className="flex-1 justify-center">
           <EmptyState
             icon="calendar-outline"
-            title={liveDatesPoll ? 'Dates still being decided' : 'No trip dates yet'}
+            title={liveDatesPoll ? 'Activity suggestions' : 'No trip dates yet'}
             body={
               liveDatesPoll
                 ? 'The itinerary fills in automatically once the group locks the dates poll.'
@@ -1384,7 +1360,22 @@ export function ItineraryTab({ tripId, isPlanner = true }: { tripId: string; isP
             }
           />
         </View>
-      ) : (
+      </View>
+    );
+  }
+
+  return (
+    <View className="flex-1 bg-cream">
+      {/* Header — title now lives in the hub-level header; this row only
+          carries the share affordance. */}
+      <View className="flex-row items-center justify-end px-6 pt-4 pb-3">
+        <Pressable onPress={handleShare} className="p-1 active:opacity-60">
+          <Ionicons name="share-outline" size={20} color="#5F685F" />
+        </Pressable>
+      </View>
+
+      {/* Day-by-day timeline */}
+      {(
         <ScrollView
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 24, paddingTop: 16 }}
           keyboardDismissMode="on-drag"

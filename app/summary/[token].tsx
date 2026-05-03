@@ -16,6 +16,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { supabaseAnon } from '@/lib/supabase';
 import { formatCadenceDate } from '@/lib/cadence';
+import { getEffectiveTripDates } from '@/lib/tripDates';
 
 const IS_WEB = Platform.OS === 'web';
 
@@ -111,6 +112,10 @@ export default function SummaryPage() {
   const { trip, polls = [] } = data;
   const decided = polls.filter((p) => p.status === 'decided');
   const stillOpen = polls.filter((p) => p.status === 'live');
+  // Locked dates only — a planner's pre-poll seed value on trip.start_date
+  // shouldn't appear in the LOCKED IN header while a date-range poll is
+  // still up for vote.
+  const { startDate: lockedStart, endDate: lockedEnd } = getEffectiveTripDates(trip, polls);
 
   return (
     <PageShell>
@@ -125,11 +130,11 @@ export default function SummaryPage() {
             <Text style={styles.metaText}>{trip.destination}</Text>
           </View>
         ) : null}
-        {trip.start_date && trip.end_date ? (
+        {lockedStart && lockedEnd ? (
           <View style={styles.metaLine}>
             <Ionicons name="calendar-outline" size={14} color="#5F685F" />
             <Text style={styles.metaText}>
-              {formatCadenceDate(trip.start_date)} → {formatCadenceDate(trip.end_date)}
+              {formatCadenceDate(lockedStart)} → {formatCadenceDate(lockedEnd)}
             </Text>
           </View>
         ) : null}

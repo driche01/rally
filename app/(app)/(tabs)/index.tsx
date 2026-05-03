@@ -8,9 +8,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { PreciseGroupSizeModal } from '@/components/PreciseGroupSizeModal';
 import { useDeleteTrip, useTripsWithRespondentCounts, useUpdateTrip } from '@/hooks/useTrips';
+import { formatGroupBreakdownLabel } from '@/lib/memberAttendance';
 import { useAuthStore } from '@/stores/authStore';
 import type { TripWithRespondentCount } from '@/lib/api/trips';
-import { getTripStage, STAGES, STAGE_LABEL } from '@/lib/tripStage';
+import { getTripStage, STAGES, STAGE_BADGE_LABEL } from '@/lib/tripStage';
 import { prefetchTripDetail } from '@/lib/prefetchTripDetail';
 import { T } from '@/theme';
 import { FirstTimeEmptyState } from '@/components/trips/FirstTimeEmptyState';
@@ -69,14 +70,29 @@ function TripCard({
     router.push(`/(app)/trips/${trip.id}`);
   }
 
-  const stage = getTripStage(trip);
+  // Pass the embedded date-range polls into getTripStage so a planner's
+  // pre-poll seed dates (entered at trip creation, before the dates poll
+  // decides) don't prematurely flip the stage to `confirmed` /
+  // `experiencing`. Mirrors the gating on the trip-detail hero.
+  const stage = getTripStage(trip, trip.polls);
   const stageIndex = STAGES.indexOf(stage);
   const stageColor = STAGE_COLOR[stage] ?? STAGE_COLOR.deciding;
 
-  // Label for the badge: prefer precise number, fall back to bucket range
-  const sizeLabel = trip.group_size_precise != null
-    ? `${trip.group_size_precise} people`
-    : `${trip.group_size_bucket} people`;
+  // Single pill shows the full breakdown so a planner can read group state
+  // at a glance — e.g. "8 people · 2 in, 5 pending, 1 declined". When the
+  // SMS session hasn't settled yet (drafts, freshly-created trips), fall
+  // back to the planner's group_size_* expectation so the pill never reads
+  // as empty.
+  const breakdownLabel = formatGroupBreakdownLabel({
+    acceptedCount: trip.acceptedCount,
+    pendingCount: trip.pendingCount,
+    declinedCount: trip.declinedCount,
+    invitedCount: trip.invitedCount,
+  });
+  const sizeLabel = breakdownLabel
+    ?? (trip.group_size_precise != null
+      ? `${trip.group_size_precise} people`
+      : `${trip.group_size_bucket} people`);
 
   function confirmDelete() {
     Alert.alert('Delete this rally?', 'This cannot be undone.', [
@@ -136,7 +152,9 @@ function TripCard({
               </View>
             ) : null}
 
-            {/* Tapping the size pill opens the precise-number modal */}
+            {/* Tapping the size pill opens the precise-number modal. The
+                label embeds the live in/pending/declined breakdown so the
+                planner reads the group state at a glance. */}
             <Pressable
               onPress={() => setPreciseModalVisible(true)}
               accessibilityRole="button"
@@ -172,7 +190,7 @@ function TripCard({
                   ))}
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
-                  <Text style={[styles.stageLabel, { color: stageColor.label }]}>{STAGE_LABEL[stage]}</Text>
+                  <Text style={[styles.stageLabel, { color: stageColor.label }]}>{STAGE_BADGE_LABEL[stage]}</Text>
                   <View style={[styles.rolePill, isPlanner ? styles.rolePillPlanner : styles.rolePillMember]}>
                     <Ionicons
                       name={isPlanner ? 'ribbon-outline' : 'person-outline'}

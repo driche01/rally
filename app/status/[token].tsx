@@ -17,6 +17,7 @@ import * as Linking from 'expo-linking';
 import { getTripByShareToken } from '@/lib/api/trips';
 import { getResponseCountsForTrip } from '@/lib/api/responses';
 import { GROUP_SIZE_MIDPOINTS, type TripWithPolls } from '@/types/database';
+import { getEffectiveTripDates } from '@/lib/tripDates';
 import { capture, Events } from '@/lib/analytics';
 
 const IS_WEB = Platform.OS === 'web';
@@ -119,7 +120,11 @@ export default function PublicTripStatus() {
     );
   }
 
-  const dateLabel = formatDateRange(trip.start_date, trip.end_date);
+  // Locked dates only — a planner's seed value on trip.start_date shouldn't
+  // render on the public status page while a date-range poll is still up
+  // for vote.
+  const { startDate: lockedStart, endDate: lockedEnd } = getEffectiveTripDates(trip, trip.polls ?? []);
+  const dateLabel = formatDateRange(lockedStart, lockedEnd);
   const total = trip.group_size_precise ?? GROUP_SIZE_MIDPOINTS[trip.group_size_bucket];
   const respondShareUrl =
     (process.env.EXPO_PUBLIC_APP_URL ?? 'https://rallyapp.io') + `/respond/${token}`;
