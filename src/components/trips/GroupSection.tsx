@@ -94,11 +94,21 @@ export function GroupSection({ tripId }: { tripId: string }) {
     queryFn: () => getProfilesForTripSession(tripSession!.id),
     enabled: Boolean(tripSession?.id),
   });
-  const { data: respondedIds } = useQuery({
+  // queryFn returns string[] (so the AsyncStorage persister can
+  // JSON-serialize it round-trippably). We deliberately do NOT use
+  // `select` to convert to a Set — `select` is bypassed when React Query
+  // rehydrates from the persister, leaving stale callers calling `.has`
+  // on an array (TypeError). Wrap in a Set here, memoized on the array,
+  // so consumers always get a real Set regardless of cache state.
+  const { data: respondedIdArr } = useQuery({
     queryKey: ['responded_respondent_ids', tripId],
     queryFn: () => getRespondedRespondentIds(tripId),
     enabled: Boolean(tripId),
   });
+  const respondedIds = useMemo(
+    () => new Set(Array.isArray(respondedIdArr) ? respondedIdArr : []),
+    [respondedIdArr],
+  );
   const addMember = useAddTripMember(tripId, tripSession?.id);
   const removeMember = useRemoveTripMember(tripId, tripSession?.id);
   const setPlanner = useSetPlannerForPhone(tripId, tripSession?.id);
@@ -180,7 +190,7 @@ export function GroupSection({ tripId }: { tripId: string }) {
         hasResponded: Boolean(
           matchingResp?.rsvp
           || matchingResp?.preferences
-          || (matchingResp && respondedIds?.has(matchingResp.id))
+          || (matchingResp && respondedIds.has(matchingResp.id))
         ),
         hasProfile: profileByPhone.get(norm) === true,
         attendance,
@@ -200,7 +210,7 @@ export function GroupSection({ tripId }: { tripId: string }) {
         isCreator: false,
         isPlanner: r.is_planner,
         isActiveSms: false,
-        hasResponded: Boolean(r.rsvp || r.preferences || respondedIds?.has(r.id)),
+        hasResponded: Boolean(r.rsvp || r.preferences || respondedIds.has(r.id)),
         hasProfile: profileByPhone.get(norm) === true,
         attendance: r.rsvp === 'out' ? 'declined' : 'in',
         note: r.note ?? null,
@@ -519,7 +529,7 @@ export function GroupSection({ tripId }: { tripId: string }) {
           </Text>
         ) : null}
       </View>
-      <Text style={{ fontSize: 13, color: '#737373', marginTop: -2 }}>
+      <Text style={{ fontSize: 14, color: '#737373', marginTop: -2 }}>
         Add or remove people from your trip. Rally texts them automatically — a welcome with the survey link when added, a heads-up when removed.
       </Text>
 
@@ -542,15 +552,15 @@ export function GroupSection({ tripId }: { tripId: string }) {
                 ) : null}
                 {row.attendance === 'declined' ? (
                   <View style={{ backgroundColor: '#F4E5DC', borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2 }}>
-                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#8C4422' }}>DECLINED</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#8C4422' }}>DECLINED</Text>
                   </View>
                 ) : row.attendance === 'opted_out' ? (
                   <View style={{ backgroundColor: '#FCE8E8', borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2 }}>
-                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#9A2A2A' }}>OPTED OUT</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#9A2A2A' }}>OPTED OUT</Text>
                   </View>
                 ) : row.hasResponded ? (
                   <View style={{ backgroundColor: '#D7EFDB', borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2 }}>
-                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#1A5A2D' }}>IN</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#1A5A2D' }}>IN</Text>
                   </View>
                 ) : null}
               </View>
@@ -562,7 +572,7 @@ export function GroupSection({ tripId }: { tripId: string }) {
               ) : null}
               {row.note ? (
                 <Text
-                  style={{ fontSize: 12, color: '#5F685F', fontStyle: 'italic', marginTop: 4 }}
+                  style={{ fontSize: 14, color: '#5F685F', fontStyle: 'italic', marginTop: 4 }}
                   numberOfLines={3}
                 >
                   &ldquo;{row.note}&rdquo;
@@ -667,7 +677,7 @@ function StatusPill({ done, label }: { done: boolean; label: string }) {
         size={11}
         color={done ? '#235C38' : '#A0A0A0'}
       />
-      <Text style={{ fontSize: 10, fontWeight: '700', color: done ? '#235C38' : '#888' }}>
+      <Text style={{ fontSize: 11, fontWeight: '700', color: done ? '#235C38' : '#888' }}>
         {label}
       </Text>
     </View>
@@ -795,12 +805,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#EFE3D0',
   },
-  modalCancel: { fontSize: 16, color: '#5F685F' },
-  modalTitle: { fontSize: 17, fontWeight: '700', color: '#163026' },
-  modalSave: { fontSize: 16, fontWeight: '700', color: '#0F3F2E' },
+  modalCancel: { fontSize: 18, color: '#5F685F' },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: '#163026' },
+  modalSave: { fontSize: 18, fontWeight: '700', color: '#0F3F2E' },
   modalBody: { padding: 20, gap: 16 },
   modalField: { gap: 6 },
-  modalLabel: { fontSize: 12, fontWeight: '600', color: '#5F685F', textTransform: 'uppercase', letterSpacing: 0.5 },
+  modalLabel: { fontSize: 14, fontWeight: '600', color: '#5F685F', textTransform: 'uppercase', letterSpacing: 0.5 },
   modalInput: {
     backgroundColor: 'white',
     borderRadius: 12,
@@ -808,9 +818,9 @@ const styles = StyleSheet.create({
     borderColor: '#E5E5E5',
     paddingHorizontal: 14,
     paddingVertical: 12,
-    fontSize: 16,
+    fontSize: 18,
     color: '#163026',
   },
-  modalErr: { fontSize: 13, color: '#9A2A2A' },
-  modalHint: { fontSize: 12, color: '#888' },
+  modalErr: { fontSize: 14, color: '#9A2A2A' },
+  modalHint: { fontSize: 14, color: '#888' },
 });
