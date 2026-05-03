@@ -683,6 +683,7 @@ export default function EditTripScreen() {
       onConfirm={(next) => setSelectedDays(next)}
       onClose={() => setDatePickerVisible(false)}
       title="Pick the days you’re considering"
+      initialMonth={selectedDays.length > 0 ? [...selectedDays].sort()[0] : undefined}
     />
     <KeyboardAvoidingView
       className="flex-1 bg-cream"
