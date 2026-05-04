@@ -32,6 +32,8 @@ Do **NOT** add raw `#XXXXXX` hex literals to feature files. They drift. Only `co
 |---|---|---|
 | Filled CTA / cancel / link / delete | **`<Button>`** | Every interactive button. Variants: `primary` (green), `secondary` (cream-warm), `ghost` (text-only green), `destructive` (warm-rust). |
 | Tag / chip / toggle | **`<Pill>`** | Status tag (no `onPress`) or toggleable filter (`onPress` + `selected`). 5 variants. |
+| Filter / sort chip in a list header | **`<FilterChip>`** | Icon + optional label + optional chevron. Implies a menu opens on tap. Omit `label` for icon-only mode (binary toggles like sort direction). Built-in flexShrink + ellipsize. |
+| Horizontal flex row | **`<Row>`** | Replaces ad-hoc `flexDirection: 'row'`. Defaults to `alignItems: center`, no wrap, optional `gap`. Pair with `numberOfLines` on user-supplied text. |
 | Single-line text input | **`<Input>`** | Optional `label`, `error`, `hint`. Brand surface + shadow + green focus. |
 | Multi-line textarea | **`<Input multiline>`** | Same component, taller. |
 | Form field with section label | **`<FormField label="..." required>`** wrapping `<Input>` | Repeating form sections. Adds the uppercase label automatically. |
@@ -64,6 +66,17 @@ Do **NOT** add raw `#XXXXXX` hex literals to feature files. They drift. Only `co
 5. **Headlines use Georgia** — `fontFamily: Platform.OS === 'android' ? 'serif' : 'Georgia'`. Body uses Inter.
 6. **Cards lift via shadow + border**, not just bg color. Use `<Card>` rather than `bg-card` directly when you want an elevated surface.
 7. **Disabled primary CTAs use sage** (`#A0C0B2`) not gray. The Button component handles this automatically when you pass `disabled`.
+
+## Responsive layout — the four rules
+
+Rally targets every iPhone from SE (320pt) through Pro Max (430pt). Apply these rules to keep layouts from overflowing on narrow phones:
+
+1. **No hardcoded widths > 44pt** (the iOS minimum tap target). Use `flex` / `flexShrink: 1` / `flexBasis` / percentages instead. If you need a runtime decision, branch via `useBreakpoint()` from `@/hooks/useBreakpoint`.
+2. **All user-supplied text gets `numberOfLines={1}` + `ellipsizeMode="tail"`** unless intentionally multi-line. Trip names, member names, destinations, planner names, custom poll labels — anything a user typed.
+3. **In a row of N siblings, the unbounded one gets `flexShrink: 1`.** Bounded chips (date filter, sort) stay full-width; the one with variable content (member name) absorbs the squeeze.
+4. **Use `<Row>` instead of inline `flexDirection: 'row'`.** Use `<FilterChip>` instead of inline filter-bar Pressables. The primitives encode the defaults so you don't have to remember them.
+
+Audit by grepping for `width: <number>` and `<Text>` rendering user data without `numberOfLines`. Both are usually red flags.
 
 ## Adding a new component
 

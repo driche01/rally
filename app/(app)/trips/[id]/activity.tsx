@@ -23,7 +23,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { DotTitle } from '@/components/ui';
+import { DotTitle, FilterChip, Row } from '@/components/ui';
 import { useTrip } from '@/hooks/useTrips';
 import { usePolls } from '@/hooks/usePolls';
 import { useTripAuditEvents } from '@/hooks/useTripAuditEvents';
@@ -354,9 +354,12 @@ export default function TripActivityScreen() {
         <View style={{ width: 60 }} />
       </View>
 
-      {/* Filter chip bar — collapses to a "no filters" gesture line via
-          the clear-all link when both filters are at default. */}
-      <View style={styles.filterBar}>
+      {/* Filter chip bar. Sort is icon-only so the row fits on iPhone SE
+          / 13 mini (375pt) — date + member chips can carry full labels.
+          The member chip flexShrinks so a long name truncates instead
+          of pushing sort off-screen. See feedback_responsive_layout
+          memory note + ui/README.md for the four rules. */}
+      <Row gap={8} style={styles.filterBar}>
         <FilterChip
           icon="calendar-outline"
           label={DATE_FILTER_LABELS[dateFilter]}
@@ -372,9 +375,8 @@ export default function TripActivityScreen() {
         />
         <FilterChip
           icon={sortDir === 'newest' ? 'arrow-down-outline' : 'arrow-up-outline'}
-          label={sortDir === 'newest' ? 'Newest first' : 'Oldest first'}
           active={sortDir !== 'newest'}
-          hideTrailingChevron
+          accessibilityLabel={sortDir === 'newest' ? 'Sort: newest first. Tap to switch to oldest first.' : 'Sort: oldest first. Tap to switch to newest first.'}
           onPress={() => setSortDir((d) => (d === 'newest' ? 'oldest' : 'newest'))}
         />
         {filtersActive ? (
@@ -382,7 +384,7 @@ export default function TripActivityScreen() {
             <Text style={styles.clearBtnText}>Clear</Text>
           </Pressable>
         ) : null}
-      </View>
+      </Row>
 
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]}
@@ -432,88 +434,22 @@ export default function TripActivityScreen() {
   );
 }
 
-// ─── Filter chip ────────────────────────────────────────────────────────────
-// Shared affordance for the date + member filters. Active state uses the
-// trip's stage accent so the bar reads as "you've narrowed something" at
-// a glance without needing a separate badge.
-
-function FilterChip({
-  icon,
-  label,
-  active,
-  disabled,
-  hideTrailingChevron,
-  onPress,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  active: boolean;
-  disabled?: boolean;
-  /** Drop the right-side chevron — set for binary toggles where there's
-   *  no menu to open and the chevron would mislead. */
-  hideTrailingChevron?: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      style={[
-        styles.chip,
-        active && styles.chipActive,
-        disabled && { opacity: 0.5 },
-      ]}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-    >
-      <Ionicons name={icon} size={13} color={active ? '#0F3F2E' : '#5F685F'} />
-      <Text style={[styles.chipText, active && styles.chipTextActive]} numberOfLines={1}>
-        {label}
-      </Text>
-      {hideTrailingChevron ? null : (
-        <Ionicons name="chevron-down" size={11} color={active ? '#0F3F2E' : '#A0A0A0'} />
-      )}
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F4F0' },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingVertical: 12,
   },
-  backBtn: { fontSize: 15, width: 60 },
+  backBtn: { fontSize: 14, width: 60 },
   scroll: { paddingHorizontal: 16, paddingTop: 8 },
 
   filterBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
     paddingHorizontal: 16,
     paddingTop: 4,
     paddingBottom: 8,
   },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: 'white',
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-    maxWidth: 180,
-  },
-  chipActive: {
-    backgroundColor: '#DFE8D2',
-    borderColor: '#0F3F2E',
-  },
-  chipText: { fontSize: 12, color: '#5F685F', fontWeight: '600' },
-  chipTextActive: { color: '#0F3F2E' },
   clearBtn: { marginLeft: 'auto', paddingHorizontal: 6, paddingVertical: 4 },
-  clearBtnText: { fontSize: 12, color: '#5F685F', fontWeight: '600' },
+  clearBtnText: { fontSize: 14, color: '#5F685F', fontWeight: '600' },
 
   listCard: {
     backgroundColor: 'white',
@@ -532,7 +468,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   rowPrimary: { fontSize: 14, color: '#163026', lineHeight: 20 },
-  rowSecondary: { fontSize: 12, color: '#737373', lineHeight: 16 },
+  rowSecondary: { fontSize: 14, color: '#737373', lineHeight: 16 },
   rowTime: { fontSize: 11, color: '#A0A0A0', flexShrink: 0, paddingTop: 4 },
 
   emptyState: { alignItems: 'center', paddingTop: 80, gap: 8 },
