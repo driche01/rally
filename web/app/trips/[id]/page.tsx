@@ -1,13 +1,16 @@
 /**
- * /trips/[id] — trip detail / planner dashboard placeholder.
+ * /trips/[id] — planner trip dashboard.
  *
- * Step 3 lands the minimum: trip name, description, share link.
- * The full planner roster + invite UI lands in Steps 6 + 7.
+ * Phase A scope (build guide §6 Step 7): trip header + roster + share
+ * link + invite trigger. Steps 8-10 layer SMS nudges, activity feed
+ * real-time, and mutuals population on top.
  */
 
 import { notFound, redirect } from "next/navigation";
 import { requireAuthUid } from "@/lib/auth";
-import type { Trip } from "@shared/types";
+import { createServiceClient } from "@/lib/supabase/server";
+import type { Trip, Respondent, ActivityFeedEntry } from "@shared/types";
+import TripDashboard from "./trip-dashboard";
 
 export default async function TripPage({
   params,
@@ -19,7 +22,7 @@ export default async function TripPage({
   const r = await requireAuthUid();
   if (!r.ok) redirect(`/login?next=/trips/${id}`);
 
-  const { data, error } = await r.supabase
+  const { data: tripRow, error } = await r.supabase
     .from("trips")
     .select("*")
     .eq("id", id)
@@ -31,61 +34,36 @@ export default async function TripPage({
       </main>
     );
   }
-  if (!data) notFound();
+  if (!tripRow) notFound();
+  const trip = tripRow as Trip;
 
-  const trip = data as Trip;
-  const baseUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  // Roster + activity feed in parallel. Use service-role to bypass
+  // the respondents RLS noise — RLS already allowed it, but we want
+  // the freshest read with a single round-trip.
+  const svc = createServiceClient();
+  const [respondentsRes, activityRes] = await Promise.all([
+    svc.from("respondents")
+       .select("*")
+       .eq("trip_id", id)
+       .order("created_at", { ascending: true }),
+    svc.from("activity_feed_entries")
+       .select("*")
+       .eq("trip_id", id)
+       .order("created_at", { ascending: false })
+       .limit(15),
+  ]);
+  const respondents = (respondentsRes.data ?? []) as Respondent[];
+  const activity = (activityRes.data ?? []) as ActivityFeedEntry[];
+
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
   const inviteUrl = `${baseUrl}/invite/${trip.share_token}`;
 
   return (
-    <main className="min-h-dvh">
-      <div className="max-w-2xl mx-auto px-6 py-10">
-        <p className="text-xs font-bold tracking-widest uppercase text-green mb-3">
-          {trip.status === "draft" ? "Draft" : "Live"} ·{" "}
-          {trip.theme ?? "no theme yet"}
-        </p>
-        <h1 className="font-display text-4xl leading-tight text-ink mb-3">
-          {trip.name}
-        </h1>
-        {trip.destination && (
-          <p className="text-ink/80 mb-2">{trip.destination}</p>
-        )}
-        {(trip.start_date || trip.end_date) && (
-          <p className="text-muted mb-6">
-            {trip.start_date ?? "TBD"} → {trip.end_date ?? "TBD"}
-          </p>
-        )}
-        {trip.description && (
-          <p className="text-ink mb-8 max-w-prose">{trip.description}</p>
-        )}
-
-        <section className="bg-card border border-line rounded-[18px] p-5 mb-6">
-          <p className="text-xs uppercase tracking-widest text-muted font-semibold mb-2">
-            Share link
-          </p>
-          <p className="text-ink font-mono text-sm break-all mb-3">
-            {inviteUrl}
-          </p>
-          <p className="text-muted text-sm">
-            Friends who hit this link can RSVP without logging in. The invite
-            page itself lands in Step 4 — for now, this is just the URL the
-            planner will share.
-          </p>
-        </section>
-
-        <section className="bg-card border border-line rounded-[18px] p-5">
-          <p className="text-xs uppercase tracking-widest text-muted font-semibold mb-2">
-            What&apos;s next
-          </p>
-          <ul className="grid gap-2 text-sm text-ink">
-            <li>Step 4 — invitation page</li>
-            <li>Step 5 — RSVP flow + profile capture</li>
-            <li>Step 6 — send invitations</li>
-            <li>Step 7 — roster (host view)</li>
-          </ul>
-        </section>
-      </div>
-    </main>
+    <TripDashboard
+      trip={trip}
+      respondents={respondents}
+      activity={activity}
+      inviteUrl={inviteUrl}
+    />
   );
 }
