@@ -145,3 +145,49 @@
 **Status:** RESOLVED 2026-05-11 — Option A with strict isolation. Extend `sms-nudge-scheduler` with an `rsvp_nudge` cadence reading `respondents` state. Reuse `_sms-shared/` (`dm-sender.ts`, `personalize.ts`, etc.). Note per Q5 revision: queue logic reads/writes `thread_messages`, not a new `sms_messages` table.
 
 ---
+
+## Q8: Design Gate — profile capture prototype ready for review
+
+**Context:** Build guide §5 requires a standalone HTML/CSS/JS prototype of the travel-profile capture flow before any real backend wiring begins. This is the hard stop before §6 build sequence.
+
+**Where it is:**
+- Path: [web/prototype/profile-capture/](web/prototype/profile-capture/index.html)
+- Localhost: `http://localhost:5174` (running via `phase-a-prototype` launch config)
+- Start command: `npx -y serve -s web/prototype/profile-capture -l 5174`
+
+**What's in the prototype:**
+- 9-step flow: intro → 5 vibe cards (this/that/either) → home airport typeahead → dietary chips (multi-select, skippable) → budget tier (4-tier) → done + summary
+- Live timer in the top-right corner (the Design Gate's load-bearing acceptance metric)
+- Pager dots that fill in as you progress
+- Tap-driven on every step except home airport (one typeahead input)
+- "Both/either" is always available on the vibe questions — nobody is forced into a binary
+- Done screen shows elapsed time, an answer summary, and a stubbed "RSVP to Tulum bachelorette" CTA
+- Restart button on the done screen for re-runs during review
+- Mock airport dataset (50 IATA codes) in `airports.js` — production version will wire to a real source
+- No backend wiring, no fetches, no persistence — pure frontend
+
+**Verification I ran:**
+- End-to-end flow on mobile viewport (375×812). All 8 answers captured correctly.
+- Desktop viewport (1280×800). No overflow, card is left-aligned on wide screens; readable.
+- Console: zero errors, zero warnings.
+- Typeahead with `jfk` returns JFK immediately.
+- Multi-select dietary chips toggle independently; Continue counter updates.
+- Restart bug fixed mid-build (done card was overlapping intro on reset; now clean).
+
+**What I want feedback on:**
+1. **Are these the right 5 vibe questions?** The five from the build guide are encoded in the schema as `vibe_beach_or_mountain`, `vibe_spa_or_hike`, `vibe_foodie_or_casual`, `vibe_social_or_chill`, `vibe_culture_or_relaxation`. If you want different questions, the schema can absorb new columns additively, so the cost of changing one is low — but every change here is a permanent column, so I'd rather lock the set before migration 117 runs.
+2. **Prompt phrasing.** I deliberately phrased as plain-English questions ("Where do you wake up?" rather than "Beach or mountain?") with sub-captions ("salt, sun, slow start"). This is the load-bearing "vibe quiz, not a form" moment. If the voice is wrong, tell me now — the answer values stay the same regardless.
+3. **Visual treatment.** Warm dark canvas + coral. Serif headlines, sans body. Big tap targets. Subtle pager + timer. Tell me if you'd rather see warm cream/light, less coral, or a totally different mood.
+4. **Three options per vibe vs. two + "skip"?** I went with three (this / that / either) to honor the schema's `'both'` value. The build guide allows either. If you'd rather force a binary choice with a "skip" escape hatch, I can swap the third option for a "Skip" affordance.
+5. **Order of steps.** Vibe → airport → dietary → budget. Airport is the only typing step, so I put it after the five vibe taps to let the user warm up first. Open to reordering.
+6. **Anything that feels wrong on the actual phone.** The biggest risk is that this feels like a form once it leaves the design tool. Walk it on your phone and tell me.
+
+**What's NOT in the prototype** (will be wired up after approval, during Step 5 of §6):
+- Real airport dataset
+- Profile lookup by phone (returning-user one-tap confirm flow — different screen entirely)
+- POST to the API
+- RSVP completion handoff
+- A11y polish (focus management on step transitions, etc.)
+- Tablet / desktop optimization (mobile-first per spec)
+
+**Status:** AWAITING HUMAN REVIEW — Design Gate hard stop per build guide §5. Migrations 116–122 are paused until this is approved.
