@@ -191,3 +191,14 @@
 - Tablet / desktop optimization (mobile-first per spec)
 
 **Status:** RESOLVED 2026-05-11 — Design Gate approved. Iteration: emojis swapped for SVG line icons; palette switched from dark/coral to Rally's documented cream/green system. The five vibe questions, prompt phrasing, three-options-per-vibe pattern, step order, and overall flow are locked. The approved prototype becomes the spec for the eventual production wiring in Step 5 of build guide §6. Migrations 116–122 are cleared to execute.
+
+---
+
+## Q9: Auth flow for Phase A web (login + signup)
+**Context:** Step 3 (trip creation) needs an authenticated planner. The existing system has `auth.users` + `profiles` + `users` (per Q1) and a phone-OTP login rail used by the Expo app (`request-phone-login-otp` + `verify-phone-login-otp` edge functions). The build guide assumes auth exists but doesn't specify how the web side wires up.
+**Options considered:**
+- (A) Reuse existing phone-OTP edge functions verbatim. Pre-existing `profiles` row required (alpha cohort manually whitelisted).
+- (B) Phone-OTP login + minimal web signup screen that creates `profiles`/`users` rows.
+- (C) Email magic link via `supabase.auth.signInWithOtp({email})`. Conflicts with the phone-keyed identity model.
+
+**Status:** RESOLVED 2026-05-11 — Option A. The alpha cohort is small enough that planner records get pre-seeded manually. The login form treats `{ok: true, registered: false}` from the edge function as "you're not on the list" rather than dead-ending the user on a code-entry screen waiting for an SMS that never arrives. If a web signup becomes necessary post-alpha, it lands as a separate question.
