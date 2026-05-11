@@ -3,9 +3,39 @@
 **Generated:** 2026-05-11
 **Source:** live Supabase Postgres 17.6, project ref `qxpbnixvjtwckuedlrfj` (Rally, East US)
 **Method:** `supabase db query --linked` against `information_schema`, `pg_catalog`, `pg_tables`, `pg_policies`, `pg_indexes`
-**Migration head applied to prod:** `114_drop_paywall_artifacts.sql`
-**Migration head in committed repo:** `113_respondent_note.sql`
-**Migration head present locally but unapplied:** `115_trip_nudge_overrides.sql` (uncommitted in parent checkout, not in worktree HEAD)
+**Migration head applied to prod:** `122_phase_a_thread_messages_extend.sql` *(was 114 at Step 0; Phase A migrations 116–122 applied 2026-05-11)*
+**Migration head in committed repo (worktree):** `122_phase_a_thread_messages_extend.sql`
+**Migration head present locally but unapplied:** `115_trip_nudge_overrides.sql` (still uncommitted in parent checkout, still not applied; reconcile separately)
+
+---
+
+## 0. Post-migration update (Phase A Step 1 — applied 2026-05-11)
+
+All seven Phase A migrations landed cleanly. The pre-migration inventory below is preserved as the "before" snapshot. New schema state in summary:
+
+**New tables (3):**
+- `trip_cohosts` — composite PK (trip_id, user_id → profiles), RLS on, 3 policies
+- `activity_feed_entries` — uuid PK, FK to trips + users, RLS on, 2 policies
+- `mutuals` — composite PK (user_id, mutual_user_id → users), RLS on, 1 policy
+
+**Extended tables (4):**
+- `trips`: +6 columns (`theme`, `cover_image_url`, `description`, `is_public`, `budget_min`, `budget_max`) + 3 CHECK constraints
+- `traveler_profiles`: +7 columns (5 `vibe_*`, `budget_comfort`, `vibe_captured_at`) + 6 CHECK constraints + 1 partial index
+- `respondents`: +4 columns (`rsvp_status`, `rsvp_status_updated_at`, `invited_by`, `invited_at`) + 2 CHECK constraints + 2 indexes
+- `thread_messages`: +2 columns (`trip_id`, `message_type`) + 1 CHECK constraint + 2 partial indexes
+
+**Tracking:** all 7 new rows in `supabase_migrations.schema_migrations` (versions 116–122). Self-registered by each migration file's footer INSERT (using `ON CONFLICT (version) DO NOTHING`) since we applied via `supabase db query --linked` rather than `db push` (docker not running for push). This is safe to reconcile later when push runs — the tracking rows are already present so push will skip them.
+
+**What was NOT touched** (still true): no DROPs, no RENAMEs, no NOT NULL toggles, no changes to existing RLS policies or triggers. The pre-Phase-A schema below is preserved 100%.
+
+**Audit query used to verify** (kept for re-run during Phase B Step 0):
+```sql
+-- 27 expected items: 3 tables + 6 trips_cols + 7 traveler_profiles_cols
+-- + 4 respondents_cols + 2 thread_messages_cols + 7 migration rows.
+-- Plus 8 indexes + 11 CHECK constraints + 6 RLS policies in a separate query.
+```
+
+---
 
 > Per CLAUDE.md hard rule #1: no DROPs, no RENAMEs, no destructive ALTERs against any column listed below. Phase A schema evolution is additive only.
 
