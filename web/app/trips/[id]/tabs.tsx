@@ -25,7 +25,7 @@ const TABS: TabDef[] = [
   { segment: "lodging",    label: "Lodging",   ready: true  },
   { segment: "travel",     label: "Travel",    ready: true  },
   { segment: "meals",      label: "Meals",     ready: true  },
-  { segment: "shopping",   label: "Shopping",  ready: false },
+  { segment: "shopping",   label: "Shopping",  ready: true  },
 ];
 
 export default function TabNav({ tripId }: { tripId: string }) {
