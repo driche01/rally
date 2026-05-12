@@ -1,142 +1,117 @@
-# Rally — Schema Report (Phase B, Step 0)
+# Rally — Schema Report (Phase C, Step 0)
 
 **Generated:** 2026-05-12
-**Source:** live Supabase Postgres 17.6, project ref `qxpbnixvjtwckuedlrfj` (Rally, East US)
-**Method:** `supabase db query --linked` against `information_schema`, `pg_catalog`, `pg_tables`, `pg_policies`, `pg_indexes`, `pg_stat_user_tables`
-**Migration head applied to prod:** `134_phase_b_generation_log.sql` *(was 124 pre-Phase-B Step 1; Phase B migrations 125–134 applied 2026-05-12)*
-**Migration head in committed repo (worktree):** `134_phase_b_generation_log.sql`
+**Source:** live Supabase Postgres 17.6, project ref `qxpbnixvjtwckuedlrfj` (Rally, us-east)
+**Method:** `supabase db query --linked` against `information_schema`, `pg_catalog`, `pg_indexes`
+**Migration head applied to prod:** `134_phase_b_generation_log.sql` (Phase B's last)
+**Migration head in committed repo:** `134_phase_b_generation_log.sql`
+**Next migration version:** `135`
 
-> Per CLAUDE.md hard rule #1: additive only. The Phase B plan in `SCHEMA_PLAN.md` adds columns and tables; it never drops, renames, or alters existing structures.
+> Per CLAUDE.md hard rule #1: additive only. The Phase C plan in `SCHEMA_PLAN.md` adds columns + tables only; never drops, renames, or alters existing structures. The exception — drops of legacy Expo-era artifacts — is deferred to the post-Phase-C cleanup PR per [LEGACY_CLEANUP.md](LEGACY_CLEANUP.md).
 
-> This file is overwritten each phase (per the working agreement). The Phase A inventory still lives in git history at commit `49fa9a8`'s `SCHEMA_REPORT.md`.
-
----
-
-## 1. Inventory summary (post-Phase-A)
-
-- **Tables:** 38 (+3 vs pre-Phase-A: trip_cohosts, activity_feed_entries, mutuals)
-- **Migration heads applied:** 116–124 (Phase A's 9 additive migrations + the trip-covers storage bucket)
-- **Enum types in `public`:** 0 — convention remains `text + CHECK`
-- **Storage buckets:** `avatars` (existing) + `trip-covers` (Phase A iteration, public)
-- **Triggers added by Phase A:** `trg_phase_a_mutuals_on_respondent_change` (fires on respondents.rsvp_status → 'going')
+> This file is overwritten each phase. The Phase A and B versions live in git history at commits `49fa9a8` and `06a671b`.
 
 ---
 
-## 2. Tables Phase B touches
+## 1. Inventory summary (post-Phase-B)
 
-### Hard collisions to extend (additive only)
+- **Public tables:** 51 (+13 vs pre-Phase-B; 0 vs end-of-Phase-B since the flyer-removal commit kept `trip_flyers` per the additive rule).
+- **Migration heads applied:** 116–134 (Phase A's 9 + Phase B's 10).
+- **Enum types in `public`:** 0 — convention remains `text + CHECK` (Q6).
+- **Storage buckets:** `avatars`, `trip-covers`.
+- **Phase A triggers:** `trg_phase_a_mutuals_on_respondent_change`.
 
-| Table | Live row count | Phase B action |
-|---|---|---|
-| `lodging_options` | 0 | Extend additively per Q10: add `room_layout jsonb`, `ai_suggested boolean`, widen `status` CHECK |
-| `itinerary_blocks` | 73 | Extend additively per Q11: add `ai_generated`, `created_by`, `location_url`; widen `type` CHECK |
-| `lodging_votes` | 0 | Extend additively per Q12: add `vote text` with default `'yes'` |
+## 2. Row counts on tables Phase C touches
 
-The two-out-of-three with zero live rows means the risk of breaking the existing Expo path is functionally zero — the columns we're adding will be filled by Phase B, and any backfill of existing rows is the default value.
+Alpha hasn't started — counts are dev/seed data only.
 
-`itinerary_blocks` has 73 live rows from the Expo flow; Phase A's reality is that the planner-side Expo itinerary editor is the only writer (per memory: "the day-RSVP UI on the public respond page was deleted; itinerary_blocks back the still-live planner-side itinerary editor"). Adding new nullable columns is safe — Expo doesn't reference them, Phase B does.
-
-### Existing tables Phase B reads but does not modify
-
-| Table | Read-by-Phase-B for |
+| Table | Rows |
 |---|---|
-| `trips` | trip metadata + theme + cover_image_url for the flyer |
-| `respondents` | "going members" filter + per-member voting/assignment FK target (Q13) |
-| `traveler_profiles` | profile aggregation engine input |
-| `users` | name/phone resolution when invitees authenticate |
-| `profiles` | planner identity, cohost identity |
-| `trip_cohosts` | who else can generate AI plans / select lodging / etc. |
-| `activity_feed_entries` | emit system entries when AI plans land |
-| `mutuals` | Step 10 — past-trip-mates filter/sort/search |
-| `thread_messages` | optional SMS sends (e.g., "voting closes tomorrow" planner nudges) |
-| `trip_travel_legs` | NOT touched — Expo's per-respondent travel legs. Phase B builds new `travel_arrangements`. |
+| `trips` | 13 |
+| `respondents` | 10 |
+| `trip_cohosts` | 0 |
+| `thread_messages` (all) | 41 |
+| `thread_messages` (Phase A outbound, `trip_id IS NOT NULL`) | 0 |
+| `activity_feed_entries` | 9 |
+| `traveler_profiles` (all) | 5 |
+| `traveler_profiles` with `home_airport` set | 2 |
+| `users` | 10 |
+| `users` with `opted_out=true` | 0 |
+| `profiles` | 4 |
 
-### New tables Phase B creates
+**Phase C–relevant signals:**
+- **3 of 5 `traveler_profiles` rows are missing `home_airport`.** Per Q25, home_airport becomes required at profile capture; these 3 rows would need the one-time fill-in SMS (or get caught by the profile-completion nudge). Tiny set, easy to handle.
+- **0 outbound SMS sent yet** — `sms-rsvp-nudge-scheduler` is built but not deployed (PHASE_A_DEMO.md straggler). Phase 0 of Phase C deploys it.
+- **0 opted-out users.** `users.opted_out` flow is theoretical until alpha.
+- **0 cohosts.** Phase C is the first phase that builds cohost-facing UI (blast composer + reminder settings).
 
-12 new tables. All additive, all empty at start. See `SCHEMA_PLAN.md` for the DDL.
+## 3. Tables Phase C will touch
 
-- `itinerary_item_votes` — per-`itinerary_blocks` row yes/no/maybe per `respondents.id`
-- `itinerary_item_alternatives` — "vote between A or B" group containers
-- `itinerary_alternative_options` — many-to-many between alternatives and items
-- `lodging_room_assignments` — who's in which room, what they owe
-- `travel_arrangements` — per-`respondents` flight / drive / etc.
-- `travel_groupings` — shared rides, by driver + departure time
-- `travel_grouping_members` — many-to-many between groupings and members
-- `meals` — per-day per-meal-type plan entries
-- `meal_ingredients` — normalized ingredients for cook-in meals
-- `meal_votes` — yes/no/maybe on each meal
-- `shopping_list_items` — derived from meal_ingredients, aggregated + categorized
-- `trip_flyers` — generated flyer records (per template + cover combination)
-- `phase_b_generation_log` — AI cost / token tracking (my §7 addition; not in build guide but recommended)
+### 3a. Extend (additive columns only)
 
----
+| Table | Current | Phase C action |
+|---|---|---|
+| `trips` | 37 columns | Add `cancelled_at timestamptz NULL`, `cancelled_by uuid NULL → profiles(id)`. Phase C cancel-trip writes both at confirmation time. |
+| `thread_messages.message_type` | `text NULL`, no CHECK | **No DDL.** New values added at app layer only (`profile_completion_nudge`, `booking_nudge`, `pre_trip_summary`, `re_engagement`, `cancellation_notice`, `planner_blast`, plus optional message-feed types if used: `lodging_vote_open`, `lodging_locked`, `itinerary_vote_open`, `final_headcount`). |
 
-## 3. Identity model (unchanged from Phase A)
+### 3b. New tables
 
-- `auth.users` → keyed by `auth.uid()`; managed by Supabase Auth
-- `public.profiles` (4 rows) → mirrors `auth.users` 1:1; holds name, email, phone, avatar
-- `public.users` (10 rows) → Rally identity; phone-primary; may lack auth (`auth_user_id` is nullable)
-- `public.respondents` (8 rows) → invitees per trip; may lack auth; **the primary per-trip-member entity for Phase B**
+| Table | Purpose | PK | Notable FKs |
+|---|---|---|---|
+| `scheduled_reminders` | Per-recipient scheduled future SMS for the polyglot scheduler | `id uuid` | `trip_id → trips`, `recipient_respondent_id → respondents`, `sent_thread_message_id → thread_messages` (nullable until sent) |
+| `planner_blasts` | One row per composed blast | `id uuid` | `trip_id → trips`, `composed_by → profiles`, `activity_feed_entry_id → activity_feed_entries` (nullable) |
+| `planner_blast_sends` | One row per recipient per blast | `id uuid` | `blast_id → planner_blasts`, `recipient_respondent_id → respondents`, `thread_message_id → thread_messages` (nullable until sent) |
+| `trip_reminder_settings` | Per-trip on/off toggles for the 5 auto-reminder types | `trip_id uuid` (PK) | `trip_id → trips` |
 
-**Phase B's FK rule (per Q13):** per-member tables FK to `respondents(id)`. The Phase B build guide originally said `users(id)`; Q13 corrects this so invitees without Rally auth accounts can still vote, get assigned rooms, fill in travel, etc. — gated by `respondents.session_token` for anon callers, `auth.uid() → users.id → respondents.user_id` for authed callers.
+All four are NEW — no legacy collisions.
 
-The one exception is `itinerary_blocks.created_by` — that's "who created this item." For AI-generated items it's NULL; for planner-created items it's the planner's `respondents.id` (every planner is also a respondent to their own trip — confirmed by `respondents.is_planner=true` flag).
+### 3c. App-layer reference data (no DB change)
 
----
+| Asset | Where | Purpose |
+|---|---|---|
+| `iata_to_tz.json` | `/shared/iata_to_tz.json` | Static ~500-entry IATA→IANA TZ map for quiet-hours resolution per Q25 |
 
-## 4. RLS posture for Phase B's new tables
+## 4. Existing FK targets confirmed (re-verified 2026-05-12 against live)
 
-All Phase B tables go through the same pattern as Phase A:
-- **Anon reads** for the invitee-facing surfaces (votes, lodging options, meals, etc. when read via the share token)
-- **Service-role writes** for any vote/assignment/etc. coming from anon (gated by session_token at the API layer)
-- **Planner/cohost writes** for the "generate AI plan" actions (gated via `requireAuthUid()` + `trips.created_by = auth.uid() OR trip_cohosts entry`)
+Confirms Q1's dual-identity rule still holds:
 
-Phase B SCHEMA_PLAN spells out the policies per table.
+| Column | Target | Side |
+|---|---|---|
+| `trips.created_by` | `profiles.id` | planner |
+| `trip_cohosts.user_id` | `profiles.id` | planner |
+| `trip_cohosts.invited_by` | `profiles.id` | planner |
+| `respondents.user_id` | `users.id` | invitee |
+| `respondents.invited_by` | `users.id` | invitee |
+| `respondents.trip_id` | `trips.id` | — |
+| `activity_feed_entries.user_id` | `users.id` | invitee/system |
+| `thread_messages.trip_id` | `trips.id` | — |
+| `thread_messages.trip_session_id` | `trip_sessions.id` | **legacy** (cleanup list) |
+| `traveler_profiles.user_id` | `users.id` | invitee |
 
----
+→ Phase C inherits the same convention: planner-side FK targets = `profiles.id`, invitee/SMS-side = `users.id`, per-member = `respondents.id`.
 
-## 5. Pre-Phase-B reality checks
+## 5. RLS posture (post-Phase-B)
 
-- Migration 115 (`trip_nudge_overrides`) is still staged locally + not applied. Phase B doesn't depend on it.
-- Migration 114 is still uncommitted in the parent checkout. Phase B doesn't depend on it but recommend committing alongside Phase B's migrations.
-- `sms-rsvp-nudge-scheduler` edge function is still not deployed. Phase A scope; Phase B doesn't depend on it.
-- Cover image upload + Gemini generate are live + working. The flyer step in Phase B can reuse the storage bucket (`trip-covers`) and the upload route pattern.
-- Themes v2 propagate through the invite page + planner dashboard. The flyer step should consume the theme to keep visual consistency.
+All tables have RLS enabled in line with the existing convention. Phase C new tables follow the same pattern:
 
----
+| Table | Read | Write |
+|---|---|---|
+| `scheduled_reminders` | host-or-cohost of the trip | service role only (worker writes) |
+| `planner_blasts` | host-or-cohost of the trip | host-or-cohost (compose) |
+| `planner_blast_sends` | host-or-cohost of the trip | service role only (send pipeline writes) |
+| `trip_reminder_settings` | host-or-cohost of the trip | host-or-cohost (toggle settings) |
 
-## 6. Open dependencies
+## 6. What's NOT changing
 
-None block schema execution. Q10–Q17 in `BUILD_QUESTIONS.md` are all RESOLVED 2026-05-12. The schema plan in `SCHEMA_PLAN.md` reflects every Phase B decision.
+- No DROPs (per hard rule #1). Legacy Expo-era artifacts stay in place until the post-Phase-C cleanup PR.
+- No RENAMEs.
+- No NOT-NULL flips on existing columns.
+- No new enum types in Postgres (`text + CHECK` everywhere, Q6).
+- No new triggers (Phase C logic runs at the app/edge layer).
+- No changes to `trip_cohosts`, `respondents`, `activity_feed_entries`, `traveler_profiles`, `users`, `profiles`, or any Phase B tables.
 
----
+## 7. Plan target
 
-## 7. Post-migration state (Phase B Step 1 — applied 2026-05-12)
+See [SCHEMA_PLAN.md](SCHEMA_PLAN.md) for the full DDL of migrations `135_phase_c_trips_cancelled.sql` through `140_phase_c_self_respondent_backfill.sql`.
 
-All 10 Phase B migrations landed cleanly against the live DB.
-
-**New tables (13):**
-- `itinerary_item_votes`, `itinerary_item_alternatives`, `itinerary_alternative_options` *(voting + A-vs-B groupings on itinerary_blocks)*
-- `lodging_room_assignments`
-- `travel_arrangements`, `travel_groupings`, `travel_grouping_members`
-- `meals`, `meal_ingredients`, `meal_votes`
-- `shopping_list_items`
-- `trip_flyers`
-- `phase_b_generation_log` *(AI cost tracking; §7 addition)*
-
-**Extended tables (3):**
-- `lodging_options`: +2 columns (`room_layout jsonb`, `ai_suggested bool`); status CHECK widened to `{option, selected, rejected, booked}`. Zero live rows pre-migration → zero data risk.
-- `itinerary_blocks`: +3 columns (`ai_generated bool`, `created_by uuid → respondents`, `location_url text`); new type CHECK covering both the Expo set `{accommodation, activity, free_time, meal, travel}` and the Phase B canonical set `{activity, meal, transit, lodging, free_time, other}`. 73 live rows pre-migration — all preserved.
-- `lodging_votes`: +1 column (`vote text default 'yes'` with CHECK yes/no/maybe). Zero live rows. Added UNIQUE on `(lodging_option_id, respondent_id)`.
-
-**By the numbers:**
-- 15 new CHECK constraints
-- 17 new indexes (including 1 unique on shopping_list_items and 1 unique on lodging_votes)
-- 12 new RLS policies (all SELECT, anon-readable under share-token gate)
-- 10 new rows in `supabase_migrations.schema_migrations` (versions 125–134)
-
-**Identity rule applied:** every per-member FK across the 13 new tables FKs `respondents(id)` per Q13 — `itinerary_item_votes.respondent_id`, `lodging_room_assignments.respondent_id`, `travel_arrangements.respondent_id`, `travel_groupings.driver_respondent_id`, `travel_grouping_members.respondent_id`, `meal_votes.respondent_id`, `meals.assigned_cook_respondent_ids[]`, `shopping_list_items.assigned_respondent_id`. The two exceptions are `itinerary_blocks.created_by` (FK respondents — added) and `trip_flyers.generated_by` / `phase_b_generation_log.caller_user_id` (FK `profiles(id)` — planner/cohost only, never anon).
-
-**What was NOT touched:** no DROPs (except the controlled widening of `lodging_options_status_check` with zero live rows), no RENAMEs, no NOT NULL toggles, no changes to existing RLS or triggers. The Expo path is byte-for-byte intact except for the additive columns on `itinerary_blocks` (which Expo doesn't read).
-
-> Same handshake as Phase A: `SCHEMA_PLAN.md` is a preview only. Migrations land only after human sign-off on the plan.
+Plan must be human-signed-off before any DDL runs (hard rule #3).

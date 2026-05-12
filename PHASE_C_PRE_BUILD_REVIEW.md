@@ -162,8 +162,7 @@ All carry recommendations. Mark each `RESOLVED: [decision]` to unblock.
 **Status:** RESOLVED 2026-05-12 — **home_airport becomes REQUIRED at profile capture (not skippable).** No NYC default for users who have completed a profile. Static `iata_to_tz.json` ships in `/shared/` for the lookup. Phase A traveler_profiles capture must be tightened to make home_airport non-skippable; existing `traveler_profiles` rows missing `home_airport` get a one-time SMS asking the recipient to fill it in before they can be sent quiet-hours-sensitive nudges.
 
 **Q25a (raised by Q25 resolution):** how do we handle quiet-hours gating for recipients who don't have a profile yet — i.e., the `invited` segment of blasts (haven't RSVPed, so no `traveler_profiles.home_airport`)?
-**Recommendation:** fall back to the **sender's local timezone** for these recipients. Operationally simple: the blast composer always knows the planner (authenticated), and reminder schedulers can resolve to the trip's planner. The sender chooses *when* to send; if their recipient's tz is unknown, the message goes during the sender's safe window. Document this clearly in the blast composer ("Recipients without a profile will receive this in your local time window").
-**Status:** AWAITING HUMAN INPUT.
+**Status:** RESOLVED 2026-05-12 — fall back to the **sender's local timezone** for these recipients. The blast composer surfaces this explicitly ("Recipients without a profile will receive this in your local time window").
 
 ### Q26 — Cancellation notice + opt-out interaction
 **Question:** Send `cancellation_notice` to opted-out recipients too (informational, not promotional)?
