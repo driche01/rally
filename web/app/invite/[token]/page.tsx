@@ -18,7 +18,7 @@ import type {
 } from "@shared/types";
 import RsvpButtons from "./rsvp-buttons";
 import ActivitySection from "./activity-section";
-import { themeClass } from "./themes";
+import { themeClass } from "@/lib/themes";
 
 interface PageProps {
   params: Promise<{ token: string }>;

@@ -1,17 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { THEMES, themeClass } from "@/lib/themes";
 import type { TripTheme } from "@shared/types";
-
-const THEMES: { value: TripTheme; label: string; mood: string }[] = [
-  { value: "classic",  label: "Classic",  mood: "warm, friendly" },
-  { value: "eclectic", label: "Eclectic", mood: "playful, mixed" },
-  { value: "fancy",    label: "Fancy",    mood: "polished" },
-  { value: "literary", label: "Literary", mood: "editorial" },
-  { value: "digital",  label: "Digital",  mood: "clean, modern" },
-  { value: "elegant",  label: "Elegant",  mood: "refined" },
-];
 
 const GROUP_BUCKETS = [
   { value: "0-4",  label: "1–4" },
@@ -51,11 +43,20 @@ const EMPTY: FormState = {
   status: "active",
 };
 
+type CoverMode = "upload" | "generate" | "url";
+
 export default function TripForm() {
   const router = useRouter();
   const [s, setS] = useState<FormState>(EMPTY);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Cover image state
+  const [coverMode, setCoverMode] = useState<CoverMode>("upload");
+  const [coverBusy, setCoverBusy] = useState(false);
+  const [coverErr, setCoverErr] = useState<string | null>(null);
+  const [genPrompt, setGenPrompt] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   function set<K extends keyof FormState>(k: K, v: FormState[K]) {
     setS((prev) => ({ ...prev, [k]: v }));
@@ -106,8 +107,65 @@ export default function TripForm() {
     }
   }
 
+  async function onUploadFile(file: File) {
+    setCoverErr(null);
+    if (!file.type.startsWith("image/")) {
+      setCoverErr("That doesn't look like an image.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setCoverErr("Image is too big — keep it under 5 MB.");
+      return;
+    }
+    setCoverBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/uploads/cover", { method: "POST", body: fd });
+      const body = await res.json();
+      if (!res.ok || !body.ok) {
+        setCoverErr(body?.error?.message || body?.error?.code || `Upload failed (${res.status})`);
+        return;
+      }
+      set("cover_image_url", body.data.url);
+    } catch {
+      setCoverErr("Couldn't reach Rally. Try again.");
+    } finally {
+      setCoverBusy(false);
+    }
+  }
+
+  async function onGenerate() {
+    setCoverErr(null);
+    const prompt = genPrompt.trim();
+    if (prompt.length < 5) {
+      setCoverErr("Tell the AI a bit more — at least a few words.");
+      return;
+    }
+    setCoverBusy(true);
+    try {
+      const res = await fetch("/api/uploads/generate-cover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+      const body = await res.json();
+      if (!res.ok || !body.ok) {
+        setCoverErr(body?.error?.message || body?.error?.code || `Generation failed (${res.status})`);
+        return;
+      }
+      set("cover_image_url", body.data.url);
+    } catch {
+      setCoverErr("Couldn't reach Rally. Try again.");
+    } finally {
+      setCoverBusy(false);
+    }
+  }
+
+  const themeStyle = themeClass(s.theme || null);
+
   return (
-    <form onSubmit={submit} className="grid gap-6">
+    <form onSubmit={submit} className="grid gap-7">
       <Field label="Trip name" required>
         <input
           type="text"
@@ -193,30 +251,49 @@ export default function TripForm() {
         </div>
       </Field>
 
+      {/* ─── Theme picker (visual mini-flyers) ────────────── */}
       <Field label="Theme">
-        <div className="grid gap-2 sm:grid-cols-2">
-          {THEMES.map((t) => (
-            <button
-              key={t.value}
-              type="button"
-              onClick={() => set("theme", s.theme === t.value ? "" : t.value)}
-              className={
-                s.theme === t.value
-                  ? "p-4 rounded-xl bg-green text-cream border border-green text-left"
-                  : "p-4 rounded-xl bg-card text-ink border border-line text-left hover:border-green-soft"
-              }
-            >
-              <div className="font-bold">{t.label}</div>
-              <div
+        <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
+          {THEMES.map((t) => {
+            const picked = s.theme === t.value;
+            return (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => set("theme", picked ? "" : t.value)}
+                aria-pressed={picked}
                 className={
-                  "text-xs " +
-                  (s.theme === t.value ? "text-cream/70" : "text-muted")
+                  "group relative text-left rounded-2xl border overflow-hidden transition-all " +
+                  (picked
+                    ? "border-green ring-2 ring-green ring-offset-2 ring-offset-cream shadow-md"
+                    : "border-line hover:border-green-soft")
                 }
               >
-                {t.mood}
-              </div>
-            </button>
-          ))}
+                {/* Mini cover preview */}
+                <div className={`aspect-[3/2] flex items-center justify-center px-3 ${t.style.cover}`}>
+                  <span
+                    className={`font-display text-base sm:text-lg leading-tight text-center ${t.style.coverInk}`}
+                  >
+                    {s.name.trim() || "Your trip"}
+                  </span>
+                </div>
+                {/* Mini meta line */}
+                <div className="px-3 py-2 bg-card flex items-center justify-between gap-2">
+                  <div>
+                    <p className={`text-[10px] font-bold uppercase tracking-widest ${t.style.eyebrow}`}>
+                      {t.style.label}
+                    </p>
+                    <p className="text-[11px] text-muted">{t.style.mood}</p>
+                  </div>
+                  {picked && (
+                    <span className="inline-flex h-5 w-5 rounded-full bg-green text-cream items-center justify-center text-xs font-bold flex-shrink-0">
+                      ✓
+                    </span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
         </div>
       </Field>
 
@@ -230,14 +307,96 @@ export default function TripForm() {
         />
       </Field>
 
-      <Field label="Cover image URL">
-        <input
-          type="url"
-          placeholder="https://…"
-          value={s.cover_image_url}
-          onChange={(e) => set("cover_image_url", e.target.value)}
-          className={inputCls}
-        />
+      {/* ─── Cover image ───────────────────────────────────── */}
+      <Field label="Cover image">
+        {s.cover_image_url ? (
+          <div className="grid gap-3">
+            <div className="relative rounded-2xl overflow-hidden border border-line bg-card">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={s.cover_image_url}
+                alt="Trip cover preview"
+                className="w-full aspect-[16/10] object-cover"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  set("cover_image_url", "");
+                  setCoverMode("upload");
+                  setGenPrompt("");
+                }}
+                className="h-10 px-4 rounded-full bg-card text-muted border border-line hover:border-green hover:text-ink text-sm"
+              >
+                Remove
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  set("cover_image_url", "");
+                  setCoverMode("upload");
+                  setTimeout(() => fileInputRef.current?.click(), 0);
+                }}
+                className="h-10 px-4 rounded-full bg-card text-ink border border-line hover:border-green text-sm"
+              >
+                Replace
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="grid gap-3">
+            <div role="tablist" className="flex gap-1 p-1 bg-card border border-line rounded-full self-start">
+              <CoverModeTab active={coverMode === "upload"}   onClick={() => { setCoverMode("upload");   setCoverErr(null); }}>Upload</CoverModeTab>
+              <CoverModeTab active={coverMode === "generate"} onClick={() => { setCoverMode("generate"); setCoverErr(null); }}>Generate with AI</CoverModeTab>
+              <CoverModeTab active={coverMode === "url"}      onClick={() => { setCoverMode("url");      setCoverErr(null); }}>Paste URL</CoverModeTab>
+            </div>
+
+            {coverMode === "upload" && (
+              <UploadDropzone
+                busy={coverBusy}
+                onFile={onUploadFile}
+                inputRef={fileInputRef}
+              />
+            )}
+
+            {coverMode === "generate" && (
+              <div className="grid gap-3">
+                <textarea
+                  rows={3}
+                  maxLength={300}
+                  value={genPrompt}
+                  onChange={(e) => setGenPrompt(e.target.value)}
+                  placeholder="Describe the cover — “a film-grain shot of a hammock on a beach at sunset, warm tones”"
+                  className={inputCls + " min-h-24 py-3"}
+                />
+                <button
+                  type="button"
+                  onClick={onGenerate}
+                  disabled={coverBusy || genPrompt.trim().length < 5}
+                  className="h-11 px-5 rounded-full bg-green text-cream font-bold hover:bg-green-2 self-start disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                  {coverBusy ? "Generating…" : "Generate cover →"}
+                </button>
+                <p className="text-xs text-muted">
+                  Uses Gemini. Takes 5–15 seconds. You can regenerate any time.
+                </p>
+              </div>
+            )}
+
+            {coverMode === "url" && (
+              <input
+                type="url"
+                placeholder="https://…"
+                value={s.cover_image_url}
+                onChange={(e) => set("cover_image_url", e.target.value)}
+                className={inputCls}
+              />
+            )}
+
+            {coverErr && <p className="text-sm text-orange">{coverErr}</p>}
+          </div>
+        )}
       </Field>
 
       <label className="flex items-center gap-3 cursor-pointer">
@@ -260,9 +419,6 @@ export default function TripForm() {
           type="button"
           onClick={() => {
             set("status", "draft");
-            // Submit programmatically with status=draft via the form ref
-            // would be cleaner. For now: a single click that updates state
-            // and then immediately submits via requestAnimationFrame.
             requestAnimationFrame(() => {
               const form = document.querySelector("form");
               form?.requestSubmit();
@@ -287,6 +443,8 @@ export default function TripForm() {
   );
 }
 
+// ─── Tiny sub-components ────────────────────────────────────────
+
 function Field({
   label,
   required,
@@ -303,6 +461,78 @@ function Field({
         {required ? <span className="text-orange ml-1">*</span> : null}
       </span>
       {children}
+    </label>
+  );
+}
+
+function CoverModeTab({
+  active, onClick, children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={
+        "h-8 px-3 rounded-full text-xs font-semibold transition-colors " +
+        (active
+          ? "bg-green text-cream"
+          : "text-muted hover:text-ink")
+      }
+    >
+      {children}
+    </button>
+  );
+}
+
+function UploadDropzone({
+  busy, onFile, inputRef,
+}: {
+  busy: boolean;
+  onFile: (f: File) => void;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+}) {
+  const [dragOver, setDragOver] = useState(false);
+  return (
+    <label
+      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file) onFile(file);
+      }}
+      className={
+        "block cursor-pointer rounded-2xl border-2 border-dashed text-center px-6 py-10 transition-colors " +
+        (dragOver
+          ? "border-green bg-green-soft/40"
+          : "border-line bg-card hover:border-green hover:bg-green-soft/20")
+      }
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        className="sr-only"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onFile(f);
+        }}
+      />
+      {busy ? (
+        <p className="text-ink font-semibold">Uploading…</p>
+      ) : (
+        <>
+          <p className="text-ink font-semibold mb-1">Drop an image here</p>
+          <p className="text-muted text-sm">or click to pick. PNG, JPEG, WEBP. Under 5&nbsp;MB.</p>
+        </>
+      )}
     </label>
   );
 }
