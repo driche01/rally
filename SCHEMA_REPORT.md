@@ -3,8 +3,8 @@
 **Generated:** 2026-05-12
 **Source:** live Supabase Postgres 17.6, project ref `qxpbnixvjtwckuedlrfj` (Rally, East US)
 **Method:** `supabase db query --linked` against `information_schema`, `pg_catalog`, `pg_tables`, `pg_policies`, `pg_indexes`, `pg_stat_user_tables`
-**Migration head applied to prod:** `124_phase_a_trip_covers_bucket.sql`
-**Migration head in committed repo (worktree):** `124_phase_a_trip_covers_bucket.sql`
+**Migration head applied to prod:** `134_phase_b_generation_log.sql` *(was 124 pre-Phase-B Step 1; Phase B migrations 125–134 applied 2026-05-12)*
+**Migration head in committed repo (worktree):** `134_phase_b_generation_log.sql`
 
 > Per CLAUDE.md hard rule #1: additive only. The Phase B plan in `SCHEMA_PLAN.md` adds columns and tables; it never drops, renames, or alters existing structures.
 
@@ -108,5 +108,35 @@ Phase B SCHEMA_PLAN spells out the policies per table.
 ## 6. Open dependencies
 
 None block schema execution. Q10–Q17 in `BUILD_QUESTIONS.md` are all RESOLVED 2026-05-12. The schema plan in `SCHEMA_PLAN.md` reflects every Phase B decision.
+
+---
+
+## 7. Post-migration state (Phase B Step 1 — applied 2026-05-12)
+
+All 10 Phase B migrations landed cleanly against the live DB.
+
+**New tables (13):**
+- `itinerary_item_votes`, `itinerary_item_alternatives`, `itinerary_alternative_options` *(voting + A-vs-B groupings on itinerary_blocks)*
+- `lodging_room_assignments`
+- `travel_arrangements`, `travel_groupings`, `travel_grouping_members`
+- `meals`, `meal_ingredients`, `meal_votes`
+- `shopping_list_items`
+- `trip_flyers`
+- `phase_b_generation_log` *(AI cost tracking; §7 addition)*
+
+**Extended tables (3):**
+- `lodging_options`: +2 columns (`room_layout jsonb`, `ai_suggested bool`); status CHECK widened to `{option, selected, rejected, booked}`. Zero live rows pre-migration → zero data risk.
+- `itinerary_blocks`: +3 columns (`ai_generated bool`, `created_by uuid → respondents`, `location_url text`); new type CHECK covering both the Expo set `{accommodation, activity, free_time, meal, travel}` and the Phase B canonical set `{activity, meal, transit, lodging, free_time, other}`. 73 live rows pre-migration — all preserved.
+- `lodging_votes`: +1 column (`vote text default 'yes'` with CHECK yes/no/maybe). Zero live rows. Added UNIQUE on `(lodging_option_id, respondent_id)`.
+
+**By the numbers:**
+- 15 new CHECK constraints
+- 17 new indexes (including 1 unique on shopping_list_items and 1 unique on lodging_votes)
+- 12 new RLS policies (all SELECT, anon-readable under share-token gate)
+- 10 new rows in `supabase_migrations.schema_migrations` (versions 125–134)
+
+**Identity rule applied:** every per-member FK across the 13 new tables FKs `respondents(id)` per Q13 — `itinerary_item_votes.respondent_id`, `lodging_room_assignments.respondent_id`, `travel_arrangements.respondent_id`, `travel_groupings.driver_respondent_id`, `travel_grouping_members.respondent_id`, `meal_votes.respondent_id`, `meals.assigned_cook_respondent_ids[]`, `shopping_list_items.assigned_respondent_id`. The two exceptions are `itinerary_blocks.created_by` (FK respondents — added) and `trip_flyers.generated_by` / `phase_b_generation_log.caller_user_id` (FK `profiles(id)` — planner/cohost only, never anon).
+
+**What was NOT touched:** no DROPs (except the controlled widening of `lodging_options_status_check` with zero live rows), no RENAMEs, no NOT NULL toggles, no changes to existing RLS or triggers. The Expo path is byte-for-byte intact except for the additive columns on `itinerary_blocks` (which Expo doesn't read).
 
 > Same handshake as Phase A: `SCHEMA_PLAN.md` is a preview only. Migrations land only after human sign-off on the plan.
