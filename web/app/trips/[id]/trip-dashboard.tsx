@@ -4,10 +4,15 @@
  * Planner trip dashboard — orchestrates the trip header, roster, and
  * invite modal. Client component because it owns the modal state +
  * optimistic roster updates after a send / override.
+ *
+ * The hero (cover image + theme treatment) mirrors what the invitee
+ * sees on /invite/[token], so the planner can confirm their cover
+ * + theme actually applied without leaving the dashboard.
  */
 
 import { useState } from "react";
 import type { Trip, Respondent, ActivityFeedEntry, RsvpStatus } from "@shared/types";
+import { themeClass } from "@/lib/themes";
 import Roster from "./roster";
 import InviteModal from "./invite-modal";
 
@@ -61,29 +66,46 @@ export default function TripDashboard({
   }
 
   const counts = countByStatus(respondents);
-  const going = counts.going + counts.maybe; // "in play"
+  const t = themeClass(trip.theme);
 
   return (
-    <main className="min-h-dvh">
+    <main className={`min-h-dvh ${t.root}`}>
       <div className="max-w-3xl mx-auto px-6 py-10">
+        {/* ─── Hero: cover + theme treatment (mirrors invitee view) ─ */}
+        {trip.cover_image_url ? (
+          <div
+            className="aspect-[16/10] w-full rounded-[28px] mb-8 bg-cover bg-center bg-cream-2"
+            style={{ backgroundImage: `url(${escapeCss(trip.cover_image_url)})` }}
+            aria-hidden="true"
+          />
+        ) : (
+          <div className={`aspect-[16/10] w-full rounded-[28px] mb-8 ${t.cover}`}>
+            <div className="h-full flex items-center justify-center px-6">
+              <span className={`text-3xl sm:text-4xl text-center ${t.coverInk}`}>
+                {trip.name}
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* ─── Trip header ───────────────────────────── */}
-        <p className="text-xs font-bold tracking-widest uppercase text-green mb-3">
+        <p className={`text-[11px] mb-3 ${t.eyebrow}`}>
           {trip.status === "draft" ? "Draft" : "Live"} ·{" "}
           {trip.theme ?? "no theme yet"}
         </p>
-        <h1 className="font-display text-4xl sm:text-5xl leading-tight text-ink mb-3">
+        <h1 className={`text-4xl sm:text-5xl leading-tight mb-3 ${t.display}`}>
           {trip.name}
         </h1>
         {trip.destination && (
-          <p className="text-ink/85 text-lg mb-1">{trip.destination}</p>
+          <p className={`text-lg mb-1 ${t.body}`}>{trip.destination}</p>
         )}
         {(trip.start_date || trip.end_date) && (
-          <p className="text-muted mb-6">
+          <p className={`mb-6 ${t.meta}`}>
             {formatDateRange(trip.start_date, trip.end_date)}
           </p>
         )}
         {trip.description && (
-          <p className="text-ink mb-8 max-w-prose whitespace-pre-line">
+          <p className={`mb-8 max-w-prose whitespace-pre-line ${t.body}`}>
             {trip.description}
           </p>
         )}
@@ -214,4 +236,8 @@ function formatEntryContent(e: ActivityFeedEntry): string {
     return `${c.name} → ${c.status}`;
   }
   return "(see details)";
+}
+
+function escapeCss(url: string): string {
+  return url.replace(/[()'"\\]/g, "\\$&");
 }
