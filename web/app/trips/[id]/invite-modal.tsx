@@ -181,24 +181,8 @@ export default function InviteModal({
               </section>
 
               {/* ─── Past trip-mates ───────────────── */}
-              <section>
-                <p className="text-xs uppercase tracking-widest text-muted font-semibold mb-2">
-                  Past trip-mates
-                </p>
-                {mutuals.length === 0 ? (
-                  <p className="text-xs text-muted">
-                    No past trip-mates yet — this fills in as you share trips with people.
-                  </p>
-                ) : (
-                  <ul className="grid gap-1">
-                    {mutuals.slice(0, 6).map((m) => (
-                      <li key={m.mutual_user_id} className="text-sm text-ink">
-                        · {m.mutual_user_id} (shared {m.shared_trip_count})
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
+              <PastTripmatesSection mutuals={mutuals} />
+
 
               {/* ─── Recipients list ───────────────── */}
               {recipients.length > 0 && (
@@ -289,6 +273,68 @@ export default function InviteModal({
         </div>
       </div>
     </div>
+  );
+}
+
+function PastTripmatesSection({ mutuals }: { mutuals: Mutual[] }) {
+  type SortKey = "most_shared" | "most_recent" | "alpha";
+  const [q, setQ] = useState("");
+  const [sort, setSort] = useState<SortKey>("most_shared");
+
+  const filtered = mutuals
+    .filter((m) => !q || m.mutual_user_id.toLowerCase().includes(q.toLowerCase()))
+    .sort((a, b) => {
+      if (sort === "most_shared") return b.shared_trip_count - a.shared_trip_count;
+      if (sort === "most_recent") {
+        const ta = a.last_traveled_together_at ? new Date(a.last_traveled_together_at).getTime() : 0;
+        const tb = b.last_traveled_together_at ? new Date(b.last_traveled_together_at).getTime() : 0;
+        return tb - ta;
+      }
+      return a.mutual_user_id.localeCompare(b.mutual_user_id);
+    });
+
+  return (
+    <section>
+      <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+        <p className="text-xs uppercase tracking-widest text-muted font-semibold">
+          Past trip-mates
+        </p>
+        {mutuals.length > 0 && (
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as SortKey)}
+            className="h-7 px-2 rounded-full border border-line bg-card text-xs text-ink"
+            aria-label="Sort past trip-mates"
+          >
+            <option value="most_shared">Most shared</option>
+            <option value="most_recent">Most recent</option>
+            <option value="alpha">A→Z</option>
+          </select>
+        )}
+      </div>
+      {mutuals.length === 0 ? (
+        <p className="text-xs text-muted">
+          No past trip-mates yet — this fills in as you share trips with people.
+        </p>
+      ) : (
+        <>
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search past trip-mates…"
+            className="w-full h-9 rounded-full border border-line bg-card px-3 text-xs text-ink placeholder:text-muted focus:border-green focus:outline-none mb-2"
+          />
+          <ul className="grid gap-1 max-h-32 overflow-y-auto">
+            {filtered.slice(0, 12).map((m) => (
+              <li key={m.mutual_user_id} className="text-sm text-ink">
+                · {m.mutual_user_id} (shared {m.shared_trip_count})
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
   );
 }
 

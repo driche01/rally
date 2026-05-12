@@ -8,7 +8,8 @@
  * Overview tab's body.
  */
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { Trip, Respondent, ActivityFeedEntry, RsvpStatus } from "@shared/types";
 import { themeClass } from "@/lib/themes";
 import Roster from "./roster";
@@ -23,11 +24,32 @@ export default function TripDashboard({
   activity: ActivityFeedEntry[];
   inviteUrl: string;
 }) {
+  const router = useRouter();
+  const [, startTrans] = useTransition();
   const [respondents, setRespondents] = useState<Respondent[]>(initialRespondents);
   const [activityFeed, setActivityFeed] = useState<ActivityFeedEntry[]>(activity);
   const [showInvite, setShowInvite] = useState(false);
   const [showFlyer, setShowFlyer]   = useState(false);
   const [copied, setCopied] = useState(false);
+  const [cloning, setCloning] = useState(false);
+
+  async function clone() {
+    if (!confirm("Clone this trip? You'll get a fresh draft with the same name, theme, destination, and budget — but no invitees, itinerary, lodging, travel, meals, or shopping.")) return;
+    setCloning(true);
+    try {
+      const res = await fetch(`/api/trips/${trip.id}/clone`, { method: "POST" });
+      const body = await res.json();
+      if (!res.ok || !body.ok) {
+        alert(`Clone failed: ${body?.error?.code ?? res.status}`);
+        return;
+      }
+      startTrans(() => router.push(`/trips/${body.data.trip.id}`));
+    } catch {
+      alert("Couldn't reach Rally. Try again.");
+    } finally {
+      setCloning(false);
+    }
+  }
 
   async function copyLink() {
     try {
@@ -104,6 +126,14 @@ export default function TripDashboard({
           className={`h-12 px-5 rounded-full ${t.surface} text-ink border ${t.surfaceBorder} hover:border-green`}
         >
           Make flyer
+        </button>
+        <button
+          onClick={clone}
+          disabled={cloning}
+          className={`h-12 px-5 rounded-full ${t.surface} text-ink border ${t.surfaceBorder} hover:border-green disabled:opacity-50`}
+          title="Duplicate trip metadata + cohosts. No invitees / itinerary / lodging / etc. carry over."
+        >
+          {cloning ? "Cloning…" : "Clone trip"}
         </button>
       </div>
 

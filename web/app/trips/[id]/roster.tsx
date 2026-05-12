@@ -25,6 +25,17 @@ const STATUS_PRETTY: Record<RsvpStatus, string> = {
   cant_go: "Can't go",
 };
 
+type SortKey = "name_asc" | "name_desc" | "recent" | "status";
+const SORT_LABELS: Record<SortKey, string> = {
+  name_asc:  "Name (A→Z)",
+  name_desc: "Name (Z→A)",
+  recent:    "Most recent",
+  status:    "Status",
+};
+const STATUS_ORDER: Record<RsvpStatus, number> = {
+  going: 0, maybe: 1, invited: 2, cant_go: 3,
+};
+
 export default function Roster({
   respondents,
   onOverride,
@@ -34,11 +45,12 @@ export default function Roster({
 }) {
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
+  const [sort, setSort]   = useState<SortKey>("status");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return respondents.filter((r) => {
+    const filtered = respondents.filter((r) => {
       const status = (r.rsvp_status ?? "invited") as RsvpStatus;
       if (filter !== "all" && status !== filter) return false;
       if (!q) return true;
@@ -48,7 +60,23 @@ export default function Roster({
         (r.email?.toLowerCase().includes(q) ?? false)
       );
     });
-  }, [respondents, filter, query]);
+    return filtered.sort((a, b) => {
+      switch (sort) {
+        case "name_asc":  return a.name.localeCompare(b.name);
+        case "name_desc": return b.name.localeCompare(a.name);
+        case "recent": {
+          const ts = (r: Respondent) =>
+            new Date(r.rsvp_status_updated_at ?? r.created_at).getTime();
+          return ts(b) - ts(a);
+        }
+        case "status": {
+          const sa = STATUS_ORDER[(a.rsvp_status ?? "invited") as RsvpStatus];
+          const sb = STATUS_ORDER[(b.rsvp_status ?? "invited") as RsvpStatus];
+          return sa - sb || a.name.localeCompare(b.name);
+        }
+      }
+    });
+  }, [respondents, filter, query, sort]);
 
   return (
     <section>
@@ -77,13 +105,25 @@ export default function Roster({
         ))}
       </div>
 
-      <input
-        type="search"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search name or phone…"
-        className="w-full h-11 rounded-full border border-line bg-card px-4 text-sm text-ink placeholder:text-muted focus:border-green focus:outline-none mb-4"
-      />
+      <div className="flex gap-2 mb-4 flex-wrap">
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search name or phone…"
+          className="flex-1 min-w-[180px] h-11 rounded-full border border-line bg-card px-4 text-sm text-ink placeholder:text-muted focus:border-green focus:outline-none"
+        />
+        <select
+          value={sort}
+          onChange={(e) => setSort(e.target.value as SortKey)}
+          className="h-11 px-3 rounded-full border border-line bg-card text-sm text-ink"
+          aria-label="Sort"
+        >
+          {Object.entries(SORT_LABELS).map(([key, label]) => (
+            <option key={key} value={key}>Sort: {label}</option>
+          ))}
+        </select>
+      </div>
 
       {filtered.length === 0 ? (
         <div className="bg-card border border-line rounded-2xl p-6 text-center">
