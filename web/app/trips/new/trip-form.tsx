@@ -251,7 +251,7 @@ export default function TripForm() {
         </div>
       </Field>
 
-      {/* ─── Theme picker (visual mini-flyers) ────────────── */}
+      {/* ─── Theme picker (mini-flyer previews) ───────────── */}
       <Field label="Theme">
         <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
           {THEMES.map((t) => {
@@ -263,27 +263,31 @@ export default function TripForm() {
                 onClick={() => set("theme", picked ? "" : t.value)}
                 aria-pressed={picked}
                 className={
-                  "group relative text-left rounded-2xl border overflow-hidden transition-all " +
+                  "group relative text-left rounded-2xl overflow-hidden transition-all " +
                   (picked
-                    ? "border-green ring-2 ring-green ring-offset-2 ring-offset-cream shadow-md"
-                    : "border-line hover:border-green-soft")
+                    ? "ring-2 ring-green ring-offset-2 ring-offset-cream shadow-md"
+                    : "ring-1 ring-line hover:ring-green-soft")
                 }
               >
-                {/* Mini cover preview */}
+                {/* Mini cover */}
                 <div className={`aspect-[3/2] flex items-center justify-center px-3 ${t.style.cover}`}>
                   <span
-                    className={`font-display text-base sm:text-lg leading-tight text-center ${t.style.coverInk}`}
+                    className={`text-base sm:text-lg leading-tight text-center ${t.style.coverInk}`}
                   >
                     {s.name.trim() || "Your trip"}
                   </span>
                 </div>
-                {/* Mini meta line */}
-                <div className="px-3 py-2 bg-card flex items-center justify-between gap-2">
-                  <div>
-                    <p className={`text-[10px] font-bold uppercase tracking-widest ${t.style.eyebrow}`}>
+                {/* Meta strip — uses the theme's own root + eyebrow + body
+                    so the planner sees the full visual treatment at picker
+                    thumbnail size, not just the cover gradient. */}
+                <div className={`px-3 py-2 flex items-center justify-between gap-2 ${t.style.root}`}>
+                  <div className="min-w-0">
+                    <p className={`text-[10px] ${t.style.eyebrow}`}>
                       {t.style.label}
                     </p>
-                    <p className="text-[11px] text-muted">{t.style.mood}</p>
+                    <p className={`text-[11px] truncate ${t.style.meta}`}>
+                      {t.style.mood}
+                    </p>
                   </div>
                   {picked && (
                     <span className="inline-flex h-5 w-5 rounded-full bg-green text-cream items-center justify-center text-xs font-bold flex-shrink-0">

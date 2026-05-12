@@ -5,6 +5,10 @@
  * required to view. This is the high-leverage public surface in
  * Phase A; build guide §6 Step 4.
  *
+ * The trip's `theme` field drives the visual treatment of EVERY
+ * surface here, not just the cover. See /web/lib/themes.ts for
+ * the per-theme class bundle.
+ *
  * Why service-role for the planner read: anon can't SELECT
  * profiles (no policy permits it), but we need the planner's name
  * + avatar for the "Hosted by" line. Service-role bypasses RLS;
@@ -18,7 +22,7 @@ import type {
 } from "@shared/types";
 import RsvpButtons from "./rsvp-buttons";
 import ActivitySection from "./activity-section";
-import { themeClass } from "@/lib/themes";
+import { themeClass, type ThemeStyle } from "@/lib/themes";
 
 interface PageProps {
   params: Promise<{ token: string }>;
@@ -40,9 +44,6 @@ export default async function InvitePage({ params }: PageProps) {
   const trip = tripRow as Trip;
 
   // 2. Planner profile via service-role, public fields only.
-  //    NOTE: this is the one place we deliberately bypass RLS in
-  //    Phase A. Whitelist: name, last_name, avatar_url. Nothing
-  //    sensitive in the SELECT.
   let plannerName = "A friend";
   let plannerAvatar: string | null = null;
   if (trip.created_by) {
@@ -74,22 +75,22 @@ export default async function InvitePage({ params }: PageProps) {
   const activity = (activityRes.data ?? []) as ActivityFeedEntry[];
 
   const buckets = bucketByStatus(respondents);
-  const themeCls = themeClass(trip.theme);
+  const t = themeClass(trip.theme);
 
   return (
-    <main className={`min-h-dvh ${themeCls.root}`}>
+    <main className={`min-h-dvh ${t.root}`}>
       <div className="max-w-2xl mx-auto px-5 sm:px-8 py-10">
         {/* ─── Cover ──────────────────────────────────── */}
         {trip.cover_image_url ? (
           <div
-            className="aspect-[16/10] w-full rounded-[28px] bg-cream-2 mb-8 bg-cover bg-center"
+            className={`aspect-[16/10] w-full rounded-[28px] mb-8 bg-cover bg-center ${t.cover}`}
             style={{ backgroundImage: `url(${escapeCss(trip.cover_image_url)})` }}
             aria-hidden="true"
           />
         ) : (
-          <div className={`aspect-[16/10] w-full rounded-[28px] mb-8 ${themeCls.cover}`}>
-            <div className="h-full flex items-center justify-center">
-              <span className={`font-display text-3xl ${themeCls.coverInk}`}>
+          <div className={`aspect-[16/10] w-full rounded-[28px] mb-8 ${t.cover}`}>
+            <div className="h-full flex items-center justify-center px-6">
+              <span className={`text-3xl sm:text-4xl text-center ${t.coverInk}`}>
                 {trip.name}
               </span>
             </div>
@@ -97,17 +98,17 @@ export default async function InvitePage({ params }: PageProps) {
         )}
 
         {/* ─── Header ─────────────────────────────────── */}
-        <p className={`text-xs font-bold tracking-widest uppercase mb-3 ${themeCls.eyebrow}`}>
-          {themeCls.label} · You&apos;re invited
+        <p className={`text-[11px] mb-3 ${t.eyebrow}`}>
+          {t.label} · You&apos;re invited
         </p>
-        <h1 className="font-display text-4xl sm:text-5xl leading-[1.05] text-ink mb-3">
+        <h1 className={`text-4xl sm:text-5xl leading-[1.05] mb-3 ${t.display}`}>
           {trip.name}
         </h1>
         {trip.destination && (
-          <p className="text-ink/85 text-lg mb-1">{trip.destination}</p>
+          <p className={`text-lg mb-1 ${t.body}`}>{trip.destination}</p>
         )}
         {(trip.start_date || trip.end_date) && (
-          <p className="text-muted mb-6">
+          <p className={`mb-6 ${t.meta}`}>
             {formatDateRange(trip.start_date, trip.end_date)}
           </p>
         )}
@@ -121,49 +122,49 @@ export default async function InvitePage({ params }: PageProps) {
               className="h-10 w-10 rounded-full object-cover"
             />
           ) : (
-            <div className="h-10 w-10 rounded-full bg-green-soft text-green flex items-center justify-center font-bold">
+            <div className={`h-10 w-10 rounded-full flex items-center justify-center font-bold ${t.accent}`}>
               {plannerName.charAt(0).toUpperCase()}
             </div>
           )}
           <div>
-            <p className="text-xs uppercase tracking-widest text-muted font-semibold">
+            <p className={`text-xs uppercase tracking-widest font-semibold ${t.meta}`}>
               Hosted by
             </p>
-            <p className="text-ink font-semibold">{plannerName}</p>
+            <p className={`font-semibold ${t.body}`}>{plannerName}</p>
           </div>
         </div>
 
         {/* ─── Description ───────────────────────────── */}
         {trip.description && (
-          <p className="text-ink/90 mb-8 max-w-prose whitespace-pre-line leading-relaxed">
+          <p className={`mb-8 max-w-prose whitespace-pre-line leading-relaxed ${t.body}`}>
             {trip.description}
           </p>
         )}
 
         {/* ─── Cost-per-person estimate ──────────────── */}
         {(trip.budget_min != null || trip.budget_max != null) && (
-          <div className="bg-card border border-line rounded-[18px] p-4 mb-8">
-            <p className="text-xs uppercase tracking-widest text-muted font-semibold mb-1">
+          <div className={`${t.surface} border ${t.surfaceBorder} rounded-[18px] p-4 mb-8`}>
+            <p className={`text-xs uppercase tracking-widest font-semibold mb-1 ${t.meta}`}>
               Ballpark per person
             </p>
-            <p className="text-ink font-semibold text-lg">
+            <p className={`font-semibold text-lg ${t.body}`}>
               {formatBudget(trip.budget_min, trip.budget_max)}
             </p>
-            <p className="text-muted text-sm">
+            <p className={`text-sm ${t.meta}`}>
               Includes everything — flights, lodging, food, fun.
             </p>
           </div>
         )}
 
-        {/* ─── RSVP buttons (wired in Step 5) ──────────── */}
+        {/* ─── RSVP buttons ──────────────────────────── */}
         <RsvpButtons tripId={trip.id} shareToken={trip.share_token} />
 
         {/* ─── Guest list ─────────────────────────────── */}
         <section className="mt-12">
-          <h2 className="font-display text-2xl text-ink mb-4">
+          <h2 className={`text-2xl mb-4 ${t.display}`}>
             The crew · {respondents.length}
           </h2>
-          <GuestRoster buckets={buckets} />
+          <GuestRoster buckets={buckets} t={t} />
         </section>
 
         {/* ─── Activity feed (composer + realtime) ────── */}
@@ -181,8 +182,10 @@ export default async function InvitePage({ params }: PageProps) {
 
 function GuestRoster({
   buckets,
+  t,
 }: {
   buckets: Record<RsvpStatus | "invited", Respondent[]>;
+  t: ThemeStyle;
 }) {
   const order: (RsvpStatus | "invited")[] = ["going", "maybe", "invited", "cant_go"];
   const labels: Record<RsvpStatus | "invited", string> = {
@@ -199,19 +202,19 @@ function GuestRoster({
         if (!rs.length) return null;
         return (
           <div key={status}>
-            <p className="text-xs uppercase tracking-widest text-muted font-semibold mb-2">
+            <p className={`text-xs uppercase tracking-widest font-semibold mb-2 ${t.meta}`}>
               {labels[status]} · {rs.length}
             </p>
             <div className="flex flex-wrap gap-2">
               {rs.map((r) => (
                 <div
                   key={r.id}
-                  className="flex items-center gap-2 bg-card border border-line rounded-full pl-1 pr-3 py-1"
+                  className={`flex items-center gap-2 ${t.surface} border ${t.surfaceBorder} rounded-full pl-1 pr-3 py-1`}
                 >
-                  <div className="h-7 w-7 rounded-full bg-green-soft text-green flex items-center justify-center text-xs font-bold">
+                  <div className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold ${t.accent}`}>
                     {r.name.charAt(0).toUpperCase()}
                   </div>
-                  <span className="text-sm text-ink">{r.name}</span>
+                  <span className={`text-sm ${t.body}`}>{r.name}</span>
                 </div>
               ))}
             </div>
@@ -219,7 +222,9 @@ function GuestRoster({
         );
       })}
       {Object.values(buckets).every((b) => b.length === 0) && (
-        <p className="text-muted text-sm">No one invited yet. The list will fill in as the planner sends invitations.</p>
+        <p className={`text-sm ${t.meta}`}>
+          No one invited yet. The list will fill in as the planner sends invitations.
+        </p>
       )}
     </div>
   );
@@ -262,8 +267,5 @@ function formatBudget(min: number | null, max: number | null): string {
 }
 
 function escapeCss(url: string): string {
-  // CSS url() value-position escape. We pass through https URLs without
-  // letting a quote or paren break the rule. Belt-and-suspenders; the
-  // input is user-supplied (planner-set cover_image_url).
   return url.replace(/[()'"\\]/g, "\\$&");
 }

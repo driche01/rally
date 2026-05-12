@@ -23,7 +23,20 @@ import { randomBytes } from "node:crypto";
 
 const MIN_PROMPT = 5;
 const MAX_PROMPT = 500;
-const MODEL = "gemini-2.5-flash-image-preview";
+
+// Ordered fallback list. `gemini-2.5-flash-image` is the current GA
+// image-gen model. The 3.x previews are listed in case Google
+// graduates them and the 2.5 endpoint shutters; we try in order
+// and stop on the first 200.
+//
+// If you see "model not found" 404s in prod, run:
+//   curl "https://generativelanguage.googleapis.com/v1beta/models?key=$GEMINI_API_KEY" | jq '.models[].name'
+// and bump this list.
+const MODEL_CANDIDATES = [
+  "gemini-2.5-flash-image",
+  "gemini-3.1-flash-image-preview",
+  "gemini-3-pro-image-preview",
+];
 
 export async function POST(req: Request) {
   const r = await requireAuthUid();
@@ -43,11 +56,9 @@ export async function POST(req: Request) {
 
   // ─── Gemini image generation ──────────────────────────────
   // Doc: https://ai.google.dev/gemini-api/docs/image-generation
-  // The 2.5 flash image model accepts a text prompt and returns
-  // inlineData parts with base64-encoded image bytes.
-  const endpoint =
-    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent` +
-    `?key=${encodeURIComponent(apiKey)}`;
+  // Try the candidate models in order; first one that returns 200
+  // wins. The 2.5 flash image model accepts a text prompt and
+  // returns inlineData parts with base64-encoded image bytes.
 
   // Light prompt scaffold — biases toward landscape-shaped, warm,
   // editorial covers that fit Rally's aesthetic without overriding
@@ -57,31 +68,51 @@ export async function POST(req: Request) {
     + `cinematic film-grain feel, no text or watermarks. `
     + `Subject: ${prompt}`;
 
-  let res: Response;
-  try {
-    res = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: scaffold }] }],
-        generationConfig: {
-          responseModalities: ["IMAGE"],
-        },
-      }),
-    });
-  } catch (e) {
-    return jsonErr(502, "gemini_unreachable", e instanceof Error ? e.message : "network");
+  let json: GeminiResponse | null = null;
+  let lastErr: string | null = null;
+
+  for (const model of MODEL_CANDIDATES) {
+    const endpoint =
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent` +
+      `?key=${encodeURIComponent(apiKey)}`;
+
+    let res: Response;
+    try {
+      res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: scaffold }] }],
+          generationConfig: { responseModalities: ["IMAGE"] },
+        }),
+      });
+    } catch (e) {
+      lastErr = `${model}: ${e instanceof Error ? e.message : "network"}`;
+      continue;
+    }
+
+    if (res.status === 404) {
+      // Model not found — try the next candidate without bailing.
+      lastErr = `${model}: 404`;
+      continue;
+    }
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      lastErr = `${model}: ${res.status}: ${errText.slice(0, 300)}`;
+      // Non-404 errors are likely the same across models (auth, bad
+      // body, etc.) — bail.
+      return jsonErr(502, "gemini_error", lastErr);
+    }
+    json = (await res.json().catch(() => null)) as GeminiResponse | null;
+    break;
   }
 
-  if (!res.ok) {
-    const errText = await res.text().catch(() => "");
-    return jsonErr(502, "gemini_error", `${res.status}: ${errText.slice(0, 400)}`);
+  if (!json) {
+    return jsonErr(502, "gemini_no_model_available",
+      `None of the candidate models responded. Last error: ${lastErr ?? "unknown"}.`);
   }
 
-  const json = (await res.json().catch(() => null)) as
-    | { candidates?: { content?: { parts?: { inlineData?: { mimeType: string; data: string } }[] } }[] }
-    | null;
-  const part = json?.candidates?.[0]?.content?.parts?.find((p) => p.inlineData);
+  const part = json.candidates?.[0]?.content?.parts?.find((p) => p.inlineData);
   if (!part?.inlineData?.data) {
     return jsonErr(502, "gemini_no_image", "Gemini didn't return an image part.");
   }
@@ -100,4 +131,12 @@ export async function POST(req: Request) {
 
   const { data: pub } = svc.storage.from("trip-covers").getPublicUrl(path);
   return jsonOk({ url: pub.publicUrl, path });
+}
+
+interface GeminiResponse {
+  candidates?: {
+    content?: {
+      parts?: { inlineData?: { mimeType: string; data: string } }[];
+    };
+  }[];
 }
