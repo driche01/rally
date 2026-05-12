@@ -40,3 +40,9 @@ verify_jwt = false
 # at true after a decline (planner roster never shows DECLINED).
 [functions.sms-survey-confirmation]
 verify_jwt = false
+
+# Phase A — invitation-anchored follow-up SMS cadence. Called by
+# pg_cron on a schedule with the service-role key in the apikey
+# header; the function does its own validation. No user JWT.
+[functions.sms-rsvp-nudge-scheduler]
+verify_jwt = false

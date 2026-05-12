@@ -17,6 +17,7 @@ import type {
   Trip, Respondent, ActivityFeedEntry, RsvpStatus,
 } from "@shared/types";
 import RsvpButtons from "./rsvp-buttons";
+import ActivitySection from "./activity-section";
 import { themeClass } from "./themes";
 
 interface PageProps {
@@ -165,13 +166,12 @@ export default async function InvitePage({ params }: PageProps) {
           <GuestRoster buckets={buckets} />
         </section>
 
-        {/* ─── Activity feed ──────────────────────────── */}
-        {activity.length > 0 && (
-          <section className="mt-12">
-            <h2 className="font-display text-2xl text-ink mb-4">Activity</h2>
-            <ActivityFeed entries={activity} />
-          </section>
-        )}
+        {/* ─── Activity feed (composer + realtime) ────── */}
+        <ActivitySection
+          tripId={trip.id}
+          shareToken={trip.share_token}
+          initial={activity}
+        />
       </div>
     </main>
   );
@@ -225,24 +225,6 @@ function GuestRoster({
   );
 }
 
-function ActivityFeed({ entries }: { entries: ActivityFeedEntry[] }) {
-  return (
-    <ul className="grid gap-3">
-      {entries.map((e) => (
-        <li
-          key={e.id}
-          className="bg-card border border-line rounded-2xl p-4 text-sm"
-        >
-          <p className="text-xs uppercase tracking-widest text-muted font-semibold mb-1">
-            {formatEntryType(e.entry_type)} · {formatRelative(e.created_at)}
-          </p>
-          <p className="text-ink">{formatEntryContent(e)}</p>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 // ─── Helpers ──────────────────────────────────────────────────────
 
 function bucketByStatus(
@@ -277,36 +259,6 @@ function formatBudget(min: number | null, max: number | null): string {
   if (min != null) return `From $${min.toLocaleString()}`;
   if (max != null) return `Up to $${max.toLocaleString()}`;
   return "TBD";
-}
-
-function formatRelative(iso: string): string {
-  const ago = Date.now() - new Date(iso).getTime();
-  const s = Math.floor(ago / 1000);
-  if (s < 60)    return "just now";
-  if (s < 3600)  return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
-}
-
-function formatEntryType(t: ActivityFeedEntry["entry_type"]): string {
-  switch (t) {
-    case "rsvp_update":  return "RSVP";
-    case "comment":      return "Comment";
-    case "gif":          return "Gif";
-    case "photo":        return "Photo";
-    case "planner_post": return "From the host";
-    case "system":       return "Update";
-  }
-}
-
-function formatEntryContent(e: ActivityFeedEntry): string {
-  const c = e.content as Record<string, unknown>;
-  if (typeof c.text === "string") return c.text;
-  if (typeof c.message === "string") return c.message;
-  if (typeof c.name === "string" && typeof c.status === "string") {
-    return `${c.name} → ${c.status}`;
-  }
-  return "(see details)";
 }
 
 function escapeCss(url: string): string {
