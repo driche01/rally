@@ -1,574 +1,602 @@
-# Schema Plan — Phase A
+# Schema Plan — Phase B
 
-**Generated:** 2026-05-11
-**Reads from:** `SCHEMA_REPORT.md` + `docs/rally_phase_a_build_guide.md` §4
-**Open dependencies:** `BUILD_QUESTIONS.md` Q1–Q6 must be RESOLVED before this plan executes.
-**Status:** Q1–Q7 RESOLVED 2026-05-11. Q5 resolved with a revised approach (reuse `thread_messages`, drop `sms_messages`). Section 7 below reflects the revision.
+**Generated:** 2026-05-12
+**Reads from:** `SCHEMA_REPORT.md` + `docs/rally_phase_b_build_guide.md` §3 + `BUILD_QUESTIONS.md` Q10–Q17
+**Status:** Q10–Q17 RESOLVED 2026-05-12. **All DDL below is preview only — nothing has been executed.** Migrations land only after human sign-off on this file.
 
-> **NOTHING IN THIS FILE HAS BEEN EXECUTED.** All DDL below is a preview. Per CLAUDE.md hard rule #3, this file waits for human approval. Migrations land only after sign-off. The Design Gate (build guide §5) is the next hard stop before migrations run.
-
-This plan assumes the recommendations in `BUILD_QUESTIONS.md` are accepted. If you choose different options, the DDL below changes accordingly and I'll regenerate.
+This plan reuses the additive-only convention from Phase A. Zero DROPs, zero RENAMEs, zero NOT NULL toggles on existing columns. Each migration self-registers in `supabase_migrations.schema_migrations` via the trailing INSERT, matching Phase A's pattern.
 
 ---
 
-## 0. Migration numbering
+## Migration plan (10 files, 125–134)
 
-- Current head in repo (worktree): `113_respondent_note.sql`.
-- Current head applied to prod: `114_drop_paywall_artifacts.sql` (file uncommitted in parent).
-- Local-only unapplied file: `115_trip_nudge_overrides.sql` (untracked in parent).
-
-**Phase A migrations will start at `116`** to leave room for 114/115 to be committed/applied first. Filenames will follow the existing `NNN_snake_case.sql` convention.
-
-Phase A migrations (proposed):
-- `116_phase_a_trips_extend.sql`
-- `117_phase_a_traveler_profiles_vibe_columns.sql`
-- `118_phase_a_respondents_invitation_fields.sql`
-- `119_phase_a_trip_cohosts.sql`
-- `120_phase_a_activity_feed_entries.sql`
-- `121_phase_a_mutuals.sql`
-- `122_phase_a_thread_messages_extend.sql` *(revised per Q5 resolution — was `sms_messages`)*
-
-Each migration is independently rerunnable (uses `IF NOT EXISTS` / idempotent guards).
+| # | File | Touches |
+|---|---|---|
+| 125 | `phase_b_lodging_options_extend.sql` | extend `lodging_options` |
+| 126 | `phase_b_itinerary_blocks_extend.sql` | extend `itinerary_blocks` |
+| 127 | `phase_b_lodging_votes_extend.sql` | extend `lodging_votes` |
+| 128 | `phase_b_itinerary_voting.sql` | new tables for itinerary votes + alternatives |
+| 129 | `phase_b_lodging_room_assignments.sql` | new table |
+| 130 | `phase_b_travel.sql` | new travel_arrangements + groupings + members |
+| 131 | `phase_b_meals.sql` | new meals + meal_ingredients + meal_votes |
+| 132 | `phase_b_shopping_list.sql` | new shopping_list_items |
+| 133 | `phase_b_trip_flyers.sql` | new trip_flyers |
+| 134 | `phase_b_generation_log.sql` | new phase_b_generation_log (AI cost + token tracking; my §7 addition) |
 
 ---
 
-## 1. `trips` — additive extend
-**File:** `116_phase_a_trips_extend.sql`
-**Phase A needs:** theme (template choice), cover_image_url, description, is_public, budget_min, budget_max.
-**Existing columns we keep:** all 30 current columns including `budget_per_person` (text bucket), `destination`, `start_date`, `end_date`, `share_token`, `status`. None are touched.
-**Note on budget:** existing `budget_per_person` (text) co-exists with new numeric `budget_min`/`budget_max`. Application code writes the new columns; legacy code that reads `budget_per_person` continues to work.
+## 1. `lodging_options` — additive extend (per Q10)
 
 ```sql
--- ============================================================
--- Migration 116: Phase A — extend trips with invitation-page fields
+-- Migration 125: Phase B — extend lodging_options for AI suggestions + room layout
+-- The existing Expo-era lodging_options table already has title, platform,
+-- url, total_cost_cents, nightly_rate_cents, status, etc. Phase B adds:
+--   - room_layout jsonb (flexible — array of {room, beds, cost_per_night})
+--   - ai_suggested boolean (mark which rows were AI-generated)
+-- The status CHECK widens to permit 'selected' alongside the existing
+-- 'option' default (Phase B sets is_selected via status='selected').
+
+ALTER TABLE lodging_options
+  ADD COLUMN IF NOT EXISTS room_layout   jsonb,
+  ADD COLUMN IF NOT EXISTS ai_suggested  boolean NOT NULL DEFAULT false;
+
+DO $$
+BEGIN
+  -- Drop the existing CHECK if it's narrower than what we need
+  -- (we know there's no live data depending on the old set since
+  -- lodging_options has 0 rows in prod). Then add the widened one.
+  IF EXISTS (
+    SELECT 1 FROM information_schema.check_constraints
+    WHERE constraint_name = 'lodging_options_status_check'
+  ) THEN
+    ALTER TABLE lodging_options DROP CONSTRAINT lodging_options_status_check;
+  END IF;
+  ALTER TABLE lodging_options
+    ADD CONSTRAINT lodging_options_status_check
+    CHECK (status IN ('option', 'selected', 'rejected', 'booked'));
+END$$;
+
+CREATE INDEX IF NOT EXISTS idx_lodging_options_trip_status
+  ON lodging_options (trip_id, status);
+
+INSERT INTO supabase_migrations.schema_migrations (version, name, statements)
+VALUES ('125', 'phase_b_lodging_options_extend', ARRAY[]::text[])
+ON CONFLICT (version) DO NOTHING;
+```
+
+> Note: dropping the `lodging_options_status_check` is technically a "drop and re-add wider," not pure additive. I'm calling this out because hard rule #1 is strict about DROPs. The justification: (a) `lodging_options` has zero live rows, so no data is at risk; (b) the new CHECK is a strict superset of the old one (every existing valid status stays valid); (c) the alternative is forcing Phase B to use a new column for status which fragments the model. **Flagging for sign-off.** If you prefer strict-additive, I'll replace this with adding a new `lifecycle text` column and leave `status` alone.
+
+---
+
+## 2. `itinerary_blocks` — additive extend (per Q11)
+
+```sql
+-- Migration 126: Phase B — extend itinerary_blocks for AI generation + voting
+-- The existing Expo-era itinerary_blocks has 73 live rows. Phase B reads
+-- + writes this table; Expo continues to read + write it for its planner
+-- itinerary editor. Both flows coexist.
 --
--- Adds Partiful-style invitation page metadata to trips. All
--- additive; existing columns and constraints are untouched.
--- ============================================================
+-- The existing `type text` column has no CHECK in the live DB; Phase B
+-- adds one that includes the existing values plus the Phase B canonical
+-- set. The `notes text` column doubles as Phase B's `description`.
 
-ALTER TABLE trips
-  ADD COLUMN IF NOT EXISTS theme            text,
-  ADD COLUMN IF NOT EXISTS cover_image_url  text,
-  ADD COLUMN IF NOT EXISTS description      text,
-  ADD COLUMN IF NOT EXISTS is_public        boolean NOT NULL DEFAULT false,
-  ADD COLUMN IF NOT EXISTS budget_min       numeric,
-  ADD COLUMN IF NOT EXISTS budget_max       numeric;
+ALTER TABLE itinerary_blocks
+  ADD COLUMN IF NOT EXISTS ai_generated  boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS created_by    uuid REFERENCES respondents(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS location_url  text;
 
--- Constrain `theme` to the six Partiful-style template choices.
--- Nullable so legacy trips (which have no theme) stay valid.
+DO $$
+DECLARE existing_types text[];
+BEGIN
+  -- Snapshot existing distinct types so we don't accidentally
+  -- invalidate live data with a narrow CHECK.
+  SELECT array_agg(DISTINCT type) INTO existing_types FROM itinerary_blocks;
+  -- We expect a small set: 'activity', 'meal', 'transit', 'lodging',
+  -- 'free_time', 'other' (plus whatever Expo writes). Build a UNION
+  -- of (existing distinct types) ∪ (Phase B canonical set) and apply
+  -- as a CHECK. Idempotent.
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.check_constraints
+    WHERE constraint_name = 'itinerary_blocks_type_check'
+  ) THEN
+    EXECUTE format(
+      'ALTER TABLE itinerary_blocks ADD CONSTRAINT itinerary_blocks_type_check
+         CHECK (type = ANY (%L))',
+      ARRAY(
+        SELECT DISTINCT t FROM (
+          SELECT unnest(coalesce(existing_types, ARRAY[]::text[])) AS t
+          UNION
+          SELECT unnest(ARRAY['activity','meal','transit','lodging','free_time','other'])
+        ) s
+      )
+    );
+  END IF;
+END$$;
+
+CREATE INDEX IF NOT EXISTS idx_itinerary_blocks_trip_day_start
+  ON itinerary_blocks (trip_id, day_date, start_time);
+
+CREATE INDEX IF NOT EXISTS idx_itinerary_blocks_ai_generated
+  ON itinerary_blocks (trip_id) WHERE ai_generated = true;
+
+INSERT INTO supabase_migrations.schema_migrations (version, name, statements)
+VALUES ('126', 'phase_b_itinerary_blocks_extend', ARRAY[]::text[])
+ON CONFLICT (version) DO NOTHING;
+```
+
+---
+
+## 3. `lodging_votes` — additive extend (per Q12)
+
+```sql
+-- Migration 127: Phase B — yes/no/maybe voting on lodging options
+-- Existing rows are "presence = yes" semantics; default 'yes' preserves
+-- that meaning.
+
+ALTER TABLE lodging_votes
+  ADD COLUMN IF NOT EXISTS vote text NOT NULL DEFAULT 'yes';
+
 DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.check_constraints
-    WHERE constraint_name = 'trips_theme_check'
+    WHERE constraint_name = 'lodging_votes_vote_check'
   ) THEN
-    ALTER TABLE trips
-      ADD CONSTRAINT trips_theme_check
-      CHECK (theme IS NULL OR theme IN (
-        'classic','eclectic','fancy','literary','digital','elegant'
+    ALTER TABLE lodging_votes
+      ADD CONSTRAINT lodging_votes_vote_check
+      CHECK (vote IN ('yes','no','maybe'));
+  END IF;
+END$$;
+
+-- One vote per (option, respondent) — replace any prior one in app code
+-- via INSERT ... ON CONFLICT.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_lodging_votes_unique
+  ON lodging_votes (lodging_option_id, respondent_id);
+
+INSERT INTO supabase_migrations.schema_migrations (version, name, statements)
+VALUES ('127', 'phase_b_lodging_votes_extend', ARRAY[]::text[])
+ON CONFLICT (version) DO NOTHING;
+```
+
+---
+
+## 4. Itinerary voting + alternatives (per Q11 + Q13)
+
+```sql
+-- Migration 128: Phase B — voting infrastructure on itinerary_blocks
+-- Three new tables:
+--   itinerary_item_votes    — per (block, respondent), yes/no/maybe
+--   itinerary_item_alternatives — "vote A vs B" group container
+--   itinerary_alternative_options — many-to-many between alternatives + blocks
+
+CREATE TABLE IF NOT EXISTS itinerary_item_votes (
+  itinerary_block_id uuid NOT NULL REFERENCES itinerary_blocks(id) ON DELETE CASCADE,
+  respondent_id      uuid NOT NULL REFERENCES respondents(id) ON DELETE CASCADE,
+  vote               text NOT NULL,
+  voted_at           timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (itinerary_block_id, respondent_id),
+  CONSTRAINT itinerary_item_votes_vote_check CHECK (vote IN ('yes','no','maybe'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_itinerary_item_votes_respondent
+  ON itinerary_item_votes (respondent_id);
+
+ALTER TABLE itinerary_item_votes ENABLE ROW LEVEL SECURITY;
+
+-- Anyone with the trip's share token can read the votes (vote totals
+-- are public to the group). Writes go through the API layer with
+-- session_token verification (service-role bypass).
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='itinerary_item_votes' AND policyname='itinerary_item_votes_public_select') THEN
+    CREATE POLICY itinerary_item_votes_public_select
+      ON itinerary_item_votes FOR SELECT
+      USING (EXISTS (
+        SELECT 1 FROM itinerary_blocks b WHERE b.id = itinerary_item_votes.itinerary_block_id
       ));
   END IF;
 END$$;
 
--- Budget sanity: min <= max when both present.
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.check_constraints
-    WHERE constraint_name = 'trips_budget_range_check'
-  ) THEN
-    ALTER TABLE trips
-      ADD CONSTRAINT trips_budget_range_check
-      CHECK (
-        budget_min IS NULL OR budget_max IS NULL OR budget_min <= budget_max
-      );
-  END IF;
-END$$;
-
--- Cover image: cap URL length defensively.
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.check_constraints
-    WHERE constraint_name = 'trips_cover_image_url_len'
-  ) THEN
-    ALTER TABLE trips
-      ADD CONSTRAINT trips_cover_image_url_len
-      CHECK (cover_image_url IS NULL OR char_length(cover_image_url) <= 2048);
-  END IF;
-END$$;
-```
-
-**RLS:** no policy changes needed. Existing `trips` policies already allow planner read/write and anon read via share token.
-
----
-
-## 2. `traveler_profiles` — additive vibe columns
-**File:** `117_phase_a_traveler_profiles_vibe_columns.sql`
-**Depends on:** Q2 resolved as Option A (reuse `traveler_profiles`).
-
-```sql
--- ============================================================
--- Migration 117: Phase A — vibe questions on traveler_profiles
---
--- Adds the Tinder-style vibe question outputs to the existing
--- traveler_profiles table. PK stays on phone. user_id stays
--- nullable. Existing columns untouched.
---
--- Per BUILD_QUESTIONS.md Q2: one profile per phone, shared
--- between the Expo app and the Phase A web app. Phase A
--- backfills these columns on first RSVP; Expo writes the older
--- columns (sleep_pref etc.) as before.
--- ============================================================
-
-ALTER TABLE traveler_profiles
-  ADD COLUMN IF NOT EXISTS vibe_beach_or_mountain     text,
-  ADD COLUMN IF NOT EXISTS vibe_spa_or_hike           text,
-  ADD COLUMN IF NOT EXISTS vibe_foodie_or_casual      text,
-  ADD COLUMN IF NOT EXISTS vibe_social_or_chill       text,
-  ADD COLUMN IF NOT EXISTS vibe_culture_or_relaxation text,
-  ADD COLUMN IF NOT EXISTS budget_comfort             text,
-  ADD COLUMN IF NOT EXISTS vibe_captured_at           timestamptz;
-
--- Each vibe column: nullable (set null until the user completes
--- the capture flow), values constrained by CHECK.
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.check_constraints
-    WHERE constraint_name = 'traveler_profiles_vibe_beach_or_mountain_check'
-  ) THEN
-    ALTER TABLE traveler_profiles
-      ADD CONSTRAINT traveler_profiles_vibe_beach_or_mountain_check
-      CHECK (vibe_beach_or_mountain IS NULL OR vibe_beach_or_mountain IN ('beach','mountain','both'));
-  END IF;
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.check_constraints
-    WHERE constraint_name = 'traveler_profiles_vibe_spa_or_hike_check'
-  ) THEN
-    ALTER TABLE traveler_profiles
-      ADD CONSTRAINT traveler_profiles_vibe_spa_or_hike_check
-      CHECK (vibe_spa_or_hike IS NULL OR vibe_spa_or_hike IN ('spa','hike','both'));
-  END IF;
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.check_constraints
-    WHERE constraint_name = 'traveler_profiles_vibe_foodie_or_casual_check'
-  ) THEN
-    ALTER TABLE traveler_profiles
-      ADD CONSTRAINT traveler_profiles_vibe_foodie_or_casual_check
-      CHECK (vibe_foodie_or_casual IS NULL OR vibe_foodie_or_casual IN ('foodie','casual','both'));
-  END IF;
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.check_constraints
-    WHERE constraint_name = 'traveler_profiles_vibe_social_or_chill_check'
-  ) THEN
-    ALTER TABLE traveler_profiles
-      ADD CONSTRAINT traveler_profiles_vibe_social_or_chill_check
-      CHECK (vibe_social_or_chill IS NULL OR vibe_social_or_chill IN ('social','chill','both'));
-  END IF;
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.check_constraints
-    WHERE constraint_name = 'traveler_profiles_vibe_culture_or_relaxation_check'
-  ) THEN
-    ALTER TABLE traveler_profiles
-      ADD CONSTRAINT traveler_profiles_vibe_culture_or_relaxation_check
-      CHECK (vibe_culture_or_relaxation IS NULL OR vibe_culture_or_relaxation IN ('culture','relaxation','both'));
-  END IF;
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.check_constraints
-    WHERE constraint_name = 'traveler_profiles_budget_comfort_check'
-  ) THEN
-    ALTER TABLE traveler_profiles
-      ADD CONSTRAINT traveler_profiles_budget_comfort_check
-      CHECK (budget_comfort IS NULL OR budget_comfort IN ('budget','mid','premium','luxury'));
-  END IF;
-END$$;
-
--- Partial index for the "needs vibe capture?" query used by RSVP
--- gating. Tiny — most profiles will eventually have it set.
-CREATE INDEX IF NOT EXISTS idx_traveler_profiles_needs_vibe_capture
-  ON traveler_profiles (phone)
-  WHERE vibe_beach_or_mountain IS NULL;
-```
-
-**RLS:** unchanged. Existing planner-read policy stays.
-
-**Phase A behavior:** "First RSVP ever" = `traveler_profiles` row for this phone is missing OR has `vibe_captured_at IS NULL`. "One-tap confirm" = row exists AND `vibe_captured_at IS NOT NULL`.
-
----
-
-## 3. `respondents` — Phase A invitation fields
-**File:** `118_phase_a_respondents_invitation_fields.sql`
-**Depends on:** Q3 resolved as Option C (reuse `respondents` for invitees, separate `trip_cohosts`).
-
-```sql
--- ============================================================
--- Migration 118: Phase A — invitation/RSVP fields on respondents
---
--- The respondents table already represents trip invitees with
--- name/phone/email/user_id. Phase A adds the invitation
--- lifecycle state on top, additively.
---
--- The legacy `rsvp` column ('in'/'out') stays for the existing
--- Expo poll flow and is not touched. The new `rsvp_status`
--- column carries the Phase A invitation lifecycle.
--- ============================================================
-
-ALTER TABLE respondents
-  ADD COLUMN IF NOT EXISTS rsvp_status            text,
-  ADD COLUMN IF NOT EXISTS rsvp_status_updated_at timestamptz,
-  ADD COLUMN IF NOT EXISTS invited_by             uuid REFERENCES users(id) ON DELETE SET NULL,
-  ADD COLUMN IF NOT EXISTS invited_at             timestamptz;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.check_constraints
-    WHERE constraint_name = 'respondents_rsvp_status_check'
-  ) THEN
-    ALTER TABLE respondents
-      ADD CONSTRAINT respondents_rsvp_status_check
-      CHECK (rsvp_status IS NULL OR rsvp_status IN ('invited','going','maybe','cant_go'));
-  END IF;
-END$$;
-
--- At least one of (user_id, phone, email) must be non-null —
--- mirrors the build guide's invariant. Existing rows all satisfy
--- this (name is NOT NULL plus either phone or email or user_id),
--- so this is safe to add.
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.check_constraints
-    WHERE constraint_name = 'respondents_identity_required'
-  ) THEN
-    ALTER TABLE respondents
-      ADD CONSTRAINT respondents_identity_required
-      CHECK (user_id IS NOT NULL OR phone IS NOT NULL OR email IS NOT NULL);
-  END IF;
-END$$;
-
-CREATE INDEX IF NOT EXISTS idx_respondents_trip_rsvp_status
-  ON respondents (trip_id, rsvp_status);
-CREATE INDEX IF NOT EXISTS idx_respondents_invited_at
-  ON respondents (invited_at)
-  WHERE rsvp_status = 'invited';
-```
-
-**RLS posture for the new columns:**
-- The existing `respondents` table has "Anyone can read respondents" — wide-open SELECT. That posture is fine for the invitation page (guest list is intentionally public to anyone with the share link).
-- INSERT is already gated to (a) "Anyone can insert a respondent" (public RSVP flow) and (b) "trip owner can insert respondents" (planner-initiated invite). Both paths can write `rsvp_status`.
-- UPDATE: existing "Session owner can update their respondent row" lets an invitee toggle their own RSVP. "trip owner can update respondents" lets the planner override on someone's behalf (Phase A requirement). Both are covered.
-- No new policies required for this migration.
-
----
-
-## 4. `trip_cohosts` — new
-**File:** `119_phase_a_trip_cohosts.sql`
-**Depends on:** Q1 (FK target for `user_id`). Recommendation says `profiles(id)` to match `trip_members`.
-
-```sql
--- ============================================================
--- Migration 119: Phase A — trip_cohosts join table
---
--- Cohosts have full planner-equivalent permissions on a trip.
--- Composite PK (trip_id, user_id). FK to profiles to match the
--- existing trip_members convention.
--- ============================================================
-
-CREATE TABLE IF NOT EXISTS trip_cohosts (
-  trip_id    uuid        NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
-  user_id    uuid        NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  invited_by uuid                 REFERENCES profiles(id) ON DELETE SET NULL,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (trip_id, user_id)
+CREATE TABLE IF NOT EXISTS itinerary_item_alternatives (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  trip_id      uuid NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  day_date     date NOT NULL,
+  slot_label   text NOT NULL,
+  winning_block_id uuid REFERENCES itinerary_blocks(id) ON DELETE SET NULL,
+  created_at   timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_trip_cohosts_user
-  ON trip_cohosts (user_id);
+CREATE INDEX IF NOT EXISTS idx_itinerary_alternatives_trip_day
+  ON itinerary_item_alternatives (trip_id, day_date);
 
-ALTER TABLE trip_cohosts ENABLE ROW LEVEL SECURITY;
-
--- Planner can see their cohosts; cohosts can see themselves.
-CREATE POLICY trip_cohosts_select
-  ON trip_cohosts FOR SELECT
-  USING (
-    user_id = auth.uid()
-    OR EXISTS (
-      SELECT 1 FROM trips t
-      WHERE t.id = trip_cohosts.trip_id
-        AND t.created_by = auth.uid()
-    )
-  );
-
--- Only the planner can grant cohost.
-CREATE POLICY trip_cohosts_insert
-  ON trip_cohosts FOR INSERT
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM trips t
-      WHERE t.id = trip_cohosts.trip_id
-        AND t.created_by = auth.uid()
-    )
-  );
-
--- Only the planner can revoke cohost (or a cohost can step
--- themselves down).
-CREATE POLICY trip_cohosts_delete
-  ON trip_cohosts FOR DELETE
-  USING (
-    user_id = auth.uid()
-    OR EXISTS (
-      SELECT 1 FROM trips t
-      WHERE t.id = trip_cohosts.trip_id
-        AND t.created_by = auth.uid()
-    )
-  );
-```
-
----
-
-## 5. `activity_feed_entries` — new
-**File:** `120_phase_a_activity_feed_entries.sql`
-**Depends on:** Q4 confirmed (separate from `trip_audit_events`).
-
-```sql
--- ============================================================
--- Migration 120: Phase A — public-facing activity feed entries
---
--- Lives on the invitation page. Anon SELECT under share-token
--- conditions, authed INSERT for comments, system entries auto-
--- posted on RSVP changes (trigger below).
---
--- Distinct from trip_audit_events (planner-only audit log).
--- Different audience, different RLS.
--- ============================================================
-
-CREATE TABLE IF NOT EXISTS activity_feed_entries (
-  id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-  trip_id     uuid        NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
-  user_id     uuid                 REFERENCES users(id) ON DELETE SET NULL,
-  entry_type  text        NOT NULL,
-  content     jsonb       NOT NULL DEFAULT '{}'::jsonb,
-  created_at  timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT activity_feed_entries_entry_type_check
-    CHECK (entry_type IN ('rsvp_update','comment','gif','photo','system','planner_post'))
+CREATE TABLE IF NOT EXISTS itinerary_alternative_options (
+  alternative_id     uuid NOT NULL REFERENCES itinerary_item_alternatives(id) ON DELETE CASCADE,
+  itinerary_block_id uuid NOT NULL REFERENCES itinerary_blocks(id) ON DELETE CASCADE,
+  PRIMARY KEY (alternative_id, itinerary_block_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_activity_feed_entries_trip_created
-  ON activity_feed_entries (trip_id, created_at DESC);
+ALTER TABLE itinerary_item_alternatives ENABLE ROW LEVEL SECURITY;
+ALTER TABLE itinerary_alternative_options ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE activity_feed_entries ENABLE ROW LEVEL SECURITY;
-
--- Anyone with the trip's share token can read the feed (the
--- invitation page is publicly accessible by design). We don't
--- carry the token at row level; the trips.is_public check + the
--- anon-trip-read policy together mean the feed is visible to
--- the same audience as the trip itself.
-CREATE POLICY activity_feed_entries_anon_select
-  ON activity_feed_entries FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM trips t
-      WHERE t.id = activity_feed_entries.trip_id
-    )
-  );
--- NOTE: this exists() check matches the existing anon-read
--- pattern on trips. If we want tighter scoping (e.g., reject
--- feed reads if trip.is_public = false unless authed), add a
--- second clause referencing trip.is_public and auth.role().
--- Flagged in BUILD_QUESTIONS Q4 for confirmation.
-
--- Authed users can post comments + GIFs to trips they're a
--- member of OR planning.
-CREATE POLICY activity_feed_entries_member_insert
-  ON activity_feed_entries FOR INSERT
-  WITH CHECK (
-    entry_type IN ('comment','gif','photo','planner_post')
-    AND (
+-- Anon read on both: same gate as itinerary_blocks (via the share token).
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='itinerary_item_alternatives' AND policyname='alts_public_select') THEN
+    CREATE POLICY alts_public_select ON itinerary_item_alternatives FOR SELECT USING (
+      EXISTS (SELECT 1 FROM trips t WHERE t.id = itinerary_item_alternatives.trip_id)
+    );
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='itinerary_alternative_options' AND policyname='alt_opts_public_select') THEN
+    CREATE POLICY alt_opts_public_select ON itinerary_alternative_options FOR SELECT USING (
       EXISTS (
-        SELECT 1 FROM trips t
-        WHERE t.id = activity_feed_entries.trip_id
-          AND t.created_by = auth.uid()
+        SELECT 1 FROM itinerary_item_alternatives a
+        WHERE a.id = itinerary_alternative_options.alternative_id
       )
-      OR EXISTS (
-        SELECT 1 FROM trip_cohosts c
-        WHERE c.trip_id = activity_feed_entries.trip_id
-          AND c.user_id = auth.uid()
-      )
-      OR auth_user_is_trip_member(activity_feed_entries.trip_id)
-    )
-  );
-
--- System entries (RSVP changes, etc.) are inserted by triggers
--- running with elevated rights, not by user roles. No INSERT
--- policy for 'system' / 'rsvp_update' entries from public roles.
-```
-
-**Trigger to auto-post RSVP updates** (will land alongside Step 9 of the build sequence, not Step 0; included here only as a forward reference — not part of the schema migration that runs at Step 0):
-```sql
--- forward-reference only — NOT in the Step 0 migration
--- CREATE FUNCTION activity_feed_emit_rsvp_update() RETURNS trigger ...
--- CREATE TRIGGER trg_respondents_rsvp_to_feed
---   AFTER UPDATE OF rsvp_status ON respondents
---   FOR EACH ROW
---   WHEN (NEW.rsvp_status IS DISTINCT FROM OLD.rsvp_status)
---   EXECUTE FUNCTION activity_feed_emit_rsvp_update();
-```
-
----
-
-## 6. `mutuals` — new
-**File:** `121_phase_a_mutuals.sql`
-**Depends on:** Q1 (FK target for user_id / mutual_user_id). Recommendation: `users(id)` to match the phone-keyed social graph.
-
-```sql
--- ============================================================
--- Migration 121: Phase A — mutuals (past trip-mates graph)
---
--- Materialized cache of "who I've traveled with." Populated
--- post-RSVP by a job that joins respondents across trips.
--- Composite PK on (user_id, mutual_user_id). Bidirectional
--- pairs are stored as two rows so the planner-side query
--- "people I've traveled with" is a single index lookup.
--- ============================================================
-
-CREATE TABLE IF NOT EXISTS mutuals (
-  user_id                    uuid        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  mutual_user_id             uuid        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  shared_trip_count          integer     NOT NULL DEFAULT 0,
-  last_traveled_together_at  timestamptz,
-  created_at                 timestamptz NOT NULL DEFAULT now(),
-  updated_at                 timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (user_id, mutual_user_id),
-  CONSTRAINT mutuals_not_self CHECK (user_id <> mutual_user_id),
-  CONSTRAINT mutuals_shared_trip_count_nonneg CHECK (shared_trip_count >= 0)
-);
-
-CREATE INDEX IF NOT EXISTS idx_mutuals_user_count_desc
-  ON mutuals (user_id, shared_trip_count DESC);
-
-ALTER TABLE mutuals ENABLE ROW LEVEL SECURITY;
-
--- A user can read their own mutuals row (for the invite picker).
-CREATE POLICY mutuals_self_select
-  ON mutuals FOR SELECT
-  USING (
-    user_id = (SELECT u.id FROM users u WHERE u.auth_user_id = auth.uid())
-  );
-
--- No INSERT / UPDATE / DELETE policies for public roles. The
--- mutuals job runs as service_role and bypasses RLS. (Mutual
--- rows are derived, not user-edited.)
-```
-
----
-
-## 7. `thread_messages` — additive extend (revised per Q5)
-**File:** `122_phase_a_thread_messages_extend.sql`
-**Depends on:** Q5 resolved as reuse-`thread_messages`.
-**Replaces:** the originally-planned `sms_messages` table. `thread_messages` is already the outbound send log used by `_sms-shared/dm-sender.ts` (`sendDm()` and `broadcast()`); it already carries `body`, `message_sid`, `delivery_status`, `error_code`, `direction`, `sender_phone`. We add the trip linkage Phase A needs and an indexed `message_type`.
-
-```sql
--- ============================================================
--- Migration 122: Phase A — extend thread_messages for invitation rail
---
--- thread_messages is the existing outbound SMS log (used by the
--- 1:1 dm-sender.ts and the planner-blast broadcast() helper).
--- Phase A reuses it. Additive only:
---   1. trip_id: nullable FK to trips, so Phase A sends can bind
---      to a trip without needing a trip_session_id (which is
---      poll-cadence-specific).
---   2. message_type: nullable text, so we can distinguish
---      'rsvp_nudge' from legacy outbound send types without
---      changing how the existing flows tag their sends.
---   3. Partial index for the planner activity-log read path.
---
--- The existing trip_session_id stays for legacy sends. The new
--- trip_id is also nullable; rows can carry either, neither, or
--- (rare) both (during a transitional period when a legacy send
--- happens to know its trip too).
--- ============================================================
-
-ALTER TABLE thread_messages
-  ADD COLUMN IF NOT EXISTS trip_id      uuid REFERENCES trips(id) ON DELETE SET NULL,
-  ADD COLUMN IF NOT EXISTS message_type text;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.check_constraints
-    WHERE constraint_name = 'thread_messages_message_type_check'
-  ) THEN
-    ALTER TABLE thread_messages
-      ADD CONSTRAINT thread_messages_message_type_check
-      CHECK (
-        message_type IS NULL OR message_type IN (
-          'rsvp_nudge',
-          'profile_completion',
-          'booking_nudge',
-          'pre_trip_summary',
-          'planner_blast'
-        )
-      );
+    );
   END IF;
 END$$;
 
--- Planner activity-log read path: "show me all outbound SMS for
--- this trip, newest first, optionally filtered by message_type."
-CREATE INDEX IF NOT EXISTS idx_thread_messages_trip_type_created
-  ON thread_messages (trip_id, message_type, created_at DESC)
-  WHERE direction = 'outbound';
-
--- RSVP-nudge dedupe path: "did we already send an rsvp_nudge to
--- this phone for this trip in the last N hours?" — needed by the
--- scheduler so we don't double-send.
-CREATE INDEX IF NOT EXISTS idx_thread_messages_rsvp_nudge_dedupe
-  ON thread_messages (trip_id, sender_phone, created_at DESC)
-  WHERE direction = 'outbound' AND message_type = 'rsvp_nudge';
+INSERT INTO supabase_migrations.schema_migrations (version, name, statements)
+VALUES ('128', 'phase_b_itinerary_voting', ARRAY[]::text[])
+ON CONFLICT (version) DO NOTHING;
 ```
-
-**RLS:** `thread_messages` already has policies appropriate for the legacy SMS rail. Phase A reuses them unchanged. The new columns are covered by the existing row-level policies (they apply to the whole row regardless of which columns are referenced).
-
-**Note on `nudge_sends`:** unused for Phase A. The legacy poll-cadence engine continues to use it. Phase A's RSVP nudge scheduler queries `respondents` for state and `thread_messages` for "already sent?" — no schedule table is needed for a single nudge type.
 
 ---
 
-## 8. `users.default_travel_profile_id` — **NOT** added (deviates from spec)
+## 5. Lodging room assignments
 
-The Phase A build guide §4 instructs to add `default_travel_profile_id` to `users`. **My plan deviates from this** based on `BUILD_QUESTIONS.md` Q2: since the recommendation is to reuse `traveler_profiles` (PK'd on `phone`), and there's exactly one profile per phone, a "default profile" concept is meaningless. Phase A resolves a user's profile by joining `users.phone → traveler_profiles.phone`. The build guide's `default_travel_profile_id` column is dropped from the plan.
-
-If you'd rather keep the column anyway (e.g., to future-proof for per-trip profile overrides), I'll add:
 ```sql
--- only if you want to keep the spec literal:
-ALTER TABLE users
-  ADD COLUMN IF NOT EXISTS default_travel_profile_phone text REFERENCES traveler_profiles(phone) ON DELETE SET NULL;
+-- Migration 129: Phase B — who's in which room, what they owe
+-- FKs respondents.id (per Q13). Payment status tracking only — Phase B
+-- doesn't do native payments; planner links out to Splitwise.
+
+CREATE TABLE IF NOT EXISTS lodging_room_assignments (
+  id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  lodging_option_id  uuid NOT NULL REFERENCES lodging_options(id) ON DELETE CASCADE,
+  respondent_id      uuid NOT NULL REFERENCES respondents(id) ON DELETE CASCADE,
+  room_label         text NOT NULL,
+  nights             integer NOT NULL DEFAULT 0,
+  cost_owed_cents    integer NOT NULL DEFAULT 0,
+  payment_status     text NOT NULL DEFAULT 'unpaid',
+  created_at         timestamptz NOT NULL DEFAULT now(),
+  updated_at         timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT lodging_room_assignments_payment_status_check
+    CHECK (payment_status IN ('unpaid','pending','paid')),
+  CONSTRAINT lodging_room_assignments_nights_nonneg CHECK (nights >= 0),
+  CONSTRAINT lodging_room_assignments_cost_nonneg   CHECK (cost_owed_cents >= 0),
+  UNIQUE (lodging_option_id, respondent_id, room_label)
+);
+
+CREATE INDEX IF NOT EXISTS idx_lodging_room_assignments_respondent
+  ON lodging_room_assignments (respondent_id);
+
+ALTER TABLE lodging_room_assignments ENABLE ROW LEVEL SECURITY;
+-- Same pattern: anon read; writes via service-role.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='lodging_room_assignments' AND policyname='lra_public_select') THEN
+    CREATE POLICY lra_public_select ON lodging_room_assignments FOR SELECT USING (
+      EXISTS (SELECT 1 FROM lodging_options o WHERE o.id = lodging_room_assignments.lodging_option_id)
+    );
+  END IF;
+END$$;
+
+INSERT INTO supabase_migrations.schema_migrations (version, name, statements)
+VALUES ('129', 'phase_b_lodging_room_assignments', ARRAY[]::text[])
+ON CONFLICT (version) DO NOTHING;
 ```
-…using the `phone` PK as the FK target. Awaiting your call.
 
 ---
 
-## 9. What this plan does NOT do
+## 6. Travel arrangements + groupings (per Q11 + Q13)
 
-- **No DROPs, no RENAMEs, no column type changes, no NOT NULL toggles on existing columns.** Everything is `ADD COLUMN IF NOT EXISTS` or new tables/indexes.
-- **No changes to existing RLS policies** (only new policies on new tables). Existing policies on `trips`, `respondents`, etc. are untouched.
-- **No new functions or triggers in Step 0.** The activity-feed auto-post trigger is forward-referenced in §5 above but ships at Step 9 of the Phase A build sequence, not Step 0.
-- **No data migration / backfill.** No existing row needs to be modified. New columns default to NULL or `false`; new tables start empty.
-- **No edge function changes.** Q7 (RSVP nudge implementation) affects Step 8, not the schema.
-- **No touch to migration 114 or 115.** They are flagged in `SCHEMA_REPORT.md` §8; I recommend committing 114 and resolving 115 separately before Phase A migrations land, but that's a separate action.
+```sql
+-- Migration 130: Phase B — per-respondent travel details + shared rides
+-- FK respondents (per Q13). New table (NOT extending trip_travel_legs)
+-- because the legacy table uses TEXT date columns and respondent_id
+-- semantics that conflict with what Phase B wants.
+
+CREATE TABLE IF NOT EXISTS travel_arrangements (
+  id                          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  trip_id                     uuid NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  respondent_id               uuid NOT NULL REFERENCES respondents(id) ON DELETE CASCADE,
+  arrival_mode                text,
+  arrival_datetime            timestamptz,
+  departure_datetime          timestamptz,
+  flight_number               text,
+  flight_origin_airport       text,
+  flight_destination_airport  text,
+  vehicle_capacity            integer,
+  gear_notes                  text,
+  created_at                  timestamptz NOT NULL DEFAULT now(),
+  updated_at                  timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT travel_arrangements_arrival_mode_check
+    CHECK (arrival_mode IS NULL OR arrival_mode IN ('flight','drive','train','other')),
+  CONSTRAINT travel_arrangements_vehicle_capacity_nonneg
+    CHECK (vehicle_capacity IS NULL OR vehicle_capacity >= 0),
+  UNIQUE (trip_id, respondent_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_travel_arrangements_trip
+  ON travel_arrangements (trip_id);
+
+CREATE TABLE IF NOT EXISTS travel_groupings (
+  id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  trip_id             uuid NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  driver_respondent_id uuid REFERENCES respondents(id) ON DELETE SET NULL,
+  direction           text NOT NULL,
+  departure_datetime  timestamptz NOT NULL,
+  notes               text,
+  created_at          timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT travel_groupings_direction_check
+    CHECK (direction IN ('outbound','return'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_travel_groupings_trip_direction
+  ON travel_groupings (trip_id, direction);
+
+CREATE TABLE IF NOT EXISTS travel_grouping_members (
+  grouping_id     uuid NOT NULL REFERENCES travel_groupings(id) ON DELETE CASCADE,
+  respondent_id   uuid NOT NULL REFERENCES respondents(id) ON DELETE CASCADE,
+  added_at        timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (grouping_id, respondent_id)
+);
+
+ALTER TABLE travel_arrangements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE travel_groupings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE travel_grouping_members ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='travel_arrangements' AND policyname='ta_public_select') THEN
+    CREATE POLICY ta_public_select ON travel_arrangements FOR SELECT USING (
+      EXISTS (SELECT 1 FROM trips t WHERE t.id = travel_arrangements.trip_id)
+    );
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='travel_groupings' AND policyname='tg_public_select') THEN
+    CREATE POLICY tg_public_select ON travel_groupings FOR SELECT USING (
+      EXISTS (SELECT 1 FROM trips t WHERE t.id = travel_groupings.trip_id)
+    );
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='travel_grouping_members' AND policyname='tgm_public_select') THEN
+    CREATE POLICY tgm_public_select ON travel_grouping_members FOR SELECT USING (
+      EXISTS (SELECT 1 FROM travel_groupings g WHERE g.id = travel_grouping_members.grouping_id)
+    );
+  END IF;
+END$$;
+
+INSERT INTO supabase_migrations.schema_migrations (version, name, statements)
+VALUES ('130', 'phase_b_travel', ARRAY[]::text[])
+ON CONFLICT (version) DO NOTHING;
+```
 
 ---
 
-## 10. Execution checklist (after approval)
+## 7. Meals (per Q11 + Q13 + Q17)
 
-When `BUILD_QUESTIONS.md` Q1–Q6 are RESOLVED and you sign off on this plan:
+```sql
+-- Migration 131: Phase B — meals + ingredients + voting
+-- meal_ingredients are written in normalized form at meal-plan generation
+-- time (per Q17 — LLM-assisted normalization upstream). Shopping list
+-- aggregation downstream is then a simple sum-by-name-and-unit.
 
-1. Reconcile migrations 114/115 (commit 114 to repo, decide on 115).
-2. Write the seven migration files in `supabase/migrations/` numbered 116–122.
-3. Run each `supabase db query --linked --file ...` (or via `supabase db push` if we restore docker), starting at 116.
-4. After each migration, re-query `information_schema` to confirm the new columns/tables/constraints exist.
-5. Update `SCHEMA_REPORT.md` to reflect the post-migration state.
-6. Commit migrations + updated report + this plan + `BUILD_QUESTIONS.md` together.
+CREATE TABLE IF NOT EXISTS meals (
+  id                       uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  trip_id                  uuid NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  day_date                 date NOT NULL,
+  meal_type                text NOT NULL,
+  mode                     text NOT NULL DEFAULT 'tbd',
+  recipe_name              text,
+  restaurant_name          text,
+  restaurant_url           text,
+  assigned_cook_respondent_ids uuid[] NOT NULL DEFAULT ARRAY[]::uuid[],
+  notes                    text,
+  ai_suggested             boolean NOT NULL DEFAULT false,
+  created_at               timestamptz NOT NULL DEFAULT now(),
+  updated_at               timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT meals_meal_type_check
+    CHECK (meal_type IN ('breakfast','lunch','dinner','snack')),
+  CONSTRAINT meals_mode_check
+    CHECK (mode IN ('cook_in','restaurant','tbd'))
+);
 
-Step 0 ends at "approval." Step 1 of §6 in the build guide picks up here.
+CREATE INDEX IF NOT EXISTS idx_meals_trip_day_type
+  ON meals (trip_id, day_date, meal_type);
+
+CREATE TABLE IF NOT EXISTS meal_ingredients (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  meal_id    uuid NOT NULL REFERENCES meals(id) ON DELETE CASCADE,
+  name       text NOT NULL,
+  quantity   numeric NOT NULL DEFAULT 1,
+  unit       text NOT NULL DEFAULT 'unit',
+  category   text NOT NULL DEFAULT 'other',
+  CONSTRAINT meal_ingredients_category_check
+    CHECK (category IN ('produce','meat_fish','dairy_fridge','pantry','other'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_meal_ingredients_meal
+  ON meal_ingredients (meal_id);
+CREATE INDEX IF NOT EXISTS idx_meal_ingredients_name_unit
+  ON meal_ingredients (lower(name), unit);
+
+CREATE TABLE IF NOT EXISTS meal_votes (
+  meal_id        uuid NOT NULL REFERENCES meals(id) ON DELETE CASCADE,
+  respondent_id  uuid NOT NULL REFERENCES respondents(id) ON DELETE CASCADE,
+  vote           text NOT NULL,
+  voted_at       timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (meal_id, respondent_id),
+  CONSTRAINT meal_votes_vote_check CHECK (vote IN ('yes','no','maybe'))
+);
+
+ALTER TABLE meals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE meal_ingredients ENABLE ROW LEVEL SECURITY;
+ALTER TABLE meal_votes ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='meals' AND policyname='meals_public_select') THEN
+    CREATE POLICY meals_public_select ON meals FOR SELECT USING (
+      EXISTS (SELECT 1 FROM trips t WHERE t.id = meals.trip_id)
+    );
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='meal_ingredients' AND policyname='mi_public_select') THEN
+    CREATE POLICY mi_public_select ON meal_ingredients FOR SELECT USING (
+      EXISTS (SELECT 1 FROM meals m WHERE m.id = meal_ingredients.meal_id)
+    );
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='meal_votes' AND policyname='mv_public_select') THEN
+    CREATE POLICY mv_public_select ON meal_votes FOR SELECT USING (
+      EXISTS (SELECT 1 FROM meals m WHERE m.id = meal_votes.meal_id)
+    );
+  END IF;
+END$$;
+
+INSERT INTO supabase_migrations.schema_migrations (version, name, statements)
+VALUES ('131', 'phase_b_meals', ARRAY[]::text[])
+ON CONFLICT (version) DO NOTHING;
+```
+
+---
+
+## 8. Shopping list
+
+```sql
+-- Migration 132: Phase B — auto-aggregated shopping list
+-- Derived from meal_ingredients via a trigger (kept in app-code for
+-- Phase B initial ship; can promote to a SQL trigger if the app-code
+-- path proves unreliable).
+
+CREATE TABLE IF NOT EXISTS shopping_list_items (
+  id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  trip_id               uuid NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  name                  text NOT NULL,
+  total_quantity        numeric NOT NULL,
+  unit                  text NOT NULL,
+  category              text NOT NULL DEFAULT 'other',
+  assigned_respondent_id uuid REFERENCES respondents(id) ON DELETE SET NULL,
+  is_acquired           boolean NOT NULL DEFAULT false,
+  source_meal_ids       uuid[] NOT NULL DEFAULT ARRAY[]::uuid[],
+  created_at            timestamptz NOT NULL DEFAULT now(),
+  updated_at            timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT shopping_list_category_check
+    CHECK (category IN ('produce','meat_fish','dairy_fridge','pantry','other')),
+  UNIQUE (trip_id, lower(name), unit)
+);
+
+CREATE INDEX IF NOT EXISTS idx_shopping_list_trip_category
+  ON shopping_list_items (trip_id, category, name);
+
+ALTER TABLE shopping_list_items ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='shopping_list_items' AND policyname='sli_public_select') THEN
+    CREATE POLICY sli_public_select ON shopping_list_items FOR SELECT USING (
+      EXISTS (SELECT 1 FROM trips t WHERE t.id = shopping_list_items.trip_id)
+    );
+  END IF;
+END$$;
+
+INSERT INTO supabase_migrations.schema_migrations (version, name, statements)
+VALUES ('132', 'phase_b_shopping_list', ARRAY[]::text[])
+ON CONFLICT (version) DO NOTHING;
+```
+
+---
+
+## 9. Trip flyers
+
+```sql
+-- Migration 133: Phase B — flyer generation records
+-- Each row is one rendered flyer (story 1080x1920 + post 1080x1080
+-- could share an id, or be separate rows — Phase B Step 3 will decide).
+-- Stored URLs point to /storage/v1/object/public/trip-covers/<...> (reusing
+-- the Phase A bucket) or a sibling bucket if scope demands.
+
+CREATE TABLE IF NOT EXISTS trip_flyers (
+  id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  trip_id              uuid NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  template_id          text NOT NULL,
+  cover_image_url      text,
+  rendered_image_url   text NOT NULL,
+  format               text NOT NULL DEFAULT 'story',
+  generated_by         uuid REFERENCES profiles(id) ON DELETE SET NULL,
+  generated_at         timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT trip_flyers_format_check CHECK (format IN ('story','post'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_trip_flyers_trip_generated
+  ON trip_flyers (trip_id, generated_at DESC);
+
+ALTER TABLE trip_flyers ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='trip_flyers' AND policyname='flyers_public_select') THEN
+    CREATE POLICY flyers_public_select ON trip_flyers FOR SELECT USING (
+      EXISTS (SELECT 1 FROM trips t WHERE t.id = trip_flyers.trip_id)
+    );
+  END IF;
+END$$;
+
+INSERT INTO supabase_migrations.schema_migrations (version, name, statements)
+VALUES ('133', 'phase_b_trip_flyers', ARRAY[]::text[])
+ON CONFLICT (version) DO NOTHING;
+```
+
+---
+
+## 10. AI generation log (my §7 addition; not in build guide)
+
+```sql
+-- Migration 134: Phase B — AI generation log for cost + rate-limit visibility
+-- Every AI generation (itinerary, lodging suggest, flight suggest,
+-- meals, cover image, flyer template, ingredient normalization) writes
+-- a row. Used by API routes to enforce per-trip / per-day caps before
+-- token cost spirals.
+
+CREATE TABLE IF NOT EXISTS phase_b_generation_log (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  trip_id         uuid REFERENCES trips(id) ON DELETE SET NULL,
+  caller_user_id  uuid REFERENCES profiles(id) ON DELETE SET NULL,
+  kind            text NOT NULL,
+  provider        text NOT NULL,
+  model           text NOT NULL,
+  input_tokens    integer,
+  output_tokens   integer,
+  duration_ms     integer,
+  error_code      text,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT phase_b_gen_log_kind_check
+    CHECK (kind IN (
+      'itinerary_generate','lodging_suggest','flight_suggest',
+      'meal_plan_generate','ingredient_normalize',
+      'cover_image_generate','flyer_render'
+    )),
+  CONSTRAINT phase_b_gen_log_provider_check
+    CHECK (provider IN ('anthropic','gemini','self'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_phase_b_gen_log_trip_day
+  ON phase_b_generation_log (trip_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_phase_b_gen_log_kind_day
+  ON phase_b_generation_log (kind, created_at DESC);
+
+INSERT INTO supabase_migrations.schema_migrations (version, name, statements)
+VALUES ('134', 'phase_b_generation_log', ARRAY[]::text[])
+ON CONFLICT (version) DO NOTHING;
+```
+
+---
+
+## What this plan does NOT do
+
+- No DROPs of pre-existing columns or tables.
+- No RENAMEs.
+- No NOT NULL toggles on pre-existing columns.
+- The single non-strict-additive moment is widening the `lodging_options.status` CHECK constraint (see §1 above) — I'm flagging it for sign-off. Zero live rows, strict superset, but it's a DROP-and-re-ADD CHECK rather than pure ADD. **If you want strict additive, I'll use a new `lifecycle text` column instead.**
+- No code changes to the existing Expo itinerary editor. Adding nullable columns to `itinerary_blocks` won't affect Expo writes.
+- No edge function changes in Step 0. AI provider clients land in Step 1+ of the Phase B build sequence, not this schema step.
+
+---
+
+## Execution checklist (after approval)
+
+1. Confirm the `lodging_options.status` CHECK widening is acceptable (or override to a new `lifecycle` column).
+2. Write the 10 migration files in `supabase/migrations/` numbered 125–134.
+3. Run each via `supabase db query --linked --file ...` in order.
+4. Re-query `information_schema` after each to verify the additions landed.
+5. Update `SCHEMA_REPORT.md` with the post-migration state.
+6. Commit migrations + updated report.
+7. Proceed to Phase B Step 2 (profile aggregation engine) per the build guide.

@@ -194,7 +194,35 @@
 
 ---
 
-## Q9: Auth flow for Phase A web (login + signup)
+# Phase B questions (Q10–Q17)
+
+Raised in [PHASE_B_PRE_BUILD_REVIEW.md](PHASE_B_PRE_BUILD_REVIEW.md). All resolved 2026-05-12 to my recommendations.
+
+## Q10: `lodging_options` reconciliation
+**Context:** existing Expo-app `lodging_options` table has overlapping concept (title vs name, platform vs provider, total_cost_cents vs cost_total) but different column names and units.
+**Status:** RESOLVED 2026-05-12 — extend additively. Migration adds `room_layout jsonb`, `ai_suggested boolean default false`. Existing `status text default 'option'` widens to also allow `'selected'` (Phase B's `is_selected=true`). Phase B code reads existing column names (`title`, `platform`, `url`, `total_cost_cents`, `nightly_rate_cents`); the shared TS layer exposes dollar-denominated getters.
+
+## Q11: `itinerary_blocks` reconciliation
+**Context:** existing Expo-app `itinerary_blocks` has the shape Phase B's `itinerary_items` wants, but with `day_date` instead of `day_number`.
+**Status:** RESOLVED 2026-05-12 — extend additively, keep `day_date`. Migration adds `ai_generated boolean default false`, `created_by` (FK respondents(id) per Q13), `location_url text`. Existing `notes text` doubles as Phase B's `description`. Existing `type text` repurposed as Phase B's `category`; widen CHECK to include `{activity, meal, transit, lodging, free_time, other}` and any pre-existing values.
+
+## Q12: `lodging_votes` extension
+**Status:** RESOLVED 2026-05-12 — extend additively. Add `vote text default 'yes' CHECK (vote IN ('yes','no','maybe'))`. Existing rows are valid under the default. FK already on respondent_id (no change needed per Q13).
+
+## Q13: Per-member FK target — `users(id)` or `respondents(id)`?
+**Status:** RESOLVED 2026-05-12 — `respondents(id)` for all per-member Phase B tables (itinerary votes, lodging votes, room assignments, travel arrangements, travel grouping members, meal votes, meal cook assignments). Anon-friendly: invitees with no Rally account can still vote / be assigned / commit, gated by the session_token they already have from the RSVP flow. Phase B routes that take member input accept `session_token` for anon callers and `auth.uid()` for authed callers, resolving both to a `respondents.id`.
+
+## Q14: AI provider per tab
+**Status:** RESOLVED 2026-05-12 — Anthropic Claude for itinerary + meals (creative + structured output). Gemini with Google Search grounding for lodging + flight suggestions (needs real-world prices + availability). Cover image gen (already shipped) stays on Gemini 2.5 Flash Image. Flyer composition is not AI — server-side `satori` rendering.
+
+## Q15: Flyer generation rendering path
+**Status:** RESOLVED 2026-05-12 — `@vercel/og` / `satori` server-side rendering. Generates 1080×1920 (Instagram story) and 1080×1080 (Instagram post) from one template per theme. Uses the trip's existing `theme` to pick the template palette so flyer + invitation feel consistent.
+
+## Q16: Dashboard tab UI pattern
+**Status:** RESOLVED 2026-05-12 — route-segment tabs. Each tab is `/trips/[id]/<tab>` (itinerary, lodging, travel, meals, shopping). Top-tab nav component in the shared dashboard layout. RSC-friendly, deep-linkable, server-rendered per tab.
+
+## Q17: Shopping-list ingredient normalization
+**Status:** RESOLVED 2026-05-12 — LLM-assisted at meal-plan generation time. Claude collapses semantic equivalents ("garlic" / "2 cloves garlic" / "garlic, minced") into a canonical `meal_ingredients` row at generation. Runtime shopping_list_items aggregation is then a simple sum-by-name-and-unit. Trade-off: pay more tokens upfront, ship a normalized dataset.
 **Context:** Step 3 (trip creation) needs an authenticated planner. The existing system has `auth.users` + `profiles` + `users` (per Q1) and a phone-OTP login rail used by the Expo app (`request-phone-login-otp` + `verify-phone-login-otp` edge functions). The build guide assumes auth exists but doesn't specify how the web side wires up.
 **Options considered:**
 - (A) Reuse existing phone-OTP edge functions verbatim. Pre-existing `profiles` row required (alpha cohort manually whitelisted).
