@@ -1,9 +1,9 @@
 /**
- * /trips/[id] — planner trip dashboard.
+ * /trips/[id] — Overview tab.
  *
- * Phase A scope (build guide §6 Step 7): trip header + roster + share
- * link + invite trigger. Steps 8-10 layer SMS nudges, activity feed
- * real-time, and mutuals population on top.
+ * The hero + tab nav live in /trips/[id]/layout.tsx. This page is
+ * just the Overview tab's content (stats, actions, roster, activity
+ * preview).
  */
 
 import { notFound, redirect } from "next/navigation";
@@ -12,7 +12,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import type { Trip, Respondent, ActivityFeedEntry } from "@shared/types";
 import TripDashboard from "./trip-dashboard";
 
-export default async function TripPage({
+export default async function TripOverviewPage({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -22,24 +22,19 @@ export default async function TripPage({
   const r = await requireAuthUid();
   if (!r.ok) redirect(`/login?next=/trips/${id}`);
 
-  const { data: tripRow, error } = await r.supabase
+  // Trip is already fetched in the layout; we need it here too for
+  // the description + share-link + flyer/invite modal props. Cheap
+  // double-fetch; trade-off is the layout doesn't have a clean way
+  // to pass server-fetched data to children without prop-drilling
+  // through the page-segment boundary.
+  const { data: tripRow } = await r.supabase
     .from("trips")
     .select("*")
     .eq("id", id)
     .maybeSingle();
-  if (error) {
-    return (
-      <main className="min-h-dvh flex items-center justify-center p-6">
-        <p className="text-orange">Couldn&apos;t load trip: {error.message}</p>
-      </main>
-    );
-  }
   if (!tripRow) notFound();
   const trip = tripRow as Trip;
 
-  // Roster + activity feed in parallel. Use service-role to bypass
-  // the respondents RLS noise — RLS already allowed it, but we want
-  // the freshest read with a single round-trip.
   const svc = createServiceClient();
   const [respondentsRes, activityRes] = await Promise.all([
     svc.from("respondents")

@@ -1,13 +1,11 @@
 "use client";
 
 /**
- * Planner trip dashboard — orchestrates the trip header, roster, and
- * invite modal. Client component because it owns the modal state +
- * optimistic roster updates after a send / override.
+ * Overview tab content — stats, actions, roster, activity preview.
  *
- * The hero (cover image + theme treatment) mirrors what the invitee
- * sees on /invite/[token], so the planner can confirm their cover
- * + theme actually applied without leaving the dashboard.
+ * The trip hero + header + tab nav live in /trips/[id]/layout.tsx
+ * (post-Phase-B Step 4 refactor). This component is just the
+ * Overview tab's body.
  */
 
 import { useState } from "react";
@@ -71,103 +69,66 @@ export default function TripDashboard({
   const t = themeClass(trip.theme);
 
   return (
-    <main className={`min-h-dvh ${t.root}`}>
-      <div className="max-w-3xl mx-auto px-6 py-10">
-        {/* ─── Hero: cover + theme treatment (mirrors invitee view) ─ */}
-        {trip.cover_image_url ? (
-          <div
-            className="aspect-[16/10] w-full rounded-[28px] mb-8 bg-cover bg-center bg-cream-2"
-            style={{ backgroundImage: `url(${escapeCss(trip.cover_image_url)})` }}
-            aria-hidden="true"
-          />
-        ) : (
-          <div className={`aspect-[16/10] w-full rounded-[28px] mb-8 ${t.cover}`}>
-            <div className="h-full flex items-center justify-center px-6">
-              <span className={`text-3xl sm:text-4xl text-center ${t.coverInk}`}>
-                {trip.name}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* ─── Trip header ───────────────────────────── */}
-        <p className={`text-[11px] mb-3 ${t.eyebrow}`}>
-          {trip.status === "draft" ? "Draft" : "Live"} ·{" "}
-          {trip.theme ?? "no theme yet"}
+    <div>
+      {/* Trip description (under header from layout) */}
+      {trip.description && (
+        <p className={`mb-8 max-w-prose whitespace-pre-line ${t.body}`}>
+          {trip.description}
         </p>
-        <h1 className={`text-4xl sm:text-5xl leading-tight mb-3 ${t.display}`}>
-          {trip.name}
-        </h1>
-        {trip.destination && (
-          <p className={`text-lg mb-1 ${t.body}`}>{trip.destination}</p>
-        )}
-        {(trip.start_date || trip.end_date) && (
-          <p className={`mb-6 ${t.meta}`}>
-            {formatDateRange(trip.start_date, trip.end_date)}
-          </p>
-        )}
-        {trip.description && (
-          <p className={`mb-8 max-w-prose whitespace-pre-line ${t.body}`}>
-            {trip.description}
-          </p>
-        )}
+      )}
 
-        {/* ─── Quick stats ───────────────────────────── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
-          <Stat label="Going"    value={counts.going} />
-          <Stat label="Maybe"    value={counts.maybe} />
-          <Stat label="Invited"  value={counts.invited} />
-          <Stat label="Can't go" value={counts.cant_go} />
-        </div>
-
-        {/* ─── Actions ───────────────────────────────── */}
-        <div className="flex flex-wrap gap-3 mb-8">
-          <button
-            onClick={() => setShowInvite(true)}
-            className="h-12 px-6 rounded-full bg-green text-cream font-bold hover:bg-green-2"
-          >
-            Invite people →
-          </button>
-          <button
-            onClick={copyLink}
-            className="h-12 px-5 rounded-full bg-card text-ink border border-line hover:border-green"
-          >
-            {copied ? "Copied ✓" : "Copy share link"}
-          </button>
-          <button
-            onClick={() => setShowFlyer(true)}
-            className="h-12 px-5 rounded-full bg-card text-ink border border-line hover:border-green"
-          >
-            Make flyer
-          </button>
-        </div>
-
-        {/* ─── Roster ────────────────────────────────── */}
-        <Roster
-          respondents={respondents}
-          onOverride={handleOverride}
-        />
-
-        {/* ─── Activity feed (read-only on the dashboard) ─── */}
-        {activityFeed.length > 0 && (
-          <section className="mt-12">
-            <h2 className="font-display text-2xl text-ink mb-4">Activity</h2>
-            <ul className="grid gap-3">
-              {activityFeed.slice(0, 10).map((e) => (
-                <li
-                  key={e.id}
-                  className="bg-card border border-line rounded-2xl p-4 text-sm"
-                >
-                  <p className="text-xs uppercase tracking-widest text-muted font-semibold mb-1">
-                    {formatEntryType(e.entry_type)} · {formatRelative(e.created_at)}
-                  </p>
-                  <p className="text-ink">{formatEntryContent(e)}</p>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+      {/* ─── Quick stats ───────────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+        <Stat label="Going"    value={counts.going}   t={t} />
+        <Stat label="Maybe"    value={counts.maybe}   t={t} />
+        <Stat label="Invited"  value={counts.invited} t={t} />
+        <Stat label="Can't go" value={counts.cant_go} t={t} />
       </div>
+
+      {/* ─── Actions ───────────────────────────────── */}
+      <div className="flex flex-wrap gap-3 mb-8">
+        <button
+          onClick={() => setShowInvite(true)}
+          className="h-12 px-6 rounded-full bg-green text-cream font-bold hover:bg-green-2"
+        >
+          Invite people →
+        </button>
+        <button
+          onClick={copyLink}
+          className={`h-12 px-5 rounded-full ${t.surface} text-ink border ${t.surfaceBorder} hover:border-green`}
+        >
+          {copied ? "Copied ✓" : "Copy share link"}
+        </button>
+        <button
+          onClick={() => setShowFlyer(true)}
+          className={`h-12 px-5 rounded-full ${t.surface} text-ink border ${t.surfaceBorder} hover:border-green`}
+        >
+          Make flyer
+        </button>
+      </div>
+
+      {/* ─── Roster ────────────────────────────────── */}
+      <Roster respondents={respondents} onOverride={handleOverride} />
+
+      {/* ─── Activity feed preview ─────────────────── */}
+      {activityFeed.length > 0 && (
+        <section className="mt-12">
+          <h2 className={`text-2xl mb-4 ${t.display}`}>Activity</h2>
+          <ul className="grid gap-3">
+            {activityFeed.slice(0, 10).map((e) => (
+              <li
+                key={e.id}
+                className={`${t.surface} border ${t.surfaceBorder} rounded-2xl p-4 text-sm`}
+              >
+                <p className={`text-xs uppercase tracking-widest font-semibold mb-1 ${t.meta}`}>
+                  {formatEntryType(e.entry_type)} · {formatRelative(e.created_at)}
+                </p>
+                <p className={t.body}>{formatEntryContent(e)}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {showInvite && (
         <InviteModal
@@ -182,17 +143,17 @@ export default function TripDashboard({
       {showFlyer && (
         <FlyerModal tripId={trip.id} onClose={() => setShowFlyer(false)} />
       )}
-    </main>
+    </div>
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function Stat({ label, value, t }: { label: string; value: number; t: ReturnType<typeof themeClass> }) {
   return (
-    <div className="bg-card border border-line rounded-2xl p-4">
-      <p className="text-xs uppercase tracking-widest text-muted font-semibold">
+    <div className={`${t.surface} border ${t.surfaceBorder} rounded-2xl p-4`}>
+      <p className={`text-xs uppercase tracking-widest font-semibold ${t.meta}`}>
         {label}
       </p>
-      <p className="font-display text-3xl text-ink mt-1">{value}</p>
+      <p className={`text-3xl mt-1 ${t.display}`}>{value}</p>
     </div>
   );
 }
@@ -206,18 +167,6 @@ function countByStatus(rs: Respondent[]): Record<RsvpStatus, number> {
     if (k in c) c[k]++;
   }
   return c;
-}
-
-function formatDateRange(start: string | null, end: string | null): string {
-  const fmt = (s: string) =>
-    new Date(s + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  if (start && end) {
-    const y = new Date(start + "T00:00:00").getFullYear();
-    return `${fmt(start)} → ${fmt(end)}, ${y}`;
-  }
-  if (start) return `From ${fmt(start)}`;
-  if (end)   return `Until ${fmt(end)}`;
-  return "Dates TBD";
 }
 
 function formatRelative(iso: string): string {
@@ -248,8 +197,4 @@ function formatEntryContent(e: ActivityFeedEntry): string {
     return `${c.name} → ${c.status}`;
   }
   return "(see details)";
-}
-
-function escapeCss(url: string): string {
-  return url.replace(/[()'"\\]/g, "\\$&");
 }
