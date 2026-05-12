@@ -178,3 +178,36 @@ export interface ThreadMessage {
   error_code: string | null;
   created_at: string;
 }
+
+// ─── Phase B: profile aggregation ─────────────────────────────────
+
+/**
+ * Per-vibe distribution. `counts` maps each value (including 'both')
+ * to how many going members chose it. `total_answered` is the number
+ * of profiles that supplied a non-null answer for this vibe. `skewed`
+ * is the majority value, 'split' if tied, 'unknown' if no answers.
+ */
+export interface VibeDistribution<T extends string = string> {
+  counts: Record<T, number>;
+  total_answered: number;
+  skewed: T | "split" | "unknown";
+}
+
+export interface TripProfileAggregate {
+  trip_id: string;
+  going_count: number;
+  profile_complete_count: number;
+  profile_incomplete_count: number;
+  vibes: {
+    beach_vs_mountain:     VibeDistribution<VibeBeachOrMountain>;
+    spa_vs_hike:           VibeDistribution<VibeSpaOrHike>;
+    foodie_vs_casual:      VibeDistribution<VibeFoodieOrCasual>;
+    social_vs_chill:       VibeDistribution<VibeSocialOrChill>;
+    culture_vs_relaxation: VibeDistribution<VibeCultureOrRelax>;
+  };
+  budget_comfort: VibeDistribution<BudgetComfort>;
+  dietary_restrictions: { value: string; count: number }[];
+  home_airports: { value: string; count: number }[];
+  alignment_summary: string;
+  computed_at: string;
+}
