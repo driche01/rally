@@ -126,47 +126,49 @@ All carry recommendations. Mark each `RESOLVED: [decision]` to unblock.
 ### Q18 — Per-member FK target for Phase C tables
 **Question:** Same as Q13 — should `scheduled_reminders.recipient_*` and `planner_blast_sends.recipient_*` target `respondents(id)` or `trip_memberships(id)`?
 **Recommendation:** `respondents(id)`. Rename the column `recipient_respondent_id` for clarity.
-**Status:** AWAITING HUMAN INPUT.
+**Status:** RESOLVED 2026-05-12 — `respondents(id)`. Column name `recipient_respondent_id`.
 
 ### Q19 — SMS log target
 **Question:** Same as Q5 — do we build a new `sms_messages` table or keep using `thread_messages`?
-**Recommendation:** keep `thread_messages`. `message_type` is uncconstrained text; Phase C just adds new values at the app layer.
-**Status:** AWAITING HUMAN INPUT.
+**Recommendation:** keep `thread_messages`. `message_type` is unconstrained text; Phase C just adds new values at the app layer.
+**Status:** RESOLVED 2026-05-12 — keep `thread_messages`. New `message_type` values added at the app layer.
 
 ### Q20 — `planner_blasts.composed_by` FK
 **Question:** Same as Q1 — `profiles(id)` or `users(id)`?
 **Recommendation:** `profiles(id)` (planner-side).
-**Status:** AWAITING HUMAN INPUT.
+**Status:** RESOLVED 2026-05-12 — `profiles(id)`.
 
 ### Q21 — Trip-blast send pipeline
 **Question:** Extend the legacy `sms-broadcast` edge function (keyed on `trip_session_id`) or build a new `sms-trip-blast`?
-**Recommendation:** new `sms-trip-blast`, strict isolation. Reuses `_sms-shared/dm-sender.ts`. Same pattern as Q7.
-**Status:** AWAITING HUMAN INPUT.
+**Status:** RESOLVED 2026-05-12 — build a clean new `sms-trip-blast` edge function. Reuses `_sms-shared/dm-sender.ts`. Designed for the Phase C contract (`trip_id` + segment via `respondents`, host-or-cohost auth, Phase C rate limits, auto-post to `activity_feed_entries`). The legacy `sms-broadcast` and its session-cadence siblings go on the post-Phase-C cleanup list ([LEGACY_CLEANUP.md](LEGACY_CLEANUP.md)). Rationale: no users on legacy v1 SMS surfaces, no point grafting Phase C semantics onto a function not designed for them.
 
 ### Q22 — Reminder scheduler shape
 **Question:** Single polyglot scheduler that handles all five reminder types via a switch on `message_type`, OR five per-type schedulers?
 **Recommendation:** single polyglot scheduler. Builds on the existing `sms-rsvp-nudge-scheduler` skeleton (the `rsvp_nudge` path becomes one case in the switch). One pg_cron entry, one deploy, one log stream.
-**Status:** AWAITING HUMAN INPUT.
+**Status:** RESOLVED 2026-05-12 — single polyglot scheduler.
 
 ### Q23 — Opt-out gating at the send rail
 **Question:** Confirm `_sms-shared/dm-sender.ts` already enforces `users.opted_out` and Phase C just needs to never bypass it. Anything else?
 **Recommendation:** confirm + adopt a hard convention: **every Phase C send goes through `dm-sender.ts`. No direct Twilio calls.** Add a comment to that effect at the top of every new send path. No schema change needed.
-**Status:** AWAITING HUMAN INPUT.
+**Status:** RESOLVED 2026-05-12 — every Phase C send goes through `dm-sender.ts`. No direct Twilio calls.
 
 ### Q24 — Auto-create planner self-respondent
 **Question:** Should trip creation auto-create a `respondents` row for the planner (`name=profiles.display_name`, `phone=profiles.phone`, `is_planner=true`, `rsvp_status='going'`)? Fixes the sharp edge from Phase B AND lets the planner be addressed by blasts uniformly.
 **Recommendation:** yes. Add to trip creation (`/api/trips`) as part of Phase C Step 1. The blast pipeline then defaults `include_planner=false` to avoid blast-yourself confusion, with an `Also send to me` checkbox in the composer for hosts who want their own copy.
-**Status:** AWAITING HUMAN INPUT.
+**Status:** RESOLVED 2026-05-12 — yes, auto-create. Blast composer defaults `include_planner=false` with "Also send to me" checkbox.
 
 ### Q25 — Quiet-hours time zone resolution
 **Question:** Static `iata_to_tz.json` for `home_airport` lookup, with `America/New_York` fallback for missing airport?
-**Recommendation:** yes. Drop one-time static map (~500 entries) in `/shared/iata_to_tz.json`. Fallback to NY. Defer phone-area-code resolution.
+**Status:** RESOLVED 2026-05-12 — **home_airport becomes REQUIRED at profile capture (not skippable).** No NYC default for users who have completed a profile. Static `iata_to_tz.json` ships in `/shared/` for the lookup. Phase A traveler_profiles capture must be tightened to make home_airport non-skippable; existing `traveler_profiles` rows missing `home_airport` get a one-time SMS asking the recipient to fill it in before they can be sent quiet-hours-sensitive nudges.
+
+**Q25a (raised by Q25 resolution):** how do we handle quiet-hours gating for recipients who don't have a profile yet — i.e., the `invited` segment of blasts (haven't RSVPed, so no `traveler_profiles.home_airport`)?
+**Recommendation:** fall back to the **sender's local timezone** for these recipients. Operationally simple: the blast composer always knows the planner (authenticated), and reminder schedulers can resolve to the trip's planner. The sender chooses *when* to send; if their recipient's tz is unknown, the message goes during the sender's safe window. Document this clearly in the blast composer ("Recipients without a profile will receive this in your local time window").
 **Status:** AWAITING HUMAN INPUT.
 
 ### Q26 — Cancellation notice + opt-out interaction
 **Question:** Send `cancellation_notice` to opted-out recipients too (informational, not promotional)?
 **Recommendation:** **no.** Suppress opted-out recipients even for cancellation notices, to stay legally + ethically safe. Show the planner a "N recipients opted out and won't be notified — let them know directly" message at the bottom of the cancel modal.
-**Status:** AWAITING HUMAN INPUT.
+**Status:** RESOLVED 2026-05-12 — suppress opted-out recipients. Cancel modal surfaces the suppressed count + recipient names.
 
 ---
 
