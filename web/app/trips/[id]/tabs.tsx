@@ -24,7 +24,7 @@ const TABS: TabDef[] = [
   { segment: "itinerary",  label: "Itinerary", ready: true  },
   { segment: "lodging",    label: "Lodging",   ready: true  },
   { segment: "travel",     label: "Travel",    ready: true  },
-  { segment: "meals",      label: "Meals",     ready: false },
+  { segment: "meals",      label: "Meals",     ready: true  },
   { segment: "shopping",   label: "Shopping",  ready: false },
 ];
 
