@@ -1,16 +1,25 @@
 /**
- * Font loader for the flyer renderer. ImageResponse (next/og) needs
- * font bytes as ArrayBuffer. We fetch from Google Fonts on first
- * use and cache in module scope for the lifetime of the Node
- * runtime process — subsequent renders pay no font-fetch cost.
+ * Font loader for the flyer renderer.
+ *
+ * Reads font bytes from the npm-installed @fontsource packages
+ * rather than fetching from Google Fonts at runtime (Google
+ * rotates CDN hashes; flyer rendering would intermittently 404).
+ * Version-pinned, deterministic, no network call.
  *
  * Two families:
- *   - "Inter" (sans) for body + small UI text
- *   - "Lora" (serif) standing in for Georgia (Georgia is not free /
- *     not redistributable); Lora has the same warm-editorial feel.
+ *   - Inter (sans) for body + UI: weights 400, 600, 700
+ *   - Lora (serif) standing in for Georgia: weights 400, 700
+ *     (Georgia isn't free / not redistributable; Lora is the
+ *     same warm-editorial feel.)
  *
- * Per-weight cache: weights 400, 600, 700 for Inter; 400, 700 for Lora.
+ * Satori supports WOFF, TTF, OTF. We use WOFF (smallest of the
+ * three; @fontsource ships both .woff and .woff2 — we pick .woff).
  */
+
+import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
 
 interface FontEntry {
   name: string;
@@ -19,41 +28,34 @@ interface FontEntry {
   style: "normal" | "italic";
 }
 
+const SOURCES: { family: "Inter" | "Lora"; weight: 400 | 600 | 700; pkgFile: string }[] = [
+  { family: "Inter", weight: 400, pkgFile: "@fontsource/inter/files/inter-latin-400-normal.woff" },
+  { family: "Inter", weight: 600, pkgFile: "@fontsource/inter/files/inter-latin-600-normal.woff" },
+  { family: "Inter", weight: 700, pkgFile: "@fontsource/inter/files/inter-latin-700-normal.woff" },
+  { family: "Lora",  weight: 400, pkgFile: "@fontsource/lora/files/lora-latin-400-normal.woff"  },
+  { family: "Lora",  weight: 700, pkgFile: "@fontsource/lora/files/lora-latin-700-normal.woff"  },
+];
+
 let cached: FontEntry[] | null = null;
 
-// Direct .ttf URLs from the Google Fonts s/static endpoint.
-// Picked specific known-stable hashes; if Google rotates them
-// (rare) we re-discover by visiting fonts.google.com/specimen and
-// inspecting the network tab.
-const SOURCES = [
-  { family: "Inter", weight: 400, url: "https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50ojIa1ZL7.woff2" },
-  { family: "Inter", weight: 600, url: "https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50ojIa0ZL7.woff2" },
-  { family: "Inter", weight: 700, url: "https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50ojIaxJL7.woff2" },
-  { family: "Lora",  weight: 400, url: "https://fonts.gstatic.com/s/lora/v35/0QI6MX1D_JOuGQbT0gvTJPa787weuxJBkqg.woff2" },
-  { family: "Lora",  weight: 700, url: "https://fonts.gstatic.com/s/lora/v35/0QI6MX1D_JOuGQbT0gvTJPa787wsuhJBkqg.woff2" },
-] as const;
-
 /**
- * Returns the fonts in the format ImageResponse expects.
- * Caches across requests; first call costs ~5 KB × N fetches.
+ * Returns the fonts in the format ImageResponse expects. First call
+ * reads from disk; subsequent calls hit the in-memory cache.
  */
 export async function loadFlyerFonts(): Promise<FontEntry[]> {
   if (cached) return cached;
-  const fetched = await Promise.all(
+  const loaded = await Promise.all(
     SOURCES.map(async (s) => {
-      const res = await fetch(s.url);
-      if (!res.ok) {
-        throw new Error(`font_fetch_failed: ${s.family} ${s.weight} ${res.status}`);
-      }
-      const data = await res.arrayBuffer();
+      const path = require.resolve(s.pkgFile);
+      const buf = await readFile(path);
       return {
         name: s.family,
-        data,
-        weight: s.weight as 400 | 600 | 700,
+        data: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer,
+        weight: s.weight,
         style: "normal" as const,
       };
     }),
   );
-  cached = fetched;
-  return fetched;
+  cached = loaded;
+  return loaded;
 }

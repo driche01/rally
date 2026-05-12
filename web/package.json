@@ -11,6 +11,8 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.2.8",
+    "@fontsource/lora": "^5.2.8",
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.45.0",
     "@types/qrcode": "^1.5.6",

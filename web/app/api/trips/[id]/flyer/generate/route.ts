@@ -13,6 +13,7 @@
 
 import { requireAuthUid } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/server";
+import { getSiteUrl } from "@/lib/site-url";
 import { jsonErr, jsonOk } from "@/lib/http";
 import { renderFlyer, type FlyerFormat } from "@/lib/flyer/render";
 import type { Trip } from "@shared/types";
@@ -66,7 +67,7 @@ export async function POST(
     ? (planner.last_name ? `${planner.name} ${planner.last_name}` : planner.name)
     : "A friend";
 
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const baseUrl = await getSiteUrl();
   const inviteUrl = `${baseUrl}/invite/${trip.share_token}`;
 
   const out: { format: FlyerFormat; url: string; id: string }[] = [];
