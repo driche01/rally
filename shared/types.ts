@@ -37,6 +37,8 @@ export interface Trip {
   budget_min: number | null;
   budget_max: number | null;
   budget_per_person: string | null; // legacy bucket from Expo path
+  group_size_bucket: string;        // '0-4'|'5-8'|'9-12'|'13-20'|'20+' (CHECK)
+  group_size_precise: number | null;
   theme: TripTheme | null;
   cover_image_url: string | null;
   description: string | null;

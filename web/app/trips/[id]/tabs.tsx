@@ -22,7 +22,7 @@ interface TabDef {
 const TABS: TabDef[] = [
   { segment: "",           label: "Overview",  ready: true  },
   { segment: "itinerary",  label: "Itinerary", ready: true  },
-  { segment: "lodging",    label: "Lodging",   ready: false },
+  { segment: "lodging",    label: "Lodging",   ready: true  },
   { segment: "travel",     label: "Travel",    ready: false },
   { segment: "meals",      label: "Meals",     ready: false },
   { segment: "shopping",   label: "Shopping",  ready: false },
