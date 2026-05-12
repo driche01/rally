@@ -84,19 +84,33 @@ const BUDGET_TIERS: { value: BudgetComfort; mark: string; label: string; range: 
 
 export default function ProfileCapture({
   onComplete,
+  initial,
 }: {
   onComplete: (data: ProfileCaptureInput) => void;
+  /** Optional pre-populated values — used by the "Edit profile first"
+      escape hatch on the returning-user confirm screen so the user
+      doesn't redo answers they've already given. */
+  initial?: {
+    vibe_beach_or_mountain?: VibeBeachOrMountain | null;
+    vibe_spa_or_hike?: VibeSpaOrHike | null;
+    vibe_foodie_or_casual?: VibeFoodieOrCasual | null;
+    vibe_social_or_chill?: VibeSocialOrChill | null;
+    vibe_culture_or_relaxation?: VibeCultureOrRelax | null;
+    home_airport?: string | null;
+    dietary_restrictions?: string[] | null;
+    budget_comfort?: BudgetComfort | null;
+  };
 }) {
   const [step, setStep] = useState<Step>("vibe-1");
-  const [vibe1, setVibe1] = useState<VibeBeachOrMountain | null>(null);
-  const [vibe2, setVibe2] = useState<VibeSpaOrHike | null>(null);
-  const [vibe3, setVibe3] = useState<VibeFoodieOrCasual | null>(null);
-  const [vibe4, setVibe4] = useState<VibeSocialOrChill | null>(null);
-  const [vibe5, setVibe5] = useState<VibeCultureOrRelax | null>(null);
-  const [airport, setAirport] = useState<string | null>(null);
-  const [airportInput, setAirportInput] = useState("");
-  const [diet, setDiet] = useState<string[]>([]);
-  const [budget, setBudget] = useState<BudgetComfort | null>(null);
+  const [vibe1, setVibe1] = useState<VibeBeachOrMountain | null>(initial?.vibe_beach_or_mountain ?? null);
+  const [vibe2, setVibe2] = useState<VibeSpaOrHike | null>(initial?.vibe_spa_or_hike ?? null);
+  const [vibe3, setVibe3] = useState<VibeFoodieOrCasual | null>(initial?.vibe_foodie_or_casual ?? null);
+  const [vibe4, setVibe4] = useState<VibeSocialOrChill | null>(initial?.vibe_social_or_chill ?? null);
+  const [vibe5, setVibe5] = useState<VibeCultureOrRelax | null>(initial?.vibe_culture_or_relaxation ?? null);
+  const [airport, setAirport] = useState<string | null>(initial?.home_airport ?? null);
+  const [airportInput, setAirportInput] = useState(initial?.home_airport ?? "");
+  const [diet, setDiet] = useState<string[]>(initial?.dietary_restrictions ?? []);
+  const [budget, setBudget] = useState<BudgetComfort | null>(initial?.budget_comfort ?? null);
 
   const stepIndex = STEPS.indexOf(step);
 

@@ -27,6 +27,7 @@ import { requireAuthUid } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/server";
 import { normalizePhone } from "@/lib/phone";
 import { sendSms } from "@/lib/twilio";
+import { getSiteUrl } from "@/lib/site-url";
 import { jsonErr, jsonOk } from "@/lib/http";
 import { randomBytes } from "node:crypto";
 
@@ -164,7 +165,7 @@ export async function POST(
     (existingRows ?? []).map((e) => [e.phone as string, e]),
   );
 
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const baseUrl = await getSiteUrl();
   const inviteUrl = `${baseUrl}/invite/${trip.share_token}`;
 
   let sent = 0;

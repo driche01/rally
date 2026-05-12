@@ -207,15 +207,31 @@ export default function RsvpFlow({
         {stage === "capture" && (
           <div className="mt-6">
             <p className="text-xs font-bold tracking-widest uppercase text-green mb-3">
-              The vibe check
+              {existingProfile?.vibe_captured_at ? "Tune your profile" : "The vibe check"}
             </p>
             <h1 className="font-display text-3xl sm:text-4xl leading-tight text-ink mb-1">
-              Twenty-five seconds, six taps.
+              {existingProfile?.vibe_captured_at
+                ? "Your answers — tweak any."
+                : "Twenty-five seconds, six taps."}
             </h1>
             <p className="text-muted mb-6">
-              Fills in once, helps the host plan around how you actually travel.
+              {existingProfile?.vibe_captured_at
+                ? "Pre-filled from your last RSVP. Updates carry across every Rally trip."
+                : "Fills in once, helps the host plan around how you actually travel."}
             </p>
-            <ProfileCapture onComplete={onCaptureComplete} />
+            <ProfileCapture
+              onComplete={onCaptureComplete}
+              initial={existingProfile ? {
+                vibe_beach_or_mountain:     existingProfile.vibe_beach_or_mountain     ?? null,
+                vibe_spa_or_hike:           existingProfile.vibe_spa_or_hike           ?? null,
+                vibe_foodie_or_casual:      existingProfile.vibe_foodie_or_casual      ?? null,
+                vibe_social_or_chill:       existingProfile.vibe_social_or_chill       ?? null,
+                vibe_culture_or_relaxation: existingProfile.vibe_culture_or_relaxation ?? null,
+                home_airport:               existingProfile.home_airport               ?? null,
+                dietary_restrictions:       existingProfile.dietary_restrictions       ?? null,
+                budget_comfort:             existingProfile.budget_comfort             ?? null,
+              } : undefined}
+            />
           </div>
         )}
 
