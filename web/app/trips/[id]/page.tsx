@@ -24,7 +24,7 @@ export default async function TripOverviewPage({
   if (!r.ok) redirect(`/login?next=/trips/${id}`);
 
   // Trip is already fetched in the layout; we need it here too for
-  // the description + share-link + flyer/invite modal props. Cheap
+  // the description + share-link + invite modal props. Cheap
   // double-fetch; trade-off is the layout doesn't have a clean way
   // to pass server-fetched data to children without prop-drilling
   // through the page-segment boundary.

@@ -5,10 +5,9 @@
  * custom message, calls /api/trips/[id]/invitations, then closes.
  *
  * Minimal Phase A version: manual add (name + phone), past trip-
- * mates list (calls /api/mutuals; empty until Step 10 populates),
- * disabled flyer button per build guide. Email is captured per
- * recipient but Phase A only sends via SMS — email exists on the
- * respondents row for future use.
+ * mates list (calls /api/mutuals; empty until Step 10 populates).
+ * Email is captured per recipient but Phase A only sends via SMS —
+ * email exists on the respondents row for future use.
  */
 
 import { useEffect, useState } from "react";
@@ -231,21 +230,6 @@ export default function InviteModal({
                 <p className="text-xs text-muted mt-1 text-right">
                   {charsLeft} left
                 </p>
-              </section>
-
-              {/* ─── Other channels ───────────────── */}
-              <section className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled
-                  title="Generate Flyer — coming in Phase B"
-                  className="h-10 px-4 rounded-full bg-card text-muted border border-line text-sm opacity-60 cursor-not-allowed"
-                >
-                  Generate flyer (Phase B)
-                </button>
-                <span className="text-xs text-muted self-center pl-1">
-                  Share link is on the trip page.
-                </span>
               </section>
 
               {err && <p className="text-orange text-sm">{err}</p>}

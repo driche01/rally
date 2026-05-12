@@ -1,6 +1,6 @@
 /**
  * Site-URL helper. Builds the absolute base URL for share links
- * (invite URLs, flyer QR codes, etc.).
+ * (invite URLs, etc.).
  *
  * Resolution order:
  *   1. NEXT_PUBLIC_SITE_URL if set AND not localhost-ish — wins
