@@ -31,9 +31,12 @@ export default function LoginForm({ next }: { next: string }) {
       // (anti-enumeration was relaxed for the alpha — see function comment).
       // sent=false / registered=false means "no Rally account on this
       // number, don't wait for a code that isn't coming."
+      //
+      // We don't know if it's a typo or a not-yet-whitelisted phone, so
+      // the copy nudges in both directions.
       if (r.sent === false || r.registered === false) {
         setErr(
-          "No Rally account on that number yet. Ping the team to get whitelisted — Phase A is alpha-only.",
+          "We don't see that number on file. Double-check the digits — or ping the Rally team if you think it should be whitelisted.",
         );
         return;
       }
