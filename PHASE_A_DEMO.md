@@ -24,7 +24,11 @@ What's NOT in Phase A: AI-drafted dashboard tabs (Phase B), full theme variants 
 
 ### First run
 
+All commands run from the worktree root (`/web` only exists on this branch):
+
 ```bash
+cd /Users/davidriche/Rally/.claude/worktrees/eager-sanderson-00015d
+
 # 1. Install web deps
 npm --prefix web install
 
@@ -34,7 +38,8 @@ cp web/.env.local.example web/.env.local
 # Then fill in NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
 # SUPABASE_SERVICE_ROLE_KEY, TWILIO_*. The dev session I built in already
 # wrote a working .env.local pulled from the parent .env — check it exists
-# before re-copying, you'll lose the values otherwise.
+# before re-copying, you'll lose the values otherwise:
+ls web/.env.local
 
 # 3. Launch the dev server
 npm --prefix web run dev
