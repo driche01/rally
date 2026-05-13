@@ -28,11 +28,11 @@ export default async function LodgingPage({
 
   const { data: tripRow } = await r.supabase
     .from("trips")
-    .select("id, name, destination, start_date, end_date, theme, created_by, group_size_bucket")
+    .select("id, name, destination, start_date, end_date, theme, created_by, group_size_bucket, group_size_precise")
     .eq("id", id)
     .maybeSingle();
   if (!tripRow) notFound();
-  const trip = tripRow as Pick<Trip, "id" | "name" | "destination" | "start_date" | "end_date" | "theme" | "created_by" | "group_size_bucket">;
+  const trip = tripRow as Pick<Trip, "id" | "name" | "destination" | "start_date" | "end_date" | "theme" | "created_by" | "group_size_bucket" | "group_size_precise">;
 
   const isPlanner = trip.created_by === r.authUid;
   let isCohost = false;
@@ -126,6 +126,8 @@ export default async function LodgingPage({
       destination={trip.destination}
       startDate={trip.start_date}
       endDate={trip.end_date}
+      groupSizePrecise={trip.group_size_precise}
+      groupSizeBucket={trip.group_size_bucket}
       canManage={canManage}
       callerRespondentId={callerRespondentId}
       goingMembers={goingMembers}

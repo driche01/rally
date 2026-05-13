@@ -8,6 +8,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { themeClass } from "@/lib/themes";
+import { lodgingSearchSet } from "@/lib/deep-links";
 import type { Trip } from "@shared/types";
 
 export interface GoingMember {
@@ -46,6 +47,7 @@ const PLATFORM_LABEL: Record<string, string> = {
 
 export default function LodgingTab({
   tripId, tripTheme, destination, startDate, endDate,
+  groupSizePrecise, groupSizeBucket,
   canManage, callerRespondentId, goingMembers,
   options: initialOptions,
 }: {
@@ -54,6 +56,8 @@ export default function LodgingTab({
   destination: string | null;
   startDate: string | null;
   endDate: string | null;
+  groupSizePrecise: number | null;
+  groupSizeBucket: string | null;
   canManage: boolean;
   callerRespondentId: string | null;
   goingMembers: GoingMember[];
@@ -69,6 +73,18 @@ export default function LodgingTab({
   const t = themeClass(tripTheme);
   const hasOptions = options.length > 0;
   const selected = options.find((o) => o.status === "selected") ?? null;
+
+  // Pre-filled "search more" links for the three big platforms.
+  // Available regardless of whether AI has run — gives the planner
+  // a manual fallback path with trip context baked in.
+  const searchLinks = lodgingSearchSet({
+    destination,
+    start_date: startDate,
+    end_date:   endDate,
+    group_size_precise: groupSizePrecise,
+    group_size_bucket:  groupSizeBucket,
+  });
+  const canSearchMore = Boolean(destination && startDate && endDate);
 
   async function suggest(regenerate: boolean) {
     setBusy(true);
@@ -216,6 +232,38 @@ export default function LodgingTab({
 
       {err && <p className="text-orange text-sm mb-4">{err}</p>}
       {aiNote && <p className={`text-xs mb-4 italic ${t.meta}`}>{aiNote}</p>}
+
+      {/* Pre-filled search-more links — destination + dates +
+          group size carried into the host site's search form. */}
+      {canSearchMore && (
+        <div className={`mb-6 flex flex-wrap items-center gap-2 text-sm ${t.meta}`}>
+          <span className="text-xs uppercase tracking-widest font-semibold">Search more:</span>
+          <a
+            href={searchLinks.airbnb}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`h-9 px-3 rounded-full ${t.surface} border ${t.surfaceBorder} hover:border-green text-ink inline-flex items-center text-sm`}
+          >
+            Airbnb ↗
+          </a>
+          <a
+            href={searchLinks.vrbo}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`h-9 px-3 rounded-full ${t.surface} border ${t.surfaceBorder} hover:border-green text-ink inline-flex items-center text-sm`}
+          >
+            VRBO ↗
+          </a>
+          <a
+            href={searchLinks.bookingCom}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`h-9 px-3 rounded-full ${t.surface} border ${t.surfaceBorder} hover:border-green text-ink inline-flex items-center text-sm`}
+          >
+            Booking.com ↗
+          </a>
+        </div>
+      )}
 
       {/* Empty state */}
       {!hasOptions && (

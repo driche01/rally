@@ -8,6 +8,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { themeClass } from "@/lib/themes";
+import { flightSearchFor } from "@/lib/deep-links";
 import type { Trip } from "@shared/types";
 
 export interface TravelMember {
@@ -210,6 +211,7 @@ export default function TravelTab({
               <li key={m.respondent_id}>
                 <MemberCard
                   member={m}
+                  trip={{ destination, start_date: startDate, end_date: endDate }}
                   t={t}
                   canManage={canManage}
                   isEditing={editing === m.respondent_id}
@@ -271,10 +273,11 @@ export default function TravelTab({
 }
 
 function MemberCard({
-  member, t, canManage, isEditing, busy,
+  member, trip, t, canManage, isEditing, busy,
   onEdit, onCancel, onSave, onSuggestFlights,
 }: {
   member: TravelMember;
+  trip: { destination: string | null; start_date: string | null; end_date: string | null };
   t: ReturnType<typeof themeClass>;
   canManage: boolean;
   isEditing: boolean;
@@ -355,6 +358,17 @@ function MemberCard({
             >
               Suggest flights
             </button>
+          )}
+          {member.home_airport && trip.destination && trip.start_date && trip.end_date && (
+            <a
+              href={flightSearchFor(member.home_airport, trip)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`h-9 px-3 rounded-full ${t.surface} border ${t.surfaceBorder} text-xs hover:border-green inline-flex items-center text-ink`}
+              title={`Search Google Flights ${member.home_airport} → ${trip.destination}`}
+            >
+              Search flights ↗
+            </a>
           )}
           {canManage && (
             <button
