@@ -137,6 +137,81 @@ export function flightSearchFor(
   });
 }
 
+// ─── Venmo split deep-links (Sprint 2 / Q27 B) ──────────────────
+
+/**
+ * Venmo "charge" deep-link. Pre-fills amount + note. Does NOT
+ * pre-fill the recipient — Venmo's URL `recipients` param only
+ * accepts Venmo usernames, not phone numbers, so we leave that
+ * field for the user to pick from their Venmo contacts (where
+ * trip-mates are already indexed by phone, since they were
+ * invited by phone). Amount + note is the high-value pre-fill;
+ * the recipient pick is a single tap.
+ *
+ * `amount` is in dollars (Venmo's URL convention). Pass `2350.50`
+ * for $2,350.50.
+ */
+export function venmoChargeUrl(amount: number, note: string): string {
+  const qs = new URLSearchParams({
+    txn: "charge",
+    audience: "private",
+    amount: amount.toFixed(2),
+    note,
+  });
+  return `https://venmo.com/?${qs.toString()}`;
+}
+
+/**
+ * Format a lodging-share note for the Venmo deep-link.
+ *
+ * Output e.g.: "Tulum bachelorette · room 2 · Dec 12–19"
+ */
+export function lodgingShareNote(tripName: string, roomLabel: string | null, startDate: string | null, endDate: string | null): string {
+  const parts: string[] = [tripName];
+  if (roomLabel) parts.push(roomLabel.toLowerCase());
+  const range = formatDateRange(startDate, endDate);
+  if (range) parts.push(range);
+  return parts.join(" · ");
+}
+
+/**
+ * Format a flight-share note for the Venmo deep-link.
+ *
+ * Output e.g.: "Tulum bachelorette · flight share · Dec 12"
+ */
+export function flightShareNote(tripName: string, startDate: string | null): string {
+  const parts: string[] = [tripName, "flight share"];
+  const date = formatShortDate(startDate);
+  if (date) parts.push(date);
+  return parts.join(" · ");
+}
+
+function formatDateRange(start: string | null, end: string | null): string {
+  if (!start) return "";
+  const s = formatShortDate(start);
+  if (!end || end === start) return s;
+  const e = formatShortDate(end);
+  // If same month, render "Dec 12–19"; otherwise "Dec 12 – Jan 3".
+  const sMonth = s.split(" ")[0];
+  const eMonth = e.split(" ")[0];
+  if (sMonth === eMonth) {
+    const eDay = e.split(" ")[1] ?? "";
+    return `${s}–${eDay}`;
+  }
+  return `${s} – ${e}`;
+}
+
+function formatShortDate(iso: string | null): string {
+  if (!iso) return "";
+  // Take the date part only ("2026-12-12") so timezone doesn't shift it.
+  const [year, month, day] = iso.slice(0, 10).split("-").map(Number);
+  if (!year || !month || !day) return "";
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${months[month - 1]} ${day}`;
+}
+
+// ─── group-size bucket fallback (Sprint 1) ──────────────────────
+
 function bucketToCount(bucket: string | null | undefined): number {
   // Centerpoint of each Phase A bucket. Used as adults pre-fill when
   // group_size_precise isn't set.

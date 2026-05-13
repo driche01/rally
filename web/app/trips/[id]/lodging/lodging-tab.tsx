@@ -8,7 +8,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { themeClass } from "@/lib/themes";
-import { lodgingSearchSet } from "@/lib/deep-links";
+import { lodgingSearchSet, venmoChargeUrl, lodgingShareNote } from "@/lib/deep-links";
 import type { Trip } from "@shared/types";
 
 export interface GoingMember {
@@ -46,12 +46,13 @@ const PLATFORM_LABEL: Record<string, string> = {
 };
 
 export default function LodgingTab({
-  tripId, tripTheme, destination, startDate, endDate,
+  tripId, tripName, tripTheme, destination, startDate, endDate,
   groupSizePrecise, groupSizeBucket,
   canManage, callerRespondentId, goingMembers,
   options: initialOptions,
 }: {
   tripId: string;
+  tripName: string;
   tripTheme: Trip["theme"];
   destination: string | null;
   startDate: string | null;
@@ -294,6 +295,9 @@ export default function LodgingTab({
             key={o.id}
             option={o}
             t={t}
+            tripName={tripName}
+            startDate={startDate}
+            endDate={endDate}
             isSelected={o.status === "selected"}
             canManage={canManage}
             canVote={!!callerRespondentId}
@@ -323,11 +327,15 @@ export default function LodgingTab({
 }
 
 function LodgingCard({
-  option, t, isSelected, canManage, canVote, goingMembers,
+  option, t, tripName, startDate, endDate,
+  isSelected, canManage, canVote, goingMembers,
   onVote, onSelect, onAssign, onUnassign,
 }: {
   option: LodgingOptionView;
   t: ReturnType<typeof themeClass>;
+  tripName: string;
+  startDate: string | null;
+  endDate: string | null;
   isSelected: boolean;
   canManage: boolean;
   canVote: boolean;
@@ -434,6 +442,9 @@ function LodgingCard({
                 key={rm.room}
                 room={rm}
                 option={option}
+                tripName={tripName}
+                startDate={startDate}
+                endDate={endDate}
                 t={t}
                 canManage={canManage}
                 goingMembers={goingMembers}
@@ -449,10 +460,14 @@ function LodgingCard({
 }
 
 function RoomCard({
-  room, option, t, canManage, goingMembers, onAssign, onUnassign,
+  room, option, tripName, startDate, endDate,
+  t, canManage, goingMembers, onAssign, onUnassign,
 }: {
   room: { room: string; beds: string };
   option: LodgingOptionView;
+  tripName: string;
+  startDate: string | null;
+  endDate: string | null;
   t: ReturnType<typeof themeClass>;
   canManage: boolean;
   goingMembers: GoingMember[];
@@ -492,18 +507,43 @@ function RoomCard({
         <ul className="mt-3 grid gap-1.5">
           {assignedHere.map((a) => {
             const member = goingMembers.find((m) => m.id === a.respondent_id);
+            // Venmo charge amount: use the persisted per-assignee
+            // owed amount, else the recomputed per-person split.
+            const dollarsOwed =
+              a.cost_owed_cents > 0
+                ? a.cost_owed_cents / 100
+                : perPersonCostCents != null
+                  ? perPersonCostCents / 100
+                  : 0;
+            const showVenmo = canManage && dollarsOwed > 0;
+            const venmoHref = showVenmo
+              ? venmoChargeUrl(dollarsOwed, lodgingShareNote(tripName, room.room, startDate, endDate))
+              : null;
             return (
-              <li key={a.id} className="flex items-center justify-between text-sm">
-                <span className={t.body}>{member?.name ?? "(left the trip)"}</span>
-                {canManage && (
-                  <button
-                    type="button"
-                    onClick={() => onUnassign(a.respondent_id)}
-                    className={`text-xs ${t.meta} hover:text-orange`}
-                  >
-                    Remove
-                  </button>
-                )}
+              <li key={a.id} className="flex items-center justify-between gap-2 text-sm">
+                <span className={`${t.body} truncate`}>{member?.name ?? "(left the trip)"}</span>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {venmoHref && (
+                    <a
+                      href={venmoHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs px-2 py-1 rounded-full bg-green-soft text-green border border-green/40 hover:bg-green-soft/80"
+                      title={`Charge $${dollarsOwed.toFixed(2)} via Venmo`}
+                    >
+                      Charge ${Math.round(dollarsOwed)} ↗
+                    </a>
+                  )}
+                  {canManage && (
+                    <button
+                      type="button"
+                      onClick={() => onUnassign(a.respondent_id)}
+                      className={`text-xs ${t.meta} hover:text-orange`}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
               </li>
             );
           })}

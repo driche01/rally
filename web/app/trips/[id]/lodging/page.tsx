@@ -122,6 +122,7 @@ export default async function LodgingPage({
   return (
     <LodgingTab
       tripId={trip.id}
+      tripName={trip.name}
       tripTheme={trip.theme}
       destination={trip.destination}
       startDate={trip.start_date}
