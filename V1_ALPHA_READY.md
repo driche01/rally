@@ -26,7 +26,7 @@
 | Twilio SMS outbound rail | ✅ live | `_sms-shared/dm-sender.ts` + `web/lib/twilio.ts`, both opt-out aware. |
 | STOP/REJOIN handling | ✅ live | `sms-inbound` + `users.opted_out`. End-to-end smoke test recommended once at alpha start. |
 | Polyglot reminder scheduler | ✅ live | Deployed + pg_cron-scheduled every 30 minutes. Handles all 5 reminder types. |
-| Planner blast pipeline | ✅ live | Rate limits + opt-out enforcement + auto-post to activity feed + per-recipient ledger. |
+| Planner blast pipeline | ✅ live | Opt-out enforcement + per-recipient 2/24h cap + auto-post to activity feed + per-recipient ledger. (Per-trip weekly/lifetime caps dropped 2026-05-12 — revisit if AI/SMS spend becomes an issue.) |
 | Cancel trip flow | ✅ live | Locks the trip, cancels pending reminders, notifies guests via SMS, blocks new writes on 5 routes. |
 | Stall detection + re-engagement | ✅ live | Both planner SMS + dashboard banner. |
 | Phase B AI tabs | ✅ live | Itinerary (Claude), Lodging (Gemini-grounded), Travel (per-member arrangements + Gemini flight suggestions), Meals (Claude + normalized ingredients), Shopping (auto-aggregated). |
@@ -87,29 +87,27 @@
 
 2. **Per-recipient 2/24h cross-source limit only applies to blasts.** A recipient could in theory get both an `rsvp_nudge` AND a `planner_blast` in the same 24h. With current cohort sizes this won't happen organically; with anything bigger it will.
 
+3. **No per-trip blast cap.** Per user directive 2026-05-12, the build-guide's 3/week and 10/lifetime caps were dropped. A determined planner could send dozens of blasts per day. If Twilio cost becomes an issue, add a cap on `planner_blasts` row count per `(trip_id, day)` window — trivial single-query gate.
+
 ### Will sting but won't break alpha
 
-3. **Twilio rate-limit headroom not stress-tested.** Default Twilio outbound is 10 msgs/sec which is plenty for the design (3 blasts/week × ~10 trips × ~10 recipients = at most ~300 SMS/week). Per-day limit on the toll-free number worth confirming with Twilio before opening up.
+4. **Twilio rate-limit headroom not stress-tested.** Default Twilio outbound is 10 msgs/sec which is plenty for most patterns. Now that the per-trip weekly/lifetime caps are off, worst-case is a single trip sending hundreds of blasts in a burst. Confirm Twilio's toll-free per-day limit before opening to anyone past trusted alpha.
 
-4. **STOP/REJOIN smoke test deferred.** All the code is in place + `sms-inbound` is deployed. Send one real STOP from a real phone the first day of alpha to confirm carrier routing end-to-end.
+5. **STOP/REJOIN smoke test deferred.** All the code is in place + `sms-inbound` is deployed. Send one real STOP from a real phone the first day of alpha to confirm carrier routing end-to-end.
 
-5. **`trip_reminder_settings` toggle UI is missing.** The table + RLS + scheduler-respect-the-toggles are all live; just no UI to flip them. Hosts can disable a reminder type by SQL. Build the panel before opening cohost permissions broadly.
+6. **`trip_reminder_settings` toggle UI is missing.** The table + RLS + scheduler-respect-the-toggles are all live; just no UI to flip them. Hosts can disable a reminder type by SQL. Build the panel before opening cohost permissions broadly.
 
-6. **AI cost ceiling is uncapped.** `phase_b_generation_log` tracks every Claude + Gemini call with tokens, duration, and error. There's no app-layer rate limit per planner per day. Build the daily-cost dashboard from `phase_b_generation_log` + a sane per-planner cap before alpha grows.
+7. **AI cost ceiling is uncapped.** `phase_b_generation_log` tracks every Claude + Gemini call with tokens, duration, and error. There's no app-layer rate limit per planner per day. Build the daily-cost dashboard from `phase_b_generation_log` + a sane per-planner cap before alpha grows.
 
 ### Latent but probably fine
 
-7. **Stalled-trip detection runs every 30 minutes against every active trip.** Scales to ~10K trips comfortably; past that, add an index or denormalize.
+8. **Stalled-trip detection runs every 30 minutes against every active trip.** Scales to ~10K trips comfortably; past that, add an index or denormalize.
 
-8. **Legacy `sms-broadcast` + `sms-nudge-scheduler` + 4 other SMS edge functions still deployed.** They do nothing in v1 (no data feeds them) but eat code-search noise. Pull the trigger on [LEGACY_CLEANUP.md](LEGACY_CLEANUP.md) in a separate PR after alpha shakes out.
+9. **Legacy `sms-broadcast` + `sms-nudge-scheduler` + 4 other SMS edge functions still deployed.** They do nothing in v1 (no data feeds them) but eat code-search noise. Pull the trigger on [LEGACY_CLEANUP.md](LEGACY_CLEANUP.md) in a separate PR after alpha shakes out.
 
-9. **Mobile (`/mobile`, `/expo`) is paused but still in the repo.** That's per CLAUDE.md hard rule #2 (don't touch). Phase C didn't touch any of it.
-
-10. **Re-engagement banner CTA pre-fill.** Stall detector carries a suggested SMS body; "Send a nudge →" opens the blast composer empty. One-liner follow-up.
+10. **Mobile (`/mobile`, `/expo`) is paused but still in the repo.** That's per CLAUDE.md hard rule #2 (don't touch). Phase C didn't touch any of it.
 
 11. **3 traveler_profiles rows missing `home_airport`** (Q25 requirement). They're dev/seed rows from before the requirement landed. Profile-completion-nudge will eventually catch them; manual SQL fix is faster if alpha needs it.
-
-12. **The 3 `re_engagement` SMS the scheduler fired on first invocation went to David's phone** (test trips matched the `no_itinerary` signal). Same deduplication (21-day window) prevents re-firing.
 
 ---
 

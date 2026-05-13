@@ -15,17 +15,18 @@
  * `rsvp_status` + `is_planner` (excluded by default; include via
  * the `include_planner` flag).
  *
- * Per build guide §5 rate limits:
- *   - 3 blasts per rolling 7-day window per trip
- *   - 10 blasts per trip lifetime
- *   - 2 outbound SMS per 24h per recipient (cross-source)
+ * Rate limits (Phase C v1 minimal):
+ *   - 2 outbound SMS per 24h per recipient (cross-source, carrier
+ *     compliance + per-phone dignity)
+ *   - No per-trip weekly or lifetime blast cap (dropped 2026-05-12
+ *     per user directive; revisit if expense becomes a concern)
  */
 
 import { requireAuthUid } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/server";
 import { jsonOk, jsonErr } from "@/lib/http";
 import { sendSms } from "@/lib/twilio";
-import { getTripBlastLimits, filterRecipientsBy24hLimit } from "@/lib/blasts/rate-limits";
+import { filterRecipientsBy24hLimit } from "@/lib/blasts/rate-limits";
 import type {
   PlannerBlast,
   RecipientSegment,
@@ -48,18 +49,14 @@ export async function GET(
   const r = await requireAuthUid();
   if (!r.ok) return jsonErr(r.status, "unauthenticated");
 
-  // RLS on planner_blasts already gates this. Service client just for
-  // the limits sidecar query — RLS-aware client returns the rows.
+  // RLS on planner_blasts already gates this.
   const { data, error } = await r.supabase
     .from("planner_blasts")
     .select("*")
     .eq("trip_id", trip_id)
     .order("created_at", { ascending: false });
   if (error) return jsonErr(500, "blasts_list_failed", error.message);
-
-  const svc = createServiceClient();
-  const limits = await getTripBlastLimits(svc, trip_id);
-  return jsonOk({ blasts: data as PlannerBlast[], limits });
+  return jsonOk({ blasts: data as PlannerBlast[] });
 }
 
 // ─── POST: compose + send ──────────────────────────────────────────
@@ -104,13 +101,7 @@ export async function POST(
   }
   if (!isPlanner && !isCohost) return jsonErr(403, "forbidden");
 
-  // 2. Rate-limit math.
-  const limits = await getTripBlastLimits(svc, trip_id);
-  if (!limits.can_send) {
-    return jsonErr(429, "rate_limit_exceeded", JSON.stringify(limits));
-  }
-
-  // 3. Resolve recipient list from respondents.
+  // 2. Resolve recipient list from respondents.
   let recipientQuery = svc.from("respondents")
     .select("id, name, phone, rsvp_status, is_planner")
     .eq("trip_id", trip_id)
@@ -128,7 +119,7 @@ export async function POST(
     return jsonErr(400, "no_recipients", `Segment '${recipient_segment}' is empty`);
   }
 
-  // 4. 24h rate-limit filter (cross-source).
+  // 3. Per-recipient 24h cross-source filter (carrier compliance).
   const phones = allCandidates.map((c) => c.phone!).filter(Boolean);
   const { allowed, suppressed: suppressed24h } = await filterRecipientsBy24hLimit(svc, phones);
   const allowedSet = new Set(allowed);
@@ -138,7 +129,7 @@ export async function POST(
     return jsonErr(429, "all_recipients_over_24h_limit", `${suppressed24h.length} recipients are over the 2/24h limit`);
   }
 
-  // 5. Create planner_blasts row first so SMS rows can FK to it.
+  // 4. Create planner_blasts row first so SMS rows can FK to it.
   const { data: blastRow, error: blastErr } = await svc
     .from("planner_blasts")
     .insert({
@@ -160,7 +151,7 @@ export async function POST(
   }
   const blast = blastRow as PlannerBlast;
 
-  // 6. Per-recipient send loop.
+  // 5. Per-recipient send loop.
   let sent = 0;
   let failed = 0;
   let suppressedOpt = 0;
@@ -207,7 +198,7 @@ export async function POST(
     }
   }
 
-  // 7. Auto-post to activity feed.
+  // 6. Auto-post to activity feed.
   let activityFeedEntryId: string | null = null;
   const { data: feedRow } = await svc.from("activity_feed_entries").insert({
     trip_id,
@@ -224,7 +215,7 @@ export async function POST(
   }).select("id").single();
   activityFeedEntryId = feedRow?.id ?? null;
 
-  // 8. Update the blast row with final counts + feed link.
+  // 7. Update the blast row with final counts + feed link.
   await svc.from("planner_blasts").update({
     sent_count: sent,
     failed_count: failed,
@@ -240,10 +231,6 @@ export async function POST(
     suppressed_opted_out: suppressedOpt,
     suppressed_24h: suppressed24h.length,
     recipients: perRecipient,
-    limits_remaining: {
-      weekly:   Math.max(0, limits.weekly_remaining   - 1),
-      lifetime: Math.max(0, limits.lifetime_remaining - 1),
-    },
   });
 }
 

@@ -9,8 +9,8 @@
  * playful, personal, link-driven.
  */
 
-import { useEffect, useMemo, useState } from "react";
-import type { Respondent, RecipientSegment, PlannerBlast } from "@shared/types";
+import { useMemo, useState } from "react";
+import type { Respondent, RecipientSegment } from "@shared/types";
 
 interface SendResult {
   blast_id: string;
@@ -19,17 +19,6 @@ interface SendResult {
   suppressed_opted_out: number;
   suppressed_24h: number;
   recipients: { phone: string; name: string; status: string; detail?: string }[];
-  limits_remaining: { weekly: number; lifetime: number };
-}
-
-interface Limits {
-  weekly_used: number;
-  weekly_limit: number;
-  lifetime_used: number;
-  lifetime_limit: number;
-  weekly_remaining: number;
-  lifetime_remaining: number;
-  can_send: boolean;
 }
 
 const SEGMENT_LABELS: Record<RecipientSegment, string> = {
@@ -69,7 +58,6 @@ export default function BlastComposer({
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<SendResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [limits, setLimits] = useState<Limits | null>(null);
 
   // Segment counts from the roster the parent already loaded.
   const counts = useMemo(() => {
@@ -85,15 +73,6 @@ export default function BlastComposer({
   }, [respondents, includePlanner]);
 
   const recipientCount = counts[segment];
-
-  useEffect(() => {
-    let cancel = false;
-    fetch(`/api/trips/${tripId}/blasts`)
-      .then((r) => r.json())
-      .then((b) => { if (!cancel && b.ok) setLimits(b.data.limits as Limits); })
-      .catch(() => {});
-    return () => { cancel = true; };
-  }, [tripId]);
 
   const charsLeft = MAX_BODY - body.length;
   const overRecommended = body.length > RECOMMENDED;
@@ -145,11 +124,6 @@ export default function BlastComposer({
               {prefillSource ? `Nudge: ${prefillSource}` : "Send blast"}
             </p>
             <h2 className="font-display text-2xl text-ink">{tripName}</h2>
-            {limits && (
-              <p className="text-xs text-muted mt-1">
-                {limits.weekly_remaining}/3 weekly · {limits.lifetime_remaining}/10 lifetime remaining
-              </p>
-            )}
           </div>
           <button
             onClick={onClose}
@@ -261,14 +235,12 @@ export default function BlastComposer({
                 </button>
                 <button
                   onClick={() => setConfirming(true)}
-                  disabled={!body.trim() || recipientCount === 0 || !limits?.can_send}
+                  disabled={!body.trim() || recipientCount === 0}
                   className="h-12 px-6 rounded-full bg-green text-cream font-bold hover:bg-green-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {recipientCount === 0
                     ? "No recipients"
-                    : !limits?.can_send
-                      ? "Rate limit hit"
-                      : `Send to ${recipientCount} →`}
+                    : `Send to ${recipientCount} →`}
                 </button>
               </div>
             </>
@@ -334,11 +306,8 @@ function SendSummary({ result, onClose }: { result: SendResult; onClose: () => v
           <li>{result.suppressed_opted_out} suppressed (opted out)</li>
         )}
         {result.suppressed_24h > 0 && (
-          <li>{result.suppressed_24h} suppressed (over 2/24h limit)</li>
+          <li>{result.suppressed_24h} suppressed (over 2/24h per-recipient limit)</li>
         )}
-        <li className="pt-2 text-ink">
-          {result.limits_remaining.weekly}/3 weekly blasts left · {result.limits_remaining.lifetime}/10 lifetime
-        </li>
       </ul>
       <div className="flex justify-end pt-2">
         <button
