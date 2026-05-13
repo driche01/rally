@@ -32,10 +32,36 @@ export default function TripDashboard({
   const [activityFeed, setActivityFeed] = useState<ActivityFeedEntry[]>(activity);
   const [showInvite, setShowInvite] = useState(false);
   const [showBlast, setShowBlast]   = useState(false);
+  const [blastPrefill, setBlastPrefill] = useState<{
+    body: string;
+    segment: "going" | "maybe" | "invited" | "all";
+    source: string;
+  } | null>(null);
   const [copied, setCopied] = useState(false);
   const [cloning, setCloning] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const cancelled = Boolean(trip.cancelled_at);
+
+  function openBlastFromBanner() {
+    if (!stallSignal) {
+      setShowBlast(true);
+      return;
+    }
+    // Bake the share link + trip name into the body. [Name] stays
+    // as a token so the blast pipeline substitutes per recipient.
+    const body = `${stallSignal.cta} ${inviteUrl}`;
+    setBlastPrefill({
+      body,
+      segment: stallSignal.defaultSegment,
+      source: stallSignal.headline.toLowerCase().replace(/\.$/, ""),
+    });
+    setShowBlast(true);
+  }
+
+  function closeBlast() {
+    setShowBlast(false);
+    setBlastPrefill(null);
+  }
 
   async function cancelTrip() {
     const note =
@@ -147,7 +173,7 @@ export default function TripDashboard({
             <p className="text-sm text-muted">{stallSignal.detail}</p>
           </div>
           <button
-            onClick={() => setShowBlast(true)}
+            onClick={openBlastFromBanner}
             className="h-10 px-4 rounded-full bg-gold text-ink font-bold hover:bg-gold/80 text-sm whitespace-nowrap"
           >
             Send a nudge →
@@ -250,7 +276,10 @@ export default function TripDashboard({
           tripId={trip.id}
           tripName={trip.name}
           respondents={respondents}
-          onClose={() => setShowBlast(false)}
+          onClose={closeBlast}
+          initialBody={blastPrefill?.body}
+          initialSegment={blastPrefill?.segment}
+          prefillSource={blastPrefill?.source}
         />
       )}
     </div>

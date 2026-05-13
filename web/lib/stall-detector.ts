@@ -15,7 +15,21 @@ export interface StallSignal {
   reason: "feed_silent_14d" | "majority_lodging_unassigned" | "no_itinerary";
   headline: string;          // shown in the banner ("Things have been quiet.")
   detail:   string;          // shown under headline
-  cta:      string;          // pre-filled blast suggestion
+  /**
+   * Pre-fill body for the blast composer. Contains [Name] for the
+   * blast pipeline's per-recipient personalization. The trip's
+   * invite URL is appended at the dashboard layer (the detector
+   * doesn't know about request hosts).
+   */
+  cta:      string;
+  /**
+   * Default segment to select in the composer when the planner
+   * taps "Send a nudge". Tailored per signal — `going` for the
+   * lodging + itinerary nudges (those affect committed members),
+   * `all` for feed-silence (re-engage everyone who's still on the
+   * fence).
+   */
+  defaultSegment: "going" | "maybe" | "invited" | "all";
 }
 
 export async function detectStallForBanner(
@@ -39,7 +53,8 @@ export async function detectStallForBanner(
         reason: "feed_silent_14d",
         headline: "Things have been quiet.",
         detail:   "Nothing's hit the feed in 2 weeks. A nudge from you would jump-start it.",
-        cta:      "Hey [Name] — circling back on our trip. Got two seconds to lock anything in?",
+        cta:      "hey [Name] — circling back on our trip. quick check in: open the page, drop a comment, lock anything in →",
+        defaultSegment: "all",
       };
     }
   }
@@ -59,7 +74,8 @@ export async function detectStallForBanner(
           reason: "majority_lodging_unassigned",
           headline: "Most of the group doesn't have a room yet.",
           detail:   "Trip's less than a month out. Worth a heads-up to the holdouts.",
-          cta:      "Hey [Name] — heads-up the trip is coming up and we still need to lock in lodging. Tap in: ",
+          cta:      "hey [Name] — trip is coming up + we still need to lock in lodging. take 30 sec and claim a room →",
+          defaultSegment: "going",
         };
       }
     }
@@ -74,7 +90,8 @@ export async function detectStallForBanner(
         reason: "no_itinerary",
         headline: "No itinerary yet.",
         detail:   "Trip is 3 weeks out and there's nothing planned. Want to generate a draft?",
-        cta:      "Hey [Name] — pinging the group, what do we want to do on the trip?",
+        cta:      "hey [Name] — pinging the group on the trip — what do we actually want to do? tap to weigh in →",
+        defaultSegment: "going",
       };
     }
   }

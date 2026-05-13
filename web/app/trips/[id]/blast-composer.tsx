@@ -47,14 +47,23 @@ export default function BlastComposer({
   tripName,
   respondents,
   onClose,
+  initialBody,
+  initialSegment,
+  prefillSource,
 }: {
   tripId: string;
   tripName: string;
   respondents: Respondent[];
   onClose: () => void;
+  /** Pre-fill the body (e.g. from the re-engagement banner). */
+  initialBody?:    string;
+  /** Pre-select the segment (e.g. "going" for a lodging nudge). */
+  initialSegment?: RecipientSegment;
+  /** Tag the UI when a pre-fill is in play (small "From: stalled-trip nudge" eyebrow). */
+  prefillSource?:  string;
 }) {
-  const [segment, setSegment] = useState<RecipientSegment>("going");
-  const [body, setBody] = useState("");
+  const [segment, setSegment] = useState<RecipientSegment>(initialSegment ?? "going");
+  const [body, setBody] = useState(initialBody ?? "");
   const [includePlanner, setIncludePlanner] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [sending, setSending] = useState(false);
@@ -133,7 +142,7 @@ export default function BlastComposer({
         <div className="px-6 py-5 sm:py-6 border-b border-line flex items-start justify-between">
           <div>
             <p className="text-xs font-bold tracking-widest uppercase text-green mb-1">
-              Send blast
+              {prefillSource ? `Nudge: ${prefillSource}` : "Send blast"}
             </p>
             <h2 className="font-display text-2xl text-ink">{tripName}</h2>
             {limits && (
