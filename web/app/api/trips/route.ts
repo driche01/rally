@@ -8,7 +8,9 @@
  * (trip creation flow UI) consumes POST.
  */
 
+import { randomBytes } from "crypto";
 import { requireAuthUid } from "@/lib/auth";
+import { createServiceClient } from "@/lib/supabase/server";
 import { json, jsonErr, jsonOk } from "@/lib/http";
 import type { Trip, TripTheme } from "@shared/types";
 
@@ -86,6 +88,50 @@ export async function POST(req: Request) {
     .single();
 
   if (error) return jsonErr(500, "trips_insert_failed", error.message);
+
+  // Phase C Q24: auto-create planner self-respondent so the planner
+  // can be addressed by blasts and reminders uniformly. Best-effort —
+  // if this fails the trip itself still exists; migration 140's
+  // idempotent backfill will pick it up later. We use the service
+  // client because RLS on respondents doesn't grant the planner
+  // INSERT on themselves (it's gated on share_token presence).
+  try {
+    const svc = createServiceClient();
+    const { data: planner } = await svc
+      .from("profiles")
+      .select("name, last_name, phone, email")
+      .eq("id", r.authUid)
+      .maybeSingle();
+
+    const plannerName = [planner?.name, planner?.last_name]
+      .map((s) => (s ?? "").trim())
+      .filter(Boolean)
+      .join(" ") || "Planner";
+
+    let user_id: string | null = null;
+    if (planner?.phone) {
+      const { data: u } = await svc
+        .from("users").select("id").eq("phone", planner.phone).maybeSingle();
+      user_id = u?.id ?? null;
+    }
+
+    await svc.from("respondents").insert({
+      trip_id: data.id,
+      name: plannerName,
+      phone: planner?.phone ?? null,
+      email: planner?.email ?? null,
+      is_planner: true,
+      rsvp_status: "going",
+      rsvp_status_updated_at: new Date().toISOString(),
+      session_token: randomBytes(16).toString("hex"),
+      user_id,
+      invited_at: new Date().toISOString(),
+    });
+  } catch (e) {
+    // Don't fail the trip create. Log and move on.
+    console.warn("[/api/trips] planner self-respondent insert failed:", e);
+  }
+
   return json({ ok: true, data: data as Trip }, 201);
 }
 

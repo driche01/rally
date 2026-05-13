@@ -47,6 +47,9 @@ export interface Trip {
   share_token: string;
   created_at: string;
   updated_at: string;
+  // Phase C — cancellation (migration 135)
+  cancelled_at: string | null;
+  cancelled_by: string | null;      // profiles.id
 }
 
 // ─── Travel profile ───────────────────────────────────────────────
@@ -159,12 +162,29 @@ export interface Mutual {
 
 // ─── SMS log (reusing thread_messages — see Q5) ───────────────────
 
+/**
+ * App-layer enum for `thread_messages.message_type`. The column itself
+ * is `text NULL` with no CHECK (per Q5); this union is the single
+ * source of truth for valid values. Keep in sync with
+ * `scheduled_reminders.message_type` CHECK (a strict subset — only
+ * the auto-reminder types).
+ */
 export type SmsMessageType =
   | "rsvp_nudge"
-  | "profile_completion"
+  | "profile_completion_nudge"
   | "booking_nudge"
   | "pre_trip_summary"
+  | "re_engagement"
+  | "cancellation_notice"
   | "planner_blast";
+
+/** Strict subset of `SmsMessageType` valid in `scheduled_reminders`. */
+export type ReminderMessageType =
+  | "rsvp_nudge"
+  | "profile_completion_nudge"
+  | "booking_nudge"
+  | "pre_trip_summary"
+  | "re_engagement";
 
 export interface ThreadMessage {
   id: string;
@@ -212,4 +232,64 @@ export interface TripProfileAggregate {
   home_airports: { value: string; count: number }[];
   alignment_summary: string;
   computed_at: string;
+}
+
+// ─── Phase C: reminders + blasts ──────────────────────────────────
+
+export type ReminderStatus = "pending" | "sent" | "cancelled" | "skipped";
+
+export interface ScheduledReminder {
+  id: string;
+  trip_id: string;
+  recipient_respondent_id: string;  // respondents.id (Q18)
+  message_type: ReminderMessageType;
+  scheduled_for: string;
+  status: ReminderStatus;
+  sent_thread_message_id: string | null;
+  attempted_at: string | null;
+  skip_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type RecipientSegment = "going" | "maybe" | "invited" | "all";
+
+export interface PlannerBlast {
+  id: string;
+  trip_id: string;
+  composed_by: string;              // profiles.id (Q20)
+  recipient_segment: RecipientSegment;
+  message_body: string;
+  include_planner: boolean;
+  recipient_count: number;
+  sent_count: number;
+  failed_count: number;
+  suppressed_opted_out: number;
+  scheduled_for: string | null;
+  sent_at: string | null;
+  auto_posted_to_feed: boolean;
+  activity_feed_entry_id: string | null;
+  created_at: string;
+}
+
+export interface PlannerBlastSend {
+  id: string;
+  blast_id: string;
+  recipient_respondent_id: string;  // respondents.id (Q18)
+  thread_message_id: string | null;
+  delivery_status: string | null;
+  error_code: string | null;
+  sent_at: string | null;
+  created_at: string;
+}
+
+export interface TripReminderSettings {
+  trip_id: string;
+  rsvp_nudge_enabled: boolean;
+  profile_completion_enabled: boolean;
+  booking_nudge_enabled: boolean;
+  pre_trip_summary_enabled: boolean;
+  re_engagement_enabled: boolean;
+  created_at: string;
+  updated_at: string;
 }
