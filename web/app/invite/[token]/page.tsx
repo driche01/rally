@@ -156,8 +156,20 @@ export default async function InvitePage({ params }: PageProps) {
           </div>
         )}
 
-        {/* ─── RSVP buttons ──────────────────────────── */}
-        <RsvpButtons tripId={trip.id} shareToken={trip.share_token} />
+        {/* ─── Cancelled banner (Phase C) ────────────── */}
+        {trip.cancelled_at ? (
+          <div className="my-6 bg-orange/10 border border-orange/40 rounded-2xl p-4">
+            <p className="text-xs font-bold tracking-widest uppercase text-orange mb-1">
+              Cancelled
+            </p>
+            <p className={`text-sm ${t.body}`}>
+              This trip was cancelled by the host. The feed below is still live, but RSVPs and new comments are closed.
+            </p>
+          </div>
+        ) : (
+          /* ─── RSVP buttons ──────────────────────────── */
+          <RsvpButtons tripId={trip.id} shareToken={trip.share_token} />
+        )}
 
         {/* ─── Guest list ─────────────────────────────── */}
         <section className="mt-12">

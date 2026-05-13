@@ -46,10 +46,11 @@ export async function POST(
   const anon = await createClient();
   const { data: trip } = await anon
     .from("trips")
-    .select("id")
+    .select("id, cancelled_at")
     .eq("share_token", token)
     .maybeSingle();
   if (!trip) return jsonErr(404, "trip_not_found");
+  if (trip.cancelled_at) return jsonErr(410, "trip_cancelled");
 
   // Optional: link to users.id if a phone was provided + matches.
   const svc = createServiceClient();

@@ -7,8 +7,9 @@
  */
 
 import { requireAuthUid } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { jsonErr, jsonOk } from "@/lib/http";
+import { assertTripWritable } from "@/lib/trip-state";
 import type { ActivityFeedEntry, ActivityEntryType } from "@shared/types";
 
 const POSTABLE_TYPES: ReadonlySet<ActivityEntryType> = new Set([
@@ -56,6 +57,10 @@ export async function POST(
       ? (body.content as Record<string, unknown>)
       : null;
   if (!content) return jsonErr(400, "content_required");
+
+  // Phase C: writes to cancelled trips return 410.
+  const writability = await assertTripWritable(createServiceClient(), trip_id);
+  if (!writability.ok) return jsonErr(writability.status, writability.code, writability.detail);
 
   // Map auth.uid() → users.id for the FK. activity_feed_entries.user_id
   // FKs users(id) per BUILD_QUESTIONS Q1.

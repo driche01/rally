@@ -10,8 +10,9 @@
  */
 
 import { requireAuthUid } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { jsonErr, jsonOk } from "@/lib/http";
+import { assertTripWritable } from "@/lib/trip-state";
 import type { Respondent, RsvpStatus } from "@shared/types";
 
 const VALID_STATUSES: ReadonlySet<RsvpStatus> = new Set([
@@ -37,6 +38,10 @@ export async function POST(
   if (note != null && note.length > 280) {
     return jsonErr(400, "note_too_long");
   }
+
+  // Phase C: writes to cancelled trips return 410.
+  const writability = await assertTripWritable(createServiceClient(), trip_id);
+  if (!writability.ok) return jsonErr(writability.status, writability.code, writability.detail);
 
   // Anon-allowed read+update. RLS policies on respondents already
   // gate "Session owner can update their respondent row" on the
@@ -78,6 +83,10 @@ export async function PATCH(
   if (!rsvp_status || !VALID_STATUSES.has(rsvp_status)) {
     return jsonErr(400, "invalid_rsvp_status");
   }
+
+  // Phase C: writes to cancelled trips return 410.
+  const writability = await assertTripWritable(createServiceClient(), trip_id);
+  if (!writability.ok) return jsonErr(writability.status, writability.code, writability.detail);
 
   // RLS gates this on planner/cohost. We additionally pin
   // trip_id so the planner can't sneak edits onto someone else's
