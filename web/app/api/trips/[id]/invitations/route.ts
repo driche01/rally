@@ -74,11 +74,12 @@ export async function POST(
   // 1. Authorize: caller is planner or cohost of this trip.
   const { data: trip, error: tripErr } = await r.supabase
     .from("trips")
-    .select("id, name, created_by, share_token")
+    .select("id, name, created_by, share_token, cancelled_at")
     .eq("id", trip_id)
     .maybeSingle();
   if (tripErr)  return jsonErr(500, "trip_read_failed", tripErr.message);
   if (!trip)    return jsonErr(404, "trip_not_found");
+  if (trip.cancelled_at) return jsonErr(410, "trip_cancelled");
 
   const isPlanner = trip.created_by === r.authUid;
   let isCohost = false;

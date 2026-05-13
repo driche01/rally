@@ -32,6 +32,38 @@ export default function TripDashboard({
   const [showBlast, setShowBlast]   = useState(false);
   const [copied, setCopied] = useState(false);
   const [cloning, setCloning] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const cancelled = Boolean(trip.cancelled_at);
+
+  async function cancelTrip() {
+    const note =
+      "Cancel this trip? This will:\n" +
+      "• Notify every guest via SMS\n" +
+      "• Lock the trip page (no new RSVPs or activity)\n" +
+      "• Post a system entry to the activity feed\n\n" +
+      "This cannot be undone.";
+    if (!confirm(note)) return;
+    setCancelling(true);
+    try {
+      const res = await fetch(`/api/trips/${trip.id}/cancel`, { method: "POST" });
+      const body = await res.json();
+      if (!res.ok || !body.ok) {
+        alert(`Cancel failed: ${body?.error?.code ?? res.status}`);
+        return;
+      }
+      const sms = body.data?.sms;
+      alert(
+        `Trip cancelled. SMS: ${sms?.sent ?? 0} sent` +
+          (sms?.failed ? `, ${sms.failed} failed` : "") +
+          (sms?.suppressed_opted_out ? `, ${sms.suppressed_opted_out} suppressed (opted out)` : ""),
+      );
+      router.refresh();
+    } catch {
+      alert("Couldn't reach Rally. Try again.");
+    } finally {
+      setCancelling(false);
+    }
+  }
 
   async function clone() {
     if (!confirm("Clone this trip? You'll get a fresh draft with the same name, theme, destination, and budget — but no invitees, itinerary, lodging, travel, meals, or shopping.")) return;
@@ -92,6 +124,17 @@ export default function TripDashboard({
 
   return (
     <div>
+      {cancelled && (
+        <div className="mb-6 bg-orange/10 border border-orange/40 text-ink rounded-2xl p-4">
+          <p className="text-xs font-bold tracking-widest uppercase text-orange mb-1">
+            Cancelled
+          </p>
+          <p className="text-sm">
+            This trip was cancelled by the host. The activity feed stays visible, but no new RSVPs or actions are accepted.
+          </p>
+        </div>
+      )}
+
       {/* Trip description (under header from layout) */}
       {trip.description && (
         <p className={`mb-8 max-w-prose whitespace-pre-line ${t.body}`}>
@@ -111,7 +154,8 @@ export default function TripDashboard({
       <div className="flex flex-wrap gap-3 mb-8">
         <button
           onClick={() => setShowInvite(true)}
-          className="h-12 px-6 rounded-full bg-green text-cream font-bold hover:bg-green-2"
+          disabled={cancelled}
+          className="h-12 px-6 rounded-full bg-green text-cream font-bold hover:bg-green-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Invite people →
         </button>
@@ -123,7 +167,8 @@ export default function TripDashboard({
         </button>
         <button
           onClick={() => setShowBlast(true)}
-          className={`h-12 px-5 rounded-full ${t.surface} text-ink border ${t.surfaceBorder} hover:border-green`}
+          disabled={cancelled}
+          className={`h-12 px-5 rounded-full ${t.surface} text-ink border ${t.surfaceBorder} hover:border-green disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           Send blast →
         </button>
@@ -135,6 +180,16 @@ export default function TripDashboard({
         >
           {cloning ? "Cloning…" : "Clone trip"}
         </button>
+        {!cancelled && (
+          <button
+            onClick={cancelTrip}
+            disabled={cancelling}
+            className="h-12 px-5 rounded-full bg-card text-orange border border-orange/40 hover:bg-orange/10 disabled:opacity-50"
+            title="Cancel the trip. Notifies every guest via SMS and locks the page."
+          >
+            {cancelling ? "Cancelling…" : "Cancel trip"}
+          </button>
+        )}
       </div>
 
       {/* ─── Roster ────────────────────────────────── */}

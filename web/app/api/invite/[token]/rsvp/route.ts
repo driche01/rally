@@ -90,11 +90,12 @@ export async function POST(
   const anon = await createClient();
   const { data: tripRow, error: tripErr } = await anon
     .from("trips")
-    .select("id")
+    .select("id, cancelled_at")
     .eq("share_token", token)
     .maybeSingle();
   if (tripErr)  return jsonErr(500, "trip_read_failed", tripErr.message);
   if (!tripRow) return jsonErr(404, "trip_not_found");
+  if (tripRow.cancelled_at) return jsonErr(410, "trip_cancelled");
   const trip_id = tripRow.id as string;
 
   const svc = createServiceClient();
