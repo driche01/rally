@@ -30,6 +30,10 @@
 | Cancel trip flow | ✅ live | Locks the trip, cancels pending reminders, notifies guests via SMS, blocks new writes on 5 routes. |
 | Stall detection + re-engagement | ✅ live | Both planner SMS + dashboard banner. |
 | Phase B AI tabs | ✅ live | Itinerary (Claude), Lodging (Gemini-grounded), Travel (per-member arrangements + Gemini flight suggestions), Meals (Claude + normalized ingredients), Shopping (auto-aggregated). |
+| Pre-filled deep-links | ✅ live | Lodging tab carries trip context into Airbnb / VRBO / Booking.com search; Travel tab pre-fills Google Flights per-member using home_airport (alpha+ Sprint 1). |
+| Venmo split deep-links | ✅ live | On each locked-lodging room assignment, per-assignee "Charge $N ↗" button opens Venmo with amount + descriptive note (alpha+ Sprint 2, Q27 B). |
+| Persistent profile pages | ✅ live | `/user/[id]` shows trip history + mutuals leaderboard + badges + travel-profile summary. Visibility gated on shared-respondents-row (Q29). Locked-state graceful UX (initial-letter avatar + first name + back nav). |
+| Badges + mini-leaderboard | ✅ live | 7 starter badges computed on-demand. Top-5 most-traveled-with list per profile (alpha+ Sprint 4). |
 
 ---
 
@@ -76,6 +80,10 @@
 | Q25 | C | `home_airport` required at profile capture; static `iata_to_tz` map |
 | Q25a | C | Recipients without a profile → sender's local timezone fallback |
 | Q26 | C | Suppress opted-out for cancellation notices |
+| Q27 | alpha+ | Venmo deep-link mode B — pre-fill amount + note only; no recipient param (Venmo doesn't accept phone). Booker picks from their contacts. |
+| Q28 | alpha+ | World map bumped to v4. Not shipped. |
+| Q29 | alpha+ | Profile visibility = "any shared respondents row, ever" (one-query simplification of mutuals + current-trip union). |
+| Q29 UX | alpha+ | Non-visible profiles render graceful locked state with first name + initial avatar + back nav. NOT 404 (uuid-gated → existence-leak risk is low). |
 
 ---
 
@@ -111,15 +119,21 @@
 
 ---
 
-## Out-of-scope (intentional v1 deferrals)
+## Out-of-scope (intentional deferrals)
 
-- Two-way SMS / inbound parsing / NLU → **v2 (monetization-unlocked)**
-- Integrated booking → **v2**
-- Native cost splitting → **v2**
-- On-trip mode → **v2**
-- Post-trip recap → **v2**
-- Mobile app → **v3**
-- Anything in Future State → **v3+**
+Updated 2026-05-12 with the alpha+ scope shift (user pulled deep-links + Venmo splits + profile pages + badges forward; bumped the rest):
+
+- Pre-filled deep-links (lodging + flights) → **shipped in alpha+**
+- Lodging Venmo splits → **shipped in alpha+** (flights + activities + meals → v4)
+- Profile pages + badges + leaderboards → **shipped in alpha+**
+- World map on profile → **v4**
+- Integrated booking (in-app, affiliate-revenue) → **v2** (deep-link enhancement satisfies "pre-fill" half)
+- Two-way SMS / inbound parsing / NLU → **v4** (user bumped from v2)
+- On-trip mode → **v4** (user bumped from v2)
+- Post-trip recap → **v4** (user bumped from v2)
+- Public trip discovery → **v4**
+- Mobile app → **v4** (user bumped from v3)
+- Platform / partnerships → **v4**
 
 ---
 
