@@ -25,12 +25,18 @@ export function buildProfileCompletionBody(trip: TripRow): string {
 }
 
 export function buildBookingNudgeBody(trip: TripRow, missing: BookingGaps): string {
+  // Phase C v1 framing: "log your status" — Rally tracks who's
+  // bringing what (flight info, lodging preference), not actual
+  // bookings (those are deep-link-out). The nudge is asking the
+  // member to share their plan, not commit to a vendor.
   // missing: { lodging: bool, travel: bool }
-  const parts: string[] = [];
-  if (missing.lodging) parts.push('a room');
-  if (missing.travel)  parts.push('your travel plan');
-  const what = parts.length === 2 ? `${parts[0]} or ${parts[1]}` : parts[0] ?? 'a few things';
-  return `[Name], [Trip]${trip.destination ? ` (${trip.destination})` : ''} is getting close and you haven't locked in ${what} yet. Tap to handle: [Survey link]`;
+  const ask: string =
+    missing.travel && missing.lodging
+      ? 'share your travel plan + weigh in on lodging'
+      : missing.travel
+        ? 'share your travel plan'
+        : 'weigh in on lodging';
+  return `hey [Name] — [Trip]${trip.destination ? ` (${trip.destination})` : ''} is getting close. quick ask: tap the page + ${ask} so the host can lock things in →  [Survey link]`;
 }
 
 export function buildPreTripSummaryBody(
@@ -50,8 +56,9 @@ export function buildPreTripSummaryBody(
 
 export function buildReEngagementBody(trip: TripRow, stallReason: string): string {
   // Goes to the planner specifically — voice shifts to "your trip"
-  // rather than "the trip you're invited to."
-  return `[Name], [Trip] has been quiet — ${stallReason}. A blast from you would unstick it. Open the dashboard: [Survey link]`;
+  // rather than "the trip you're invited to." Phase C v1 framing
+  // leans into the commitment-confirmation angle (not booking).
+  return `hey [Name] — [Trip] looks stalled (${stallReason}). a quick blast to confirm who's still in would unstick it. open the dashboard → [Survey link]`;
 }
 
 export function buildCancellationNoticeBody(trip: TripRow): string {

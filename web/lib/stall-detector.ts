@@ -52,8 +52,8 @@ export async function detectStallForBanner(
       return {
         reason: "feed_silent_14d",
         headline: "Things have been quiet.",
-        detail:   "Nothing's hit the feed in 2 weeks. A nudge from you would jump-start it.",
-        cta:      "hey [Name] — circling back on our trip. quick check in: open the page, drop a comment, lock anything in →",
+        detail:   "Nothing's hit the feed in 2 weeks. A check-in would help confirm who's still in.",
+        cta:      "hey [Name] — circling back on the trip. quick check: you still in? a yes/no helps me lock things down on my end →",
         defaultSegment: "all",
       };
     }
@@ -72,10 +72,10 @@ export async function detectStallForBanner(
       if ((assigned?.length ?? 0) / goingIds.length < 0.5) {
         return {
           reason: "majority_lodging_unassigned",
-          headline: "Most of the group doesn't have a room yet.",
-          detail:   "Trip's less than a month out. Worth a heads-up to the holdouts.",
-          cta:      "hey [Name] — trip is coming up + we still need to lock in lodging. take 30 sec and claim a room →",
-          defaultSegment: "going",
+          headline: "Headcount still soft.",
+          detail:   "Trip's less than a month out and most of the group hasn't been slotted into a room yet — worth confirming who's actually in before lodging gets locked.",
+          cta:      "hey [Name] — trip's coming up + I want to make sure I've got the right headcount before I start locking lodging. you still in? →",
+          defaultSegment: "all",
         };
       }
     }
@@ -88,10 +88,10 @@ export async function detectStallForBanner(
     if ((items?.length ?? 0) === 0) {
       return {
         reason: "no_itinerary",
-        headline: "No itinerary yet.",
-        detail:   "Trip is 3 weeks out and there's nothing planned. Want to generate a draft?",
-        cta:      "hey [Name] — pinging the group on the trip — what do we actually want to do? tap to weigh in →",
-        defaultSegment: "going",
+        headline: "Nothing planned yet.",
+        detail:   "Trip is 3 weeks out and there's no itinerary. Confirm who's in so the planning can actually start.",
+        cta:      "hey [Name] — trip's getting close + we're about to start planning. just want to confirm — you still in? →",
+        defaultSegment: "all",
       };
     }
   }

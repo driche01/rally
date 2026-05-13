@@ -188,12 +188,16 @@ async function getStallSignals(ctx: ConditionContext): Promise<string[]> {
         .gt('created_at', cutoff)
         .limit(1);
       if ((recent?.length ?? 0) === 0) {
-        out.push("nothing on the feed in 2 weeks");
+        out.push("the feed's gone quiet");
       }
     }
   }
 
-  // Signal 2: > 50% of going members have no lodging assignment AND start_date < 30d.
+  // Signal 2: > 50% of going members have no lodging assignment
+  // AND start_date < 30d. The signal is really about soft headcount
+  // (you haven't slotted people into rooms because you're not sure
+  // who's coming yet) — frame it that way so the planner SMS doesn't
+  // sound like a vendor-booking nudge.
   if (ctx.trip.start_date) {
     const daysUntilStart = (new Date(ctx.trip.start_date).getTime() - ctx.now.getTime()) / 86_400_000;
     if (daysUntilStart < 30) {
@@ -210,7 +214,7 @@ async function getStallSignals(ctx: ConditionContext): Promise<string[]> {
           .in('respondent_id', goingIds);
         const assignedFrac = (assigned?.length ?? 0) / goingIds.length;
         if (assignedFrac < 0.5) {
-          out.push("over half the group still doesn't have a room");
+          out.push("the headcount's still soft");
         }
       }
     }
@@ -226,7 +230,7 @@ async function getStallSignals(ctx: ConditionContext): Promise<string[]> {
         .eq('trip_id', ctx.trip.id)
         .limit(1);
       if ((items?.length ?? 0) === 0) {
-        out.push("there's still no itinerary");
+        out.push("nothing's planned yet");
       }
     }
   }
