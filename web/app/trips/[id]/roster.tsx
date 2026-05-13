@@ -7,6 +7,7 @@
  */
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import type { Respondent, RsvpStatus } from "@shared/types";
 
 type Filter = "all" | RsvpStatus;
@@ -143,22 +144,48 @@ export default function Roster({
                 key={r.id}
                 className="bg-card border border-line rounded-2xl p-3 sm:p-4 flex items-center gap-3"
               >
-                <div className="h-10 w-10 rounded-full bg-green-soft text-green flex items-center justify-center font-bold flex-shrink-0">
-                  {r.name.charAt(0).toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-ink font-semibold truncate">
-                    {r.name}
-                    {r.is_planner && (
-                      <span className="ml-2 text-xs uppercase tracking-widest text-gold font-bold">
-                        host
-                      </span>
-                    )}
-                  </p>
-                  <p className="text-xs text-muted truncate">
-                    {r.phone ?? r.email ?? "—"}
-                  </p>
-                </div>
+                {r.user_id ? (
+                  <Link
+                    href={`/user/${r.user_id}`}
+                    className="flex items-center gap-3 flex-1 min-w-0 hover:opacity-80 transition-opacity"
+                  >
+                    <div className="h-10 w-10 rounded-full bg-green-soft text-green flex items-center justify-center font-bold flex-shrink-0">
+                      {r.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-ink font-semibold truncate">
+                        {r.name}
+                        {r.is_planner && (
+                          <span className="ml-2 text-xs uppercase tracking-widest text-gold font-bold">
+                            host
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-xs text-muted truncate">
+                        {r.phone ?? r.email ?? "—"}
+                      </p>
+                    </div>
+                  </Link>
+                ) : (
+                  <>
+                    <div className="h-10 w-10 rounded-full bg-green-soft text-green flex items-center justify-center font-bold flex-shrink-0">
+                      {r.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-ink font-semibold truncate">
+                        {r.name}
+                        {r.is_planner && (
+                          <span className="ml-2 text-xs uppercase tracking-widest text-gold font-bold">
+                            host
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-xs text-muted truncate">
+                        {r.phone ?? r.email ?? "—"}
+                      </p>
+                    </div>
+                  </>
+                )}
                 <div className="relative">
                   <button
                     onClick={() => setOpenMenuId(isMenuOpen ? null : r.id)}
