@@ -21,6 +21,7 @@ import Link from "next/link";
 import { requireAuthUid } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/server";
 import { canViewUserProfile } from "@/lib/profile-visibility";
+import { computeBadges, type Badge } from "@/lib/badges";
 import ProfileLocked from "./profile-locked";
 
 export default async function UserProfilePage({
@@ -137,7 +138,41 @@ export default async function UserProfilePage({
     last_traveled_together_at: string | null;
   }[];
 
-  // 7. Travel profile (via phone, per Q2).
+  // 7. Resolve mutual user names for the mini-leaderboard.
+  let topMutuals: Array<{ id: string; name: string; shared_trip_count: number }> = [];
+  if (mutuals.length > 0) {
+    const ids = mutuals.slice(0, 5).map((m) => m.mutual_user_id);
+    const { data: nameRows } = await svc
+      .from("users")
+      .select("id, display_name")
+      .in("id", ids);
+    const nameMap = new Map<string, string | null>(
+      (nameRows ?? []).map((u) => [u.id as string, (u.display_name as string | null) ?? null]),
+    );
+    // Fallback to most-recent respondents.name when users.display_name is null.
+    const missing = ids.filter((id) => !nameMap.get(id));
+    if (missing.length > 0) {
+      const { data: respNames } = await svc
+        .from("respondents")
+        .select("user_id, name, created_at")
+        .in("user_id", missing)
+        .order("created_at", { ascending: false });
+      for (const id of missing) {
+        const r = (respNames ?? []).find((row) => row.user_id === id);
+        if (r) nameMap.set(id, (r.name as string) ?? null);
+      }
+    }
+    topMutuals = mutuals.slice(0, 5).map((m) => ({
+      id:    m.mutual_user_id,
+      name:  nameMap.get(m.mutual_user_id) ?? "a friend",
+      shared_trip_count: m.shared_trip_count,
+    }));
+  }
+
+  // 8. Compute badges + stats.
+  const { stats, badges } = await computeBadges(svc, targetUserId);
+
+  // 9. Travel profile (via phone, per Q2).
   let profile: TravelerProfileSummary | null = null;
   if (target.phone) {
     const { data: tp } = await svc
@@ -156,18 +191,26 @@ export default async function UserProfilePage({
         </Link>
 
         {/* Header */}
-        <header className="flex items-center gap-5 mb-10">
+        <header className="flex items-center gap-5 mb-8">
           <Avatar name={safeName} />
           <div className="min-w-0 flex-1">
             <h1 className="font-display text-3xl sm:text-4xl text-ink leading-tight mb-1 truncate">
               {safeName}
             </h1>
             <p className="text-sm text-muted">
-              {(target.trip_count ?? 0)} trip{(target.trip_count ?? 0) === 1 ? "" : "s"} ·{" "}
-              {mutuals.length} {mutuals.length === 1 ? "person" : "people"} traveled with
+              {stats.trips_attended} trip{stats.trips_attended === 1 ? "" : "s"} ·{" "}
+              {stats.distinct_destinations} destination{stats.distinct_destinations === 1 ? "" : "s"} ·{" "}
+              {stats.mutuals_count} traveled-with
             </p>
           </div>
         </header>
+
+        {/* Badges */}
+        {badges.length > 0 && (
+          <div className="mb-10 flex flex-wrap gap-2">
+            {badges.map((b) => <BadgePill key={b.id} badge={b} />)}
+          </div>
+        )}
 
         {/* Upcoming trips */}
         {upcoming.length > 0 && (
@@ -194,15 +237,39 @@ export default async function UserProfilePage({
           </Section>
         )}
 
-        {/* Mutuals */}
-        {mutuals.length > 0 && (
-          <Section title="Traveled with">
-            <p className="text-sm text-muted">
-              {mutuals.length} {mutuals.length === 1 ? "person" : "people"} across their trips.
-              {mutuals[0]?.last_traveled_together_at && (
-                <> Most recent: {formatRelative(mutuals[0].last_traveled_together_at)}.</>
-              )}
-            </p>
+        {/* Mutuals leaderboard — top 5 by shared trip count */}
+        {topMutuals.length > 0 && (
+          <Section title="Most-traveled-with">
+            <ul className="grid gap-2">
+              {topMutuals.map((m, i) => (
+                <li key={m.id}>
+                  <Link
+                    href={`/user/${m.id}`}
+                    className="flex items-center justify-between gap-3 bg-card border border-line rounded-2xl p-3 hover:border-green transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-xs font-bold text-muted w-5 tabular-nums">
+                        #{i + 1}
+                      </span>
+                      <span className="text-ink font-semibold truncate">{m.name}</span>
+                    </div>
+                    <span className="text-xs text-muted whitespace-nowrap">
+                      {m.shared_trip_count} {m.shared_trip_count === 1 ? "trip" : "trips"} together
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            {mutuals.length > topMutuals.length && (
+              <p className="text-xs text-muted mt-3">
+                + {mutuals.length - topMutuals.length} more
+              </p>
+            )}
+            {mutuals[0]?.last_traveled_together_at && (
+              <p className="text-xs text-muted mt-2">
+                Last shared trip: {formatRelative(mutuals[0].last_traveled_together_at)}
+              </p>
+            )}
           </Section>
         )}
 
@@ -226,6 +293,18 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       </h2>
       {children}
     </section>
+  );
+}
+
+function BadgePill({ badge }: { badge: Badge }) {
+  return (
+    <span
+      title={badge.hint}
+      className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-gold/15 text-ink border border-gold/40 text-xs font-semibold"
+    >
+      <span aria-hidden>{badge.emoji}</span>
+      {badge.label}
+    </span>
   );
 }
 
