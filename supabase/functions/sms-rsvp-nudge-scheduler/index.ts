@@ -95,6 +95,9 @@ Deno.serve(async (req: Request) => {
   // ─── 1. Lazy-schedule pass (Phase A → Phase C migration glue) ────
   const lazyScheduled = await lazySchedule(admin, now);
 
+  // ─── 1b. Re-engagement detection pass ───────────────────────────
+  const reEngagementScheduled = await scheduleReEngagement(admin, now);
+
   // ─── 2. Drain queue ──────────────────────────────────────────────
   const { data: due, error: dueErr } = await admin
     .from('scheduled_reminders')
@@ -108,7 +111,7 @@ Deno.serve(async (req: Request) => {
   }
   const queue = (due ?? []) as ScheduledReminderRow[];
   if (queue.length === 0) {
-    return json({ ok: true, lazy_scheduled: lazyScheduled, scanned: 0, fired: 0, skipped: {} });
+    return json({ ok: true, lazy_scheduled: lazyScheduled, re_engagement_scheduled: reEngagementScheduled, scanned: 0, fired: 0, skipped: {} });
   }
 
   // ─── 3. Batch-load trips, respondents, settings ──────────────────
@@ -209,6 +212,7 @@ Deno.serve(async (req: Request) => {
   return json({
     ok: true,
     lazy_scheduled: lazyScheduled,
+    re_engagement_scheduled: reEngagementScheduled,
     scanned: queue.length,
     fired,
     skipped,
@@ -257,6 +261,120 @@ async function lazySchedule(admin: SupabaseClient, now: Date): Promise<number> {
     return 0;
   }
   return rows.length;
+}
+
+// ─── re-engagement detection (Phase C Step 7) ────────────────────
+
+/**
+ * Scan active trips for stall signals. For each stalled trip without
+ * a recent re_engagement reminder (sent or pending within the last
+ * 21 days), insert a row scheduled for now with recipient = the
+ * planner's self-respondent. The condition validator double-checks
+ * stall is still active at send time.
+ */
+async function scheduleReEngagement(admin: SupabaseClient, now: Date): Promise<number> {
+  // Pull active trips that have a start_date and aren't cancelled.
+  // Bound the scan: trips whose start_date is within +/- 60d of now
+  // (re-engagement is moot for trips far in the future or far past).
+  const lo = new Date(now.getTime() - 60 * 86_400_000).toISOString().slice(0, 10);
+  const hi = new Date(now.getTime() + 60 * 86_400_000).toISOString().slice(0, 10);
+
+  const { data: trips } = await admin
+    .from('trips')
+    .select('id, start_date')
+    .is('cancelled_at', null)
+    .not('start_date', 'is', null)
+    .gte('start_date', lo)
+    .lte('start_date', hi)
+    .limit(500);
+
+  if (!trips || trips.length === 0) return 0;
+
+  let scheduled = 0;
+  const twentyOneDaysAgo = new Date(now.getTime() - 21 * 86_400_000).toISOString();
+
+  for (const trip of trips) {
+    const stallSignal = await detectStallForTrip(admin, trip.id, trip.start_date as string, now);
+    if (!stallSignal) continue;
+
+    // Skip if a recent re_engagement row already exists for this trip.
+    const { data: recent } = await admin
+      .from('scheduled_reminders')
+      .select('id')
+      .eq('trip_id', trip.id)
+      .eq('message_type', 're_engagement')
+      .gte('created_at', twentyOneDaysAgo)
+      .limit(1);
+    if ((recent?.length ?? 0) > 0) continue;
+
+    // Find the planner's self-respondent row.
+    const { data: planner } = await admin
+      .from('respondents')
+      .select('id')
+      .eq('trip_id', trip.id)
+      .eq('is_planner', true)
+      .limit(1)
+      .maybeSingle();
+    if (!planner) continue;
+
+    const { error: insErr } = await admin.from('scheduled_reminders').insert({
+      trip_id: trip.id,
+      recipient_respondent_id: planner.id,
+      message_type: 're_engagement',
+      scheduled_for: now.toISOString(),
+      status: 'pending',
+    });
+    if (!insErr) scheduled++;
+  }
+  return scheduled;
+}
+
+/**
+ * Lightweight stall check — returns the first matching signal or
+ * null. Mirrors conditions.ts:getStallSignals but trimmed for the
+ * scanning pass (we don't need all signals, just at-least-one).
+ */
+async function detectStallForTrip(
+  admin: SupabaseClient,
+  tripId: string,
+  startDate: string,
+  now: Date,
+): Promise<string | null> {
+  const daysUntilStart = (new Date(startDate).getTime() - now.getTime()) / 86_400_000;
+
+  // Signal 1: 14d of feed silence AND start > 21d out.
+  if (daysUntilStart > 21) {
+    const cutoff = new Date(now.getTime() - 14 * 86_400_000).toISOString();
+    const { data } = await admin
+      .from('activity_feed_entries')
+      .select('id').eq('trip_id', tripId).gt('created_at', cutoff).limit(1);
+    if ((data?.length ?? 0) === 0) return 'feed_silent_14d';
+  }
+
+  // Signal 2: >50% going without lodging AND start < 30d.
+  if (daysUntilStart < 30 && daysUntilStart > 0) {
+    const { data: going } = await admin
+      .from('respondents')
+      .select('id').eq('trip_id', tripId).eq('rsvp_status', 'going');
+    const goingIds = (going ?? []).map((r) => r.id);
+    if (goingIds.length > 0) {
+      const { data: assigned } = await admin
+        .from('lodging_room_assignments')
+        .select('respondent_id').in('respondent_id', goingIds);
+      if ((assigned?.length ?? 0) / goingIds.length < 0.5) {
+        return 'majority_lodging_unassigned';
+      }
+    }
+  }
+
+  // Signal 3: no itinerary AND start < 21d.
+  if (daysUntilStart < 21 && daysUntilStart > 0) {
+    const { data: items } = await admin
+      .from('itinerary_blocks').select('id').eq('trip_id', tripId).limit(1);
+    if ((items?.length ?? 0) === 0) return 'no_itinerary';
+  }
+
+  return null;
 }
 
 // ─── body dispatch ────────────────────────────────────────────────

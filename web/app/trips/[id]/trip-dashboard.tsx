@@ -11,18 +11,20 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Trip, Respondent, ActivityFeedEntry, RsvpStatus } from "@shared/types";
+import type { StallSignal } from "@/lib/stall-detector";
 import { themeClass } from "@/lib/themes";
 import Roster from "./roster";
 import InviteModal from "./invite-modal";
 import BlastComposer from "./blast-composer";
 
 export default function TripDashboard({
-  trip, respondents: initialRespondents, activity, inviteUrl,
+  trip, respondents: initialRespondents, activity, inviteUrl, stallSignal,
 }: {
   trip: Trip;
   respondents: Respondent[];
   activity: ActivityFeedEntry[];
   inviteUrl: string;
+  stallSignal: StallSignal | null;
 }) {
   const router = useRouter();
   const [, startTrans] = useTransition();
@@ -132,6 +134,24 @@ export default function TripDashboard({
           <p className="text-sm">
             This trip was cancelled by the host. The activity feed stays visible, but no new RSVPs or actions are accepted.
           </p>
+        </div>
+      )}
+
+      {!cancelled && stallSignal && (
+        <div className="mb-6 bg-gold/10 border border-gold/40 text-ink rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold tracking-widest uppercase text-gold mb-1">
+              Heads up
+            </p>
+            <p className="text-sm font-semibold">{stallSignal.headline}</p>
+            <p className="text-sm text-muted">{stallSignal.detail}</p>
+          </div>
+          <button
+            onClick={() => setShowBlast(true)}
+            className="h-10 px-4 rounded-full bg-gold text-ink font-bold hover:bg-gold/80 text-sm whitespace-nowrap"
+          >
+            Send a nudge →
+          </button>
         </div>
       )}
 

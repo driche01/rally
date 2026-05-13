@@ -217,7 +217,6 @@ export default function ProfileCapture({
           input={airportInput}
           onInput={setAirportInput}
           onPick={(code) => { setAirport(code); setAirportInput(code); setTimeout(advance, 200); }}
-          onSkip={() => { setAirport(null); advance(); }}
         />
       )}
 
@@ -286,12 +285,11 @@ function VibeCard<T extends string>({
 }
 
 function AirportStep({
-  input, onInput, onPick, onSkip,
+  input, onInput, onPick,
 }: {
   input: string;
   onInput: (s: string) => void;
   onPick: (code: string) => void;
-  onSkip: () => void;
 }) {
   const matches = searchAirports(input);
   return (
@@ -301,7 +299,7 @@ function AirportStep({
         Home airport?
       </h2>
       <p className="text-muted mb-6">
-        We use it to suggest flight options, not for anything else.
+        We use it for flight suggestions and to time SMS to your timezone — not anything else.
       </p>
       <div className="grid gap-3">
         <input
@@ -332,13 +330,6 @@ function AirportStep({
             ))}
           </ul>
         )}
-        <button
-          type="button"
-          onClick={onSkip}
-          className="h-12 rounded-full bg-card text-muted border border-line hover:border-green hover:text-ink"
-        >
-          Skip for now
-        </button>
       </div>
     </div>
   );

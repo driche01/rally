@@ -10,6 +10,7 @@ import { notFound, redirect } from "next/navigation";
 import { requireAuthUid } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getSiteUrl } from "@/lib/site-url";
+import { detectStallForBanner } from "@/lib/stall-detector";
 import type { Trip, Respondent, ActivityFeedEntry } from "@shared/types";
 import TripDashboard from "./trip-dashboard";
 
@@ -54,12 +55,17 @@ export default async function TripOverviewPage({
   const baseUrl = await getSiteUrl();
   const inviteUrl = `${baseUrl}/invite/${trip.share_token}`;
 
+  const stallSignal = await detectStallForBanner(
+    svc, trip.id, trip.start_date, trip.cancelled_at,
+  );
+
   return (
     <TripDashboard
       trip={trip}
       respondents={respondents}
       activity={activity}
       inviteUrl={inviteUrl}
+      stallSignal={stallSignal}
     />
   );
 }
