@@ -39,6 +39,36 @@ export async function sendSms(
     return { sid: null, error: "missing_args" };
   }
 
+  // Per Phase C Q23: every outbound send checks users.opted_out.
+  // STOP/REJOIN handling in sms-inbound writes the flag; the send
+  // rail honors it. Failure here doesn't block the send — defaults
+  // to "not opted out" if lookup fails.
+  try {
+    const { data: u } = await admin
+      .from("users")
+      .select("opted_out")
+      .eq("phone", opts.to)
+      .maybeSingle();
+    if (u?.opted_out) {
+      // Log the suppression so we have an audit trail.
+      await admin.from("thread_messages").insert({
+        direction: "outbound",
+        trip_id: opts.tripId,
+        sender_phone: opts.to,
+        sender_role: opts.senderRole ?? "rally",
+        body: opts.body,
+        message_sid: null,
+        message_type: opts.messageType,
+        delivery_status: "suppressed_opted_out",
+        delivery_status_at: new Date().toISOString(),
+        error_code: "opted_out",
+      });
+      return { sid: null, error: "opted_out" };
+    }
+  } catch (e) {
+    console.warn("[twilio] opt-out lookup failed (sending anyway):", e);
+  }
+
   const auth = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
   const formBody = new URLSearchParams({
     To:   opts.to,

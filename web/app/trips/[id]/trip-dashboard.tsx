@@ -14,6 +14,7 @@ import type { Trip, Respondent, ActivityFeedEntry, RsvpStatus } from "@shared/ty
 import { themeClass } from "@/lib/themes";
 import Roster from "./roster";
 import InviteModal from "./invite-modal";
+import BlastComposer from "./blast-composer";
 
 export default function TripDashboard({
   trip, respondents: initialRespondents, activity, inviteUrl,
@@ -28,6 +29,7 @@ export default function TripDashboard({
   const [respondents, setRespondents] = useState<Respondent[]>(initialRespondents);
   const [activityFeed, setActivityFeed] = useState<ActivityFeedEntry[]>(activity);
   const [showInvite, setShowInvite] = useState(false);
+  const [showBlast, setShowBlast]   = useState(false);
   const [copied, setCopied] = useState(false);
   const [cloning, setCloning] = useState(false);
 
@@ -120,6 +122,12 @@ export default function TripDashboard({
           {copied ? "Copied ✓" : "Copy share link"}
         </button>
         <button
+          onClick={() => setShowBlast(true)}
+          className={`h-12 px-5 rounded-full ${t.surface} text-ink border ${t.surfaceBorder} hover:border-green`}
+        >
+          Send blast →
+        </button>
+        <button
           onClick={clone}
           disabled={cloning}
           className={`h-12 px-5 rounded-full ${t.surface} text-ink border ${t.surfaceBorder} hover:border-green disabled:opacity-50`}
@@ -159,6 +167,15 @@ export default function TripDashboard({
           shareLink={inviteUrl}
           onClose={() => setShowInvite(false)}
           onSent={handleInvitationsSent}
+        />
+      )}
+
+      {showBlast && (
+        <BlastComposer
+          tripId={trip.id}
+          tripName={trip.name}
+          respondents={respondents}
+          onClose={() => setShowBlast(false)}
         />
       )}
     </div>
