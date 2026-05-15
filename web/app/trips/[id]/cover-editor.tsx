@@ -5,26 +5,31 @@
  * planner taps the cover image. Three modes: upload an image,
  * generate one via Gemini from a prompt, or paste a URL directly.
  *
- * Reuses the existing /api/uploads/cover (upload) +
- * /api/uploads/generate-cover (Gemini) endpoints. On save, the
- * caller is responsible for PATCHing the trip's cover_image_url.
+ * Generate + Upload run in the background via the GenerationProvider
+ * — the modal closes immediately on click and the hero shows a
+ * loading placeholder until the new image is ready. URL paste stays
+ * synchronous because the round-trip is fast (just a PATCH).
  */
 
 import { useRef, useState } from "react";
+import { useGeneration } from "@/lib/generation/provider";
 
 type Mode = "upload" | "generate" | "url";
 
 export default function CoverEditor({
+  tripId,
   currentUrl,
   tripName,
   onClose,
   onSave,
 }: {
+  tripId: string;
   currentUrl: string | null;
   tripName: string;
   onClose: () => void;
   onSave: (newUrl: string | null) => Promise<void>;
 }) {
+  const generation = useGeneration();
   const [mode, setMode] = useState<Mode>("upload");
   const [busy, setBusy] = useState(false);
   const [err, setErr]   = useState<string | null>(null);
@@ -32,7 +37,7 @@ export default function CoverEditor({
   const [urlInput, setUrlInput] = useState(currentUrl ?? "");
   const fileRef = useRef<HTMLInputElement>(null);
 
-  async function onUpload(file: File) {
+  function onUpload(file: File) {
     setErr(null);
     if (!file.type.startsWith("image/")) {
       setErr("That doesn't look like an image.");
@@ -42,47 +47,55 @@ export default function CoverEditor({
       setErr("Max 5MB.");
       return;
     }
-    setBusy(true);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch("/api/uploads/cover", { method: "POST", body: fd });
-      const body = await res.json();
-      if (!res.ok || !body.ok) {
-        setErr(body?.error?.code ?? "Upload failed");
-        return;
-      }
-      await onSave(body.data.url);
-      onClose();
-    } catch {
-      setErr("Couldn't reach Rally. Try again.");
-    } finally {
-      setBusy(false);
-    }
+    // Background: kick off upload → PATCH chain through the provider,
+    // close the modal immediately so the user can keep planning.
+    // The hero shows a loading placeholder until the new cover lands.
+    generation.start({
+      kind: "cover-image",
+      label: "Uploading cover…",
+      fetcher: async () => {
+        const fd = new FormData();
+        fd.append("file", file);
+        const r = await fetch("/api/uploads/cover", { method: "POST", body: fd });
+        if (!r.ok) return r;
+        const body = await r.json();
+        const url = body?.data?.url as string | undefined;
+        if (!url) return new Response(JSON.stringify({ ok: false, error: { code: "no_url" } }), { status: 500 });
+        return fetch(`/api/trips/${tripId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cover_image_url: url }),
+        });
+      },
+    });
+    onClose();
   }
 
-  async function onGenerate() {
+  function onGenerate() {
     setErr(null);
     if (!prompt.trim()) { setErr("Type a prompt first."); return; }
-    setBusy(true);
-    try {
-      const res = await fetch("/api/uploads/generate-cover", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: prompt.trim() }),
-      });
-      const body = await res.json();
-      if (!res.ok || !body.ok) {
-        setErr(body?.error?.code ?? "Generate failed");
-        return;
-      }
-      await onSave(body.data.url);
-      onClose();
-    } catch {
-      setErr("Couldn't reach Rally. Try again.");
-    } finally {
-      setBusy(false);
-    }
+    const p = prompt.trim();
+    generation.start({
+      kind: "cover-image",
+      label: "Generating cover…",
+      fetcher: async () => {
+        const r = await fetch("/api/uploads/generate-cover", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: p }),
+        });
+        if (!r.ok) return r;
+        const body = await r.json();
+        const url = body?.data?.url as string | undefined;
+        if (!url) return new Response(JSON.stringify({ ok: false, error: { code: "no_url" } }), { status: 500 });
+        return fetch(`/api/trips/${tripId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cover_image_url: url }),
+        });
+      },
+    });
+    onClose();
   }
 
   async function onSaveUrl() {
@@ -187,11 +200,14 @@ export default function CoverEditor({
               />
               <button
                 onClick={onGenerate}
-                disabled={busy || !prompt.trim()}
+                disabled={!prompt.trim()}
                 className="h-11 rounded-full bg-green text-cream font-bold hover:bg-green-2 disabled:opacity-50"
               >
-                {busy ? "Generating…" : "Generate cover →"}
+                Generate cover →
               </button>
+              <p className="text-xs text-muted">
+                Generation runs in the background. You can keep planning while it cooks.
+              </p>
             </div>
           )}
 

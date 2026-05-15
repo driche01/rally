@@ -16,6 +16,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { themeClass } from "@/lib/themes";
 import { EditableText } from "@/lib/editable";
+import { useGeneration } from "@/lib/generation/provider";
+import TravelLoadingDance from "@/lib/generation/loading-art";
 import type { Trip } from "@shared/types";
 import CoverEditor from "./cover-editor";
 
@@ -42,6 +44,8 @@ export default function EditableHero({
   const router = useRouter();
   const [trip, setTrip] = useState<EditableTripFields>(initial);
   const [coverOpen, setCoverOpen] = useState(false);
+  const generation = useGeneration();
+  const coverBusy = generation.isRunning("cover-image");
   const t = themeClass(trip.theme);
 
   async function patch(fields: Partial<EditableTripFields>) {
@@ -61,7 +65,33 @@ export default function EditableHero({
   return (
     <>
       {/* ─── Hero (cover or theme gradient) ─────────────── */}
-      {trip.cover_image_url ? (
+      {coverBusy ? (
+        // Loading placeholder while a cover-image job is in flight.
+        // The old cover stays visible underneath at low opacity so
+        // there's no jarring whiteout while the new one renders.
+        <div
+          className={
+            "block aspect-[16/10] w-full rounded-[28px] mb-6 relative overflow-hidden " +
+            (trip.cover_image_url ? "bg-cover bg-center" : t.cover)
+          }
+          style={trip.cover_image_url ? { backgroundImage: `url(${escapeCss(trip.cover_image_url)})` } : undefined}
+          aria-label="Generating cover image"
+          role="status"
+        >
+          {/* Frosted darkening overlay */}
+          <div className="absolute inset-0 bg-ink/60 backdrop-blur-sm" aria-hidden />
+          {/* Centered dance + caption */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-cream">
+            <div className="scale-150">
+              <TravelLoadingDance />
+            </div>
+            <p className="text-sm font-semibold tracking-wide">Cooking up your cover…</p>
+            <p className="text-xs opacity-80 text-center max-w-[80%]">
+              Keep planning — we&rsquo;ll drop it in when it&rsquo;s ready.
+            </p>
+          </div>
+        </div>
+      ) : trip.cover_image_url ? (
         <button
           type="button"
           onClick={() => canEdit && setCoverOpen(true)}
@@ -160,6 +190,7 @@ export default function EditableHero({
 
       {coverOpen && (
         <CoverEditor
+          tripId={tripId}
           currentUrl={trip.cover_image_url}
           tripName={trip.name}
           onClose={() => setCoverOpen(false)}
