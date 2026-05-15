@@ -80,115 +80,133 @@ export default async function InvitePage({ params }: PageProps) {
 
   return (
     <main className={`min-h-dvh ${t.root}`}>
-      <div className="max-w-2xl mx-auto px-5 sm:px-8 py-6">
+      <div className="max-w-6xl mx-auto px-5 sm:px-8 py-6">
         <header className="mb-6">
           <RallyLogo size="md" />
         </header>
-        {/* ─── Cover ──────────────────────────────────── */}
-        {trip.cover_image_url ? (
-          <div
-            className={`aspect-square w-full rounded-[28px] mb-8 bg-cover bg-center ${t.cover}`}
-            style={{ backgroundImage: `url(${escapeCss(trip.cover_image_url)})` }}
-            aria-hidden="true"
-          />
-        ) : (
-          <div className={`aspect-square w-full rounded-[28px] mb-8 ${t.cover}`}>
-            <div className="h-full flex items-center justify-center px-6">
-              <span className={`text-3xl sm:text-4xl text-center ${t.coverInk}`}>
-                {trip.name}
-              </span>
-            </div>
+
+        {/* Same 2-col layout as the planner trip page: cover sticks
+            on the left with the primary CTA (RSVP buttons or, if
+            cancelled, the cancellation banner) directly underneath;
+            the right column holds trip details + guest list +
+            activity feed and scrolls. Below lg, stacks single-
+            column with cover on top.
+
+            Sticky-center pattern matches /trips/[id]/layout.tsx —
+            `lg:sticky lg:top-0 lg:h-[100dvh] lg:flex lg:flex-col
+            lg:justify-center` so the cover is always visually
+            centered in the viewport regardless of how much content
+            sits in the right column. */}
+        <div className="lg:grid lg:grid-cols-[5fr_7fr] lg:gap-10">
+
+          {/* ── Left column: cover + RSVP / cancellation slot ── */}
+          <div className="lg:sticky lg:top-0 lg:h-[100dvh] lg:flex lg:flex-col lg:justify-center lg:gap-4 mb-6 lg:mb-0">
+            {trip.cover_image_url ? (
+              <div
+                className={`block aspect-square w-full rounded-[28px] bg-cover bg-center ${t.cover}`}
+                style={{ backgroundImage: `url(${escapeCss(trip.cover_image_url)})` }}
+                aria-hidden="true"
+              />
+            ) : (
+              <div className={`block aspect-square w-full rounded-[28px] ${t.cover}`}>
+                <div className="h-full flex items-center justify-center px-6">
+                  <span className={`text-3xl sm:text-4xl text-center ${t.coverInk}`}>
+                    {trip.name}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {trip.cancelled_at ? (
+              <div className="bg-orange/10 border border-orange/40 rounded-2xl p-4">
+                <p className="text-xs font-bold tracking-widest uppercase text-orange mb-1">
+                  Cancelled
+                </p>
+                <p className={`text-sm ${t.body}`}>
+                  This trip was cancelled by the host. The feed is still live, but RSVPs and new comments are closed.
+                </p>
+              </div>
+            ) : (
+              <RsvpButtons tripId={trip.id} shareToken={trip.share_token} />
+            )}
           </div>
-        )}
 
-        {/* ─── Header ─────────────────────────────────── */}
-        <p className={`text-[11px] mb-3 ${t.eyebrow}`}>
-          {t.label} · You&apos;re invited
-        </p>
-        <h1 className={`text-4xl sm:text-5xl leading-[1.05] mb-3 ${t.display}`}>
-          {trip.name}
-        </h1>
-        {trip.destination && (
-          <p className={`text-lg mb-1 ${t.body}`}>{trip.destination}</p>
-        )}
-        {(trip.start_date || trip.end_date) && (
-          <p className={`mb-6 ${t.meta}`}>
-            {formatDateRange(trip.start_date, trip.end_date)}
-          </p>
-        )}
-
-        {/* ─── Hosted by ──────────────────────────────── */}
-        <div className="flex items-center gap-3 mb-8">
-          {plannerAvatar ? (
-            <img
-              src={plannerAvatar}
-              alt=""
-              className="h-10 w-10 rounded-full object-cover"
-            />
-          ) : (
-            <div className={`h-10 w-10 rounded-full flex items-center justify-center font-bold ${t.accent}`}>
-              {plannerName.charAt(0).toUpperCase()}
-            </div>
-          )}
+          {/* ── Right column: trip details + crew + activity ── */}
           <div>
-            <p className={`text-xs uppercase tracking-widest font-semibold ${t.meta}`}>
-              Hosted by
+            <p className={`text-[11px] mb-3 ${t.eyebrow}`}>
+              {t.label} · You&apos;re invited
             </p>
-            <p className={`font-semibold ${t.body}`}>{plannerName}</p>
+            <h1 className={`text-4xl sm:text-5xl leading-[1.05] mb-3 ${t.display}`}>
+              {trip.name}
+            </h1>
+            {trip.destination && (
+              <p className={`text-lg mb-1 ${t.body}`}>{trip.destination}</p>
+            )}
+            {(trip.start_date || trip.end_date) && (
+              <p className={`mb-6 ${t.meta}`}>
+                {formatDateRange(trip.start_date, trip.end_date)}
+              </p>
+            )}
+
+            {/* Hosted by */}
+            <div className="flex items-center gap-3 mb-8">
+              {plannerAvatar ? (
+                <img
+                  src={plannerAvatar}
+                  alt=""
+                  className="h-10 w-10 rounded-full object-cover"
+                />
+              ) : (
+                <div className={`h-10 w-10 rounded-full flex items-center justify-center font-bold ${t.accent}`}>
+                  {plannerName.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div>
+                <p className={`text-xs uppercase tracking-widest font-semibold ${t.meta}`}>
+                  Hosted by
+                </p>
+                <p className={`font-semibold ${t.body}`}>{plannerName}</p>
+              </div>
+            </div>
+
+            {/* Description */}
+            {trip.description && (
+              <p className={`mb-8 max-w-prose whitespace-pre-line leading-relaxed ${t.body}`}>
+                {trip.description}
+              </p>
+            )}
+
+            {/* Cost-per-person estimate */}
+            {(trip.budget_min != null || trip.budget_max != null) && (
+              <div className={`${t.surface} border ${t.surfaceBorder} rounded-[18px] p-4 mb-8`}>
+                <p className={`text-xs uppercase tracking-widest font-semibold mb-1 ${t.meta}`}>
+                  Ballpark per person
+                </p>
+                <p className={`font-semibold text-lg ${t.body}`}>
+                  {formatBudget(trip.budget_min, trip.budget_max)}
+                </p>
+                <p className={`text-sm ${t.meta}`}>
+                  Includes everything — flights, lodging, food, fun.
+                </p>
+              </div>
+            )}
+
+            {/* Guest list */}
+            <section className="mt-12">
+              <h2 className={`text-2xl mb-4 ${t.display}`}>
+                The crew · {respondents.length}
+              </h2>
+              <GuestRoster buckets={buckets} t={t} />
+            </section>
+
+            {/* Activity feed (composer + realtime) */}
+            <ActivitySection
+              tripId={trip.id}
+              shareToken={trip.share_token}
+              initial={activity}
+            />
           </div>
         </div>
-
-        {/* ─── Description ───────────────────────────── */}
-        {trip.description && (
-          <p className={`mb-8 max-w-prose whitespace-pre-line leading-relaxed ${t.body}`}>
-            {trip.description}
-          </p>
-        )}
-
-        {/* ─── Cost-per-person estimate ──────────────── */}
-        {(trip.budget_min != null || trip.budget_max != null) && (
-          <div className={`${t.surface} border ${t.surfaceBorder} rounded-[18px] p-4 mb-8`}>
-            <p className={`text-xs uppercase tracking-widest font-semibold mb-1 ${t.meta}`}>
-              Ballpark per person
-            </p>
-            <p className={`font-semibold text-lg ${t.body}`}>
-              {formatBudget(trip.budget_min, trip.budget_max)}
-            </p>
-            <p className={`text-sm ${t.meta}`}>
-              Includes everything — flights, lodging, food, fun.
-            </p>
-          </div>
-        )}
-
-        {/* ─── Cancelled banner (Phase C) ────────────── */}
-        {trip.cancelled_at ? (
-          <div className="my-6 bg-orange/10 border border-orange/40 rounded-2xl p-4">
-            <p className="text-xs font-bold tracking-widest uppercase text-orange mb-1">
-              Cancelled
-            </p>
-            <p className={`text-sm ${t.body}`}>
-              This trip was cancelled by the host. The feed below is still live, but RSVPs and new comments are closed.
-            </p>
-          </div>
-        ) : (
-          /* ─── RSVP buttons ──────────────────────────── */
-          <RsvpButtons tripId={trip.id} shareToken={trip.share_token} />
-        )}
-
-        {/* ─── Guest list ─────────────────────────────── */}
-        <section className="mt-12">
-          <h2 className={`text-2xl mb-4 ${t.display}`}>
-            The crew · {respondents.length}
-          </h2>
-          <GuestRoster buckets={buckets} t={t} />
-        </section>
-
-        {/* ─── Activity feed (composer + realtime) ────── */}
-        <ActivitySection
-          tripId={trip.id}
-          shareToken={trip.share_token}
-          initial={activity}
-        />
       </div>
     </main>
   );
