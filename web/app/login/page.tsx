@@ -41,5 +41,5 @@ async function LoginFormWrapper({
   searchParams: Promise<{ next?: string; phone?: string }>;
 }) {
   const sp = await searchParams;
-  return <LoginForm next={sp.next ?? "/trips/new"} initialPhone={sp.phone ?? ""} />;
+  return <LoginForm next={sp.next ?? "/trips"} initialPhone={sp.phone ?? ""} />;
 }

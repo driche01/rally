@@ -1,10 +1,20 @@
-// Phase A landing. Minimal scaffold until Step 3 (trip creation flow).
-// The marketing landing page that currently lives on rallysurveys.netlify.app
-// will eventually move here, but that's outside Phase A scope.
+// Phase A landing.
+//
+// If you're logged in, this is just a redirect to /trips — the
+// real dashboard. Anon visitors see the marketing scaffold below
+// (Phase A version; the full landing comes from the netlify site
+// later).
 
+import { redirect } from "next/navigation";
+import Link from "next/link";
 import AppHeader from "@/lib/brand/app-header";
+import { createClient } from "@/lib/supabase/server";
 
-export default function Home() {
+export default async function Home() {
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getUser();
+  if (data?.user) redirect("/trips");
+
   return (
     <main className="min-h-dvh flex flex-col p-6">
       <AppHeader />
@@ -14,12 +24,17 @@ export default function Home() {
           <h1 className="font-display text-4xl leading-tight text-ink mb-3">
             Group trips with friends, planned together.
           </h1>
-          <p className="text-muted">
-            This is the Phase A scaffold. The full home page lands later in the
-            build. For now, dev routes live under{" "}
-            <code className="font-mono text-sm">/api</code> and{" "}
-            <code className="font-mono text-sm">/invite/[token]</code>.
+          <p className="text-muted mb-6">
+            Rally handles invites, RSVPs, lodging, and the itinerary
+            so the trip actually happens. Built for the group chat
+            that can&apos;t agree on a Saturday.
           </p>
+          <Link
+            href="/login"
+            className="inline-flex h-12 px-6 items-center rounded-full bg-green text-cream font-bold hover:bg-green-2 active:scale-95 transition-transform"
+          >
+            Sign in →
+          </Link>
         </div>
       </div>
     </main>
