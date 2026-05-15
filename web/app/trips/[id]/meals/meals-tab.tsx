@@ -8,6 +8,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { themeClass } from "@/lib/themes";
+import { useGeneration } from "@/lib/generation/provider";
 import type { Trip } from "@shared/types";
 
 export interface GoingMember { id: string; name: string; }
@@ -55,28 +56,26 @@ export default function MealsTab({
   const t = themeClass(tripTheme);
   const hasMeals = meals.length > 0;
 
-  async function generate(regenerate: boolean) {
-    setBusy(true);
+  const generation = useGeneration();
+  const generating = generation.isRunning("meals");
+
+  function generate(regenerate: boolean) {
     setErr(null);
     setAiNote(null);
-    try {
-      const res = await fetch(`/api/trips/${tripId}/meals/generate`, {
+    generation.start({
+      kind: "meals",
+      label: regenerate ? "Regenerating meal plan…" : "Generating meal plan…",
+      fetcher: () => fetch(`/api/trips/${tripId}/meals/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ regenerate }),
-      });
-      const body = await res.json();
-      if (!res.ok || !body.ok) {
-        setErr(body?.error?.message || body?.error?.code || `Generation failed (${res.status})`);
-        return;
-      }
-      setAiNote(body.data.note ?? null);
-      startTrans(() => router.refresh());
-    } catch {
-      setErr("Couldn't reach Rally. Try again.");
-    } finally {
-      setBusy(false);
-    }
+      }),
+      onDone: (data) => {
+        const note = (data as { data?: { note?: string } } | null)?.data?.note ?? null;
+        setAiNote(note);
+        startTrans(() => router.refresh());
+      },
+    });
   }
 
   async function vote(mealId: string, choice: "yes" | "no" | "maybe") {
@@ -142,19 +141,19 @@ export default function MealsTab({
             {hasMeals && (
               <button
                 onClick={() => generate(true)}
-                disabled={busy}
+                disabled={generating}
                 className={`h-10 px-4 rounded-full ${t.surface} text-ink border ${t.surfaceBorder} hover:border-green text-sm disabled:opacity-50`}
               >
-                {busy ? "Regenerating…" : "Regenerate"}
+                {generating ? "Regenerating…" : "Regenerate"}
               </button>
             )}
             {!hasMeals && (
               <button
                 onClick={() => generate(false)}
-                disabled={busy || !startDate || !endDate}
+                disabled={generating || !startDate || !endDate}
                 className="h-11 px-5 rounded-full bg-green text-cream font-bold hover:bg-green-2 text-sm disabled:opacity-50"
               >
-                {busy ? "Generating…" : "Generate meal plan →"}
+                {generating ? "Generating…" : "Generate meal plan →"}
               </button>
             )}
           </div>

@@ -9,6 +9,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { themeClass } from "@/lib/themes";
 import { lodgingSearchSet, venmoChargeUrl, lodgingShareNote } from "@/lib/deep-links";
+import { useGeneration } from "@/lib/generation/provider";
 import type { Trip } from "@shared/types";
 
 export interface GoingMember {
@@ -87,28 +88,26 @@ export default function LodgingTab({
   });
   const canSearchMore = Boolean(destination && startDate && endDate);
 
-  async function suggest(regenerate: boolean) {
-    setBusy(true);
+  const generation = useGeneration();
+  const generating = generation.isRunning("lodging");
+
+  function suggest(regenerate: boolean) {
     setErr(null);
     setAiNote(null);
-    try {
-      const res = await fetch(`/api/trips/${tripId}/lodging/suggest`, {
+    generation.start({
+      kind: "lodging",
+      label: regenerate ? "Finding more lodging…" : "Finding lodging…",
+      fetcher: () => fetch(`/api/trips/${tripId}/lodging/suggest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ regenerate }),
-      });
-      const body = await res.json();
-      if (!res.ok || !body.ok) {
-        setErr(body?.error?.message || body?.error?.code || `Generation failed (${res.status})`);
-        return;
-      }
-      setAiNote(body.data.note ?? null);
-      startTrans(() => router.refresh());
-    } catch {
-      setErr("Couldn't reach Rally. Try again.");
-    } finally {
-      setBusy(false);
-    }
+      }),
+      onDone: (data) => {
+        const note = (data as { data?: { note?: string } } | null)?.data?.note ?? null;
+        setAiNote(note);
+        startTrans(() => router.refresh());
+      },
+    });
   }
 
   async function vote(optionId: string, choice: "yes" | "no" | "maybe") {
@@ -212,19 +211,19 @@ export default function LodgingTab({
             {hasOptions && (
               <button
                 onClick={() => suggest(true)}
-                disabled={busy}
+                disabled={generating}
                 className={`h-10 px-4 rounded-full ${t.surface} text-ink border ${t.surfaceBorder} hover:border-green text-sm disabled:opacity-50`}
               >
-                {busy ? "Regenerating…" : "Regenerate"}
+                {generating ? "Finding more…" : "Regenerate"}
               </button>
             )}
             {!hasOptions && (
               <button
                 onClick={() => suggest(false)}
-                disabled={busy || !destination || !startDate || !endDate}
+                disabled={generating || !destination || !startDate || !endDate}
                 className="h-11 px-5 rounded-full bg-green text-cream font-bold hover:bg-green-2 text-sm disabled:opacity-50"
               >
-                {busy ? "Finding…" : "Find lodging →"}
+                {generating ? "Finding…" : "Find lodging →"}
               </button>
             )}
           </div>

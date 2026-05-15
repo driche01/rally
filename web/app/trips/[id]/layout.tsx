@@ -14,6 +14,7 @@ import { themeClass } from "@/lib/themes";
 import type { Trip } from "@shared/types";
 import TabNav from "./tabs";
 import EditableHero from "./editable-hero";
+import GenerationProvider from "@/lib/generation/provider";
 
 export default async function TripLayout({
   children,
@@ -55,26 +56,28 @@ export default async function TripLayout({
 
   return (
     <main className={`min-h-dvh ${t.root}`}>
-      <div className="max-w-3xl mx-auto px-6 pt-10">
-        <EditableHero
-          tripId={trip.id}
-          canEdit={canEdit}
-          initial={{
-            name:             trip.name,
-            destination:      trip.destination,
-            start_date:       trip.start_date,
-            end_date:         trip.end_date,
-            book_by_date:     trip.book_by_date,
-            cover_image_url:  trip.cover_image_url,
-            theme:            trip.theme,
-            status:           trip.status,
-          }}
-        />
+      <GenerationProvider>
+        <div className="max-w-3xl mx-auto px-6 pt-10">
+          <EditableHero
+            tripId={trip.id}
+            canEdit={canEdit}
+            initial={{
+              name:             trip.name,
+              destination:      trip.destination,
+              start_date:       trip.start_date,
+              end_date:         trip.end_date,
+              book_by_date:     trip.book_by_date,
+              cover_image_url:  trip.cover_image_url,
+              theme:            trip.theme,
+              status:           trip.status,
+            }}
+          />
 
-        <TabNav tripId={trip.id} />
+          <TabNav tripId={trip.id} />
 
-        <div className="pb-12">{children}</div>
-      </div>
+          <div className="pb-12">{children}</div>
+        </div>
+      </GenerationProvider>
     </main>
   );
 }

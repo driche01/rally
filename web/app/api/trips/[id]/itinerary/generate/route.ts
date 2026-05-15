@@ -120,14 +120,33 @@ export async function POST(
   }
 
   // 6. Insert items. Validate dates fall in range; clamp times.
+  // Claude sometimes hallucinates the same item twice (e.g.,
+  // "Dinner at Ahwahnee" + "Dinner at The Ahwahnee Dining Room"
+  // for the same evening). Dedupe within the response before we
+  // persist, keeping the first occurrence.
   const startTs = new Date(trip.start_date + "T00:00:00").getTime();
   const endTs   = new Date(trip.end_date   + "T23:59:59").getTime();
 
+  const seenKeys = new Set<string>();
+  const seenSig  = new Set<string>();
   const rows = items
     .filter((it) => {
       if (!it.title?.trim() || !it.day_date) return false;
       const ts = new Date(it.day_date + "T00:00:00").getTime();
       return ts >= startTs && ts <= endTs;
+    })
+    .filter((it) => {
+      // Hard dedupe: same day + same start time + same normalized title.
+      const hardKey = `${it.day_date}|${cleanTime(it.start_time) ?? ""}|${normalizeTitle(it.title)}`;
+      if (seenKeys.has(hardKey)) return false;
+      seenKeys.add(hardKey);
+      // Soft dedupe: same day + same start time + similar location-or-title
+      // shingles. Catches "Dinner at Ahwahnee" vs "Dinner at The Ahwahnee
+      // Dining Room" at 6:30 PM.
+      const softSig = `${it.day_date}|${cleanTime(it.start_time) ?? ""}|${normalizedSignature(it.title, it.location)}`;
+      if (seenSig.has(softSig)) return false;
+      seenSig.add(softSig);
+      return true;
     })
     .map((it, idx) => ({
       trip_id,
@@ -281,6 +300,33 @@ function enumerateDays(start: string, end: string): string[] {
 function normalizeType(t: string): string {
   const allowed = new Set(["activity","meal","free_time","lodging","transit","other"]);
   return allowed.has(t) ? t : "other";
+}
+
+/**
+ * Lower, strip leading articles, strip non-alphanumeric, collapse
+ * whitespace. Used for the hard-dedupe key.
+ */
+function normalizeTitle(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/\b(the|a|an)\b/g, " ")
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Bag-of-shingle signature for soft dedupe — catches near-duplicates
+ * where Claude paraphrases the same activity ("Dinner at Ahwahnee" vs
+ * "Dinner at The Ahwahnee Dining Room"). Returns a sorted, distinct
+ * set of length-3 word shingles from the title + location.
+ */
+function normalizedSignature(title: string, location: string | null | undefined): string {
+  const words = normalizeTitle(`${title} ${location ?? ""}`).split(" ").filter(Boolean);
+  if (words.length === 0) return "";
+  // Distinct-ordered tokens — order doesn't matter for the signature.
+  const distinct = Array.from(new Set(words)).sort();
+  return distinct.join("|");
 }
 
 function cleanTime(s?: string): string | null {

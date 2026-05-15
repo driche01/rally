@@ -19,6 +19,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { themeClass } from "@/lib/themes";
+import { useGeneration } from "@/lib/generation/provider";
 import type { Trip } from "@shared/types";
 
 export interface ItineraryItemWithVotes {
@@ -72,35 +73,33 @@ export default function ItineraryTab({
   const router = useRouter();
   const [items, setItems] = useState<ItineraryItemWithVotes[]>(initialItems);
   const [busy, setBusy] = useState(false);
+  // `busy` covers vote optimistic state. `generating` reflects the
+  // background itinerary-generation job via the GenerationProvider.
   const [err, setErr] = useState<string | null>(null);
   const [aiNote, setAiNote] = useState<string | null>(null);
   const [, startTrans] = useTransition();
+  const generation = useGeneration();
+  const generating = generation.isRunning("itinerary");
 
   const t = themeClass(tripTheme);
 
-  async function generate(regenerate: boolean) {
-    setBusy(true);
+  function generate(regenerate: boolean) {
     setErr(null);
     setAiNote(null);
-    try {
-      const res = await fetch(`/api/trips/${tripId}/itinerary/generate`, {
+    generation.start({
+      kind: "itinerary",
+      label: regenerate ? "Regenerating itinerary…" : "Generating itinerary…",
+      fetcher: () => fetch(`/api/trips/${tripId}/itinerary/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ regenerate }),
-      });
-      const body = await res.json();
-      if (!res.ok || !body.ok) {
-        setErr(body?.error?.message || body?.error?.code || `Generation failed (${res.status})`);
-        return;
-      }
-      setAiNote(body.data.note ?? null);
-      // Refresh server data so the page picks up vote rows + ordering.
-      startTrans(() => { router.refresh(); });
-    } catch {
-      setErr("Couldn't reach Rally. Try again.");
-    } finally {
-      setBusy(false);
-    }
+      }),
+      onDone: (data) => {
+        const note = (data as { data?: { note?: string } } | null)?.data?.note ?? null;
+        setAiNote(note);
+        startTrans(() => router.refresh());
+      },
+    });
   }
 
   async function vote(itemId: string, choice: "yes" | "no" | "maybe") {
@@ -155,19 +154,19 @@ export default function ItineraryTab({
             {hasItems && (
               <button
                 onClick={() => generate(true)}
-                disabled={busy}
+                disabled={generating}
                 className={`h-10 px-4 rounded-full ${t.surface} text-ink border ${t.surfaceBorder} hover:border-green text-sm disabled:opacity-50`}
               >
-                {busy ? "Regenerating…" : "Regenerate"}
+                {generating ? "Regenerating…" : "Regenerate"}
               </button>
             )}
             {!hasItems && (
               <button
                 onClick={() => generate(false)}
-                disabled={busy || !startDate || !endDate}
+                disabled={generating || !startDate || !endDate}
                 className="h-11 px-5 rounded-full bg-green text-cream font-bold hover:bg-green-2 text-sm disabled:opacity-50"
               >
-                {busy ? "Generating…" : "Generate itinerary →"}
+                {generating ? "Generating…" : "Generate itinerary →"}
               </button>
             )}
           </div>
