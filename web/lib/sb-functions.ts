@@ -20,13 +20,15 @@ function publishableKey(): string {
   return k;
 }
 
-async function call<T>(name: string, body: unknown): Promise<T> {
+async function call<T>(name: string, body: unknown, jwt?: string): Promise<T> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    apikey: publishableKey(),
+  };
+  if (jwt) headers.Authorization = `Bearer ${jwt}`;
   const res = await fetch(endpoint(name), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: publishableKey(),
-    },
+    headers,
     body: JSON.stringify(body),
   });
   // We return both 2xx and 4xx as JSON — the edge functions encode
@@ -57,4 +59,35 @@ export function requestPhoneOtp(phone: string) {
 
 export function verifyPhoneOtp(phone: string, code: string) {
   return call<OtpVerifyResult>("verify-phone-login-otp", { phone, code });
+}
+
+// ─── Authenticated edge functions (require the user JWT) ──────────
+
+export interface PhoneChangeRequestResult {
+  ok: boolean;
+  sent?: boolean;
+  reason?: string;
+  error?: string;
+}
+export interface PhoneChangeVerifyResult {
+  ok: boolean;
+  reason?: string;
+  error?: string;
+}
+export interface DeleteAccountResult {
+  ok: boolean;
+  reason?: string;
+  error?: string;
+}
+
+export function requestPhoneChangeOtp(phone: string, jwt: string) {
+  return call<PhoneChangeRequestResult>("request-phone-change-otp", { phone }, jwt);
+}
+
+export function verifyPhoneChangeOtp(phone: string, code: string, jwt: string) {
+  return call<PhoneChangeVerifyResult>("verify-phone-change-otp", { phone, code }, jwt);
+}
+
+export function deleteAccount(jwt: string) {
+  return call<DeleteAccountResult>("delete-account", {}, jwt);
 }

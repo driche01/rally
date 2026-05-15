@@ -23,6 +23,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import RallyLogo from "./logo";
+import AccountMenu from "./account-menu";
 
 interface AppHeaderProps {
   /** Optional className for the outer <header>. */
@@ -102,27 +103,11 @@ export default async function AppHeader({
                 + New trip
               </Link>
             )}
-            <Link
-              href={`/user/${profileId}`}
-              aria-label="Your account"
-              className="flex items-center gap-2 h-9 pl-1 pr-3 rounded-full bg-card border border-line hover:border-green text-sm text-ink active:scale-95 transition-transform"
-            >
-              {avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={avatarUrl}
-                  alt=""
-                  className="h-7 w-7 rounded-full object-cover"
-                />
-              ) : (
-                <span className="h-7 w-7 rounded-full bg-green-soft text-green font-bold text-xs flex items-center justify-center">
-                  {(displayName ?? "R").charAt(0).toUpperCase()}
-                </span>
-              )}
-              <span className="hidden sm:inline truncate max-w-[8rem]">
-                {displayName ?? "Account"}
-              </span>
-            </Link>
+            <AccountMenu
+              profileId={profileId}
+              displayName={displayName}
+              avatarUrl={avatarUrl}
+            />
           </>
         ) : respondentName ? (
           <>
