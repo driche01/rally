@@ -129,6 +129,7 @@ From `CLAUDE.md`:
 5. **`@fontsource` packages don't expose woff files via `exports`** — `require.resolve` for `.woff` fails. The flyer feature used to hit this; flyer is now deleted, but if you ever need to bundle font files, copy them into the repo and read via `fileURLToPath(import.meta.url)`, don't go through package resolution.
 6. **Don't touch `/mobile` or `/expo`.** The Expo app is paused.
 7. **Don't run `supabase db reset` or anything that re-baselines.** Live DB has user data.
+8. **Stale `next dev` → unstyled pages.** Next 15 + Tailwind v4 dev-mode CSS chunking drifts after multi-day uptime + heavy HMR churn — the page HTML asks for `/_next/static/css/app/layout.css` but it 404s, leaving an unstyled DOM that still has all the right classes. Symptoms: one or more pages render naked, network tab shows the CSS link returning 404, the *built* CSS at `/_next/static/css/<hash>.css` still works. Fix: `npm run dev:clean` (added in `web/package.json`) — it `rm -rf .next` and restarts. **Don't debug the page**, restart the dev server first. Recycle proactively if it's been alive more than ~1 day or you just landed a globals.css / `@theme` / new top-level component change.
 
 ---
 

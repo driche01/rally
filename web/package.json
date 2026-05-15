@@ -5,6 +5,7 @@
   "description": "Rally v1 web app (Phase A). Next.js + Supabase. Lives at /web; deploys come after Phase A DoD.",
   "scripts": {
     "dev": "next dev",
+    "dev:clean": "rm -rf .next && next dev",
     "build": "next build",
     "start": "next start --port 3000",
     "typecheck": "tsc --noEmit",
