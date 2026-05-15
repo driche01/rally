@@ -1,20 +1,19 @@
 /**
  * /trips/[id]/layout.tsx — shared chrome across every dashboard tab.
  *
- * Renders: theme-aware hero (cover image or theme gradient) +
- * compact trip header + TabNav. Children mount below.
- *
- * This is where auth + theme propagation live now (in Phase A both
- * lived in /trips/[id]/page.tsx). Tabs reuse the same layout, so
- * the hero + theme treatment are consistent across Overview /
- * Itinerary / Lodging / Travel / Meals / Shopping.
+ * Server-side: auth, trip fetch, theme propagation, host/cohost
+ * gate. Hero markup is delegated to <EditableHero> (client), which
+ * handles click-to-edit on cover / name / destination / dates /
+ * book_by_date for planners + cohosts.
  */
 
 import { notFound, redirect } from "next/navigation";
 import { requireAuthUid } from "@/lib/auth";
+import { createServiceClient } from "@/lib/supabase/server";
 import { themeClass } from "@/lib/themes";
 import type { Trip } from "@shared/types";
 import TabNav from "./tabs";
+import EditableHero from "./editable-hero";
 
 export default async function TripLayout({
   children,
@@ -30,7 +29,7 @@ export default async function TripLayout({
 
   const { data: tripRow, error } = await r.supabase
     .from("trips")
-    .select("id, name, destination, start_date, end_date, theme, cover_image_url, status, share_token, created_by")
+    .select("id, name, destination, start_date, end_date, book_by_date, theme, cover_image_url, status, share_token, created_by")
     .eq("id", id)
     .maybeSingle();
   if (error) {
@@ -41,69 +40,41 @@ export default async function TripLayout({
     );
   }
   if (!tripRow) notFound();
-  const trip = tripRow as Pick<Trip, "id" | "name" | "destination" | "start_date" | "end_date" | "theme" | "cover_image_url" | "status" | "share_token" | "created_by">;
+  const trip = tripRow as Pick<Trip, "id" | "name" | "destination" | "start_date" | "end_date" | "book_by_date" | "theme" | "cover_image_url" | "status" | "share_token" | "created_by">;
+
+  // Host-or-cohost gate for edit affordances.
+  let canEdit = trip.created_by === r.authUid;
+  if (!canEdit) {
+    const svc = createServiceClient();
+    const { data: cohost } = await svc.from("trip_cohosts")
+      .select("trip_id").eq("trip_id", id).eq("user_id", r.authUid).maybeSingle();
+    canEdit = !!cohost;
+  }
 
   const t = themeClass(trip.theme);
 
   return (
     <main className={`min-h-dvh ${t.root}`}>
       <div className="max-w-3xl mx-auto px-6 pt-10">
-        {/* ─── Hero (cover or theme gradient) ─────────────── */}
-        {trip.cover_image_url ? (
-          <div
-            className="aspect-[16/10] w-full rounded-[28px] mb-6 bg-cover bg-center bg-cream-2"
-            style={{ backgroundImage: `url(${escapeCss(trip.cover_image_url)})` }}
-            aria-hidden="true"
-          />
-        ) : (
-          <div className={`aspect-[16/10] w-full rounded-[28px] mb-6 ${t.cover}`}>
-            <div className="h-full flex items-center justify-center px-6">
-              <span className={`text-3xl sm:text-4xl text-center ${t.coverInk}`}>
-                {trip.name}
-              </span>
-            </div>
-          </div>
-        )}
+        <EditableHero
+          tripId={trip.id}
+          canEdit={canEdit}
+          initial={{
+            name:             trip.name,
+            destination:      trip.destination,
+            start_date:       trip.start_date,
+            end_date:         trip.end_date,
+            book_by_date:     trip.book_by_date,
+            cover_image_url:  trip.cover_image_url,
+            theme:            trip.theme,
+            status:           trip.status,
+          }}
+        />
 
-        {/* ─── Compact header ───────────────────────────── */}
-        <p className={`text-[11px] mb-2 ${t.eyebrow}`}>
-          {trip.status === "draft" ? "Draft" : "Live"} · {trip.theme ?? "no theme yet"}
-        </p>
-        <h1 className={`text-3xl sm:text-4xl leading-tight mb-2 ${t.display}`}>
-          {trip.name}
-        </h1>
-        {(trip.destination || trip.start_date || trip.end_date) && (
-          <p className={`mb-1 ${t.body}`}>
-            {[trip.destination, formatDateRange(trip.start_date, trip.end_date)]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
-        )}
-
-        {/* ─── Tab nav ──────────────────────────────────── */}
         <TabNav tripId={trip.id} />
 
-        {/* Tab content */}
         <div className="pb-12">{children}</div>
       </div>
     </main>
   );
-}
-
-function formatDateRange(start: string | null, end: string | null): string {
-  const fmt = (s: string) =>
-    new Date(s + "T00:00:00").toLocaleDateString("en-US", {
-      month: "short", day: "numeric",
-    });
-  if (start && end) {
-    const y = new Date(start + "T00:00:00").getFullYear();
-    return `${fmt(start)} → ${fmt(end)}, ${y}`;
-  }
-  if (start) return `From ${fmt(start)}`;
-  if (end)   return `Until ${fmt(end)}`;
-  return "Dates TBD";
-}
-
-function escapeCss(url: string): string {
-  return url.replace(/[()'"\\]/g, "\\$&");
 }

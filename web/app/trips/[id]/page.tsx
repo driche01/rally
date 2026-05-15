@@ -60,6 +60,14 @@ export default async function TripOverviewPage({
     trip.group_size_precise,
   );
 
+  // Host-or-cohost gate for edit affordances on Overview body.
+  let canEdit = trip.created_by === r.authUid;
+  if (!canEdit) {
+    const { data: cohost } = await svc.from("trip_cohosts")
+      .select("trip_id").eq("trip_id", id).eq("user_id", r.authUid).maybeSingle();
+    canEdit = !!cohost;
+  }
+
   return (
     <TripDashboard
       trip={trip}
@@ -67,6 +75,7 @@ export default async function TripOverviewPage({
       activity={activity}
       inviteUrl={inviteUrl}
       stallSignal={stallSignal}
+      canEdit={canEdit}
     />
   );
 }

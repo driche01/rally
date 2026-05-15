@@ -13,18 +13,20 @@ import { useRouter } from "next/navigation";
 import type { Trip, Respondent, ActivityFeedEntry, RsvpStatus } from "@shared/types";
 import type { StallSignal } from "@/lib/stall-detector";
 import { themeClass } from "@/lib/themes";
+import { EditableTextarea } from "@/lib/editable";
 import Roster from "./roster";
 import InviteModal from "./invite-modal";
 import BlastComposer from "./blast-composer";
 
 export default function TripDashboard({
-  trip, respondents: initialRespondents, activity, inviteUrl, stallSignal,
+  trip, respondents: initialRespondents, activity, inviteUrl, stallSignal, canEdit,
 }: {
   trip: Trip;
   respondents: Respondent[];
   activity: ActivityFeedEntry[];
   inviteUrl: string;
   stallSignal: StallSignal | null;
+  canEdit: boolean;
 }) {
   const router = useRouter();
   const [, startTrans] = useTransition();
@@ -181,11 +183,33 @@ export default function TripDashboard({
         </div>
       )}
 
-      {/* Trip description (under header from layout) */}
-      {trip.description && (
-        <p className={`mb-8 max-w-prose whitespace-pre-line ${t.body}`}>
-          {trip.description}
-        </p>
+      {/* Trip description (under header from layout) — editable
+          inline for planners + cohosts, plain text for everyone else. */}
+      {(trip.description || canEdit) && (
+        <div className={`mb-8 max-w-prose ${t.body}`}>
+          <EditableTextarea
+            value={trip.description}
+            canEdit={canEdit}
+            placeholder="Add a description — what's this trip about?"
+            rows={4}
+            maxLength={2000}
+            renderDisplay={(v) =>
+              v ? <p className="whitespace-pre-line">{v}</p> : null
+            }
+            onSave={async (v) => {
+              const res = await fetch(`/api/trips/${trip.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ description: v }),
+              });
+              const body = await res.json();
+              if (!res.ok || !body.ok) {
+                throw new Error(body?.error?.code || "Update failed");
+              }
+              router.refresh();
+            }}
+          />
+        </div>
       )}
 
       {/* ─── Quick stats ───────────────────────────── */}

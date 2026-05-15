@@ -55,13 +55,40 @@ export async function PATCH(
   if ("cover_image_url" in body) patch.cover_image_url = strOrNull(body.cover_image_url);
   if ("start_date"      in body) patch.start_date      = strOrNull(body.start_date);
   if ("end_date"        in body) patch.end_date        = strOrNull(body.end_date);
+  if ("book_by_date"    in body) patch.book_by_date    = strOrNull(body.book_by_date);
   if ("is_public"       in body) patch.is_public       = Boolean(body.is_public);
   if ("budget_min"      in body) patch.budget_min      = numOrNull(body.budget_min);
   if ("budget_max"      in body) patch.budget_max      = numOrNull(body.budget_max);
+  if ("group_size_bucket" in body) {
+    const bucket = strOrNull(body.group_size_bucket);
+    if (bucket && !["0-4","5-8","9-12","13-20","20+"].includes(bucket)) {
+      return jsonErr(400, "invalid_group_size_bucket");
+    }
+    patch.group_size_bucket = bucket ?? "5-8";
+  }
+  if ("group_size_precise" in body) {
+    if (body.group_size_precise == null || body.group_size_precise === "") {
+      patch.group_size_precise = null;
+    } else {
+      const n = Number(body.group_size_precise);
+      if (!Number.isFinite(n) || n < 1 || n > 500) {
+        return jsonErr(400, "invalid_group_size_precise");
+      }
+      patch.group_size_precise = Math.floor(n);
+    }
+  }
   if ("theme"           in body) {
     const t = strOrNull(body.theme) as TripTheme | null;
     if (t && !ALLOWED_THEMES.has(t)) return jsonErr(400, "invalid_theme");
     patch.theme = t;
+  }
+
+  // Date-coherence validation.
+  if (patch.start_date && patch.end_date && (patch.start_date as string) > (patch.end_date as string)) {
+    return jsonErr(400, "end_before_start");
+  }
+  if (patch.book_by_date && patch.start_date && (patch.book_by_date as string) > (patch.start_date as string)) {
+    return jsonErr(400, "book_by_after_start");
   }
 
   if (Object.keys(patch).length === 0) return jsonErr(400, "no_fields_to_update");
