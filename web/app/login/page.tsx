@@ -10,6 +10,7 @@
  */
 
 import LoginForm from "./login-form";
+import RallyLogo from "@/lib/brand/logo";
 
 export default function LoginPage({
   searchParams,
@@ -17,11 +18,11 @@ export default function LoginPage({
   searchParams: Promise<{ next?: string }>;
 }) {
   return (
-    <main className="min-h-dvh flex items-center justify-center p-6">
-      <div className="w-full max-w-sm">
-        <p className="text-xs font-bold tracking-widest uppercase text-green mb-3 text-center">
-          Rally
-        </p>
+    <main className="min-h-dvh flex flex-col items-center p-6">
+      <header className="w-full max-w-sm mb-12 pt-6">
+        <RallyLogo size="md" />
+      </header>
+      <div className="w-full max-w-sm flex-1 flex flex-col justify-center -mt-12">
         <h1 className="font-display text-3xl leading-tight text-ink text-center mb-2">
           Welcome back.
         </h1>

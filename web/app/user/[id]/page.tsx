@@ -22,6 +22,7 @@ import { requireAuthUid } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/server";
 import { canViewUserProfile } from "@/lib/profile-visibility";
 import { computeBadges, type Badge } from "@/lib/badges";
+import RallyLogo from "@/lib/brand/logo";
 import ProfileLocked from "./profile-locked";
 
 export default async function UserProfilePage({
@@ -186,9 +187,9 @@ export default async function UserProfilePage({
   return (
     <main className="min-h-dvh bg-cream px-6 py-10">
       <div className="max-w-2xl mx-auto">
-        <Link href="/" className="text-sm text-muted hover:text-ink mb-6 inline-block">
-          ← Back to Rally
-        </Link>
+        <header className="mb-8">
+          <RallyLogo size="md" />
+        </header>
 
         {/* Header */}
         <header className="flex items-center gap-5 mb-8">

@@ -17,6 +17,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ProfileCapture from "./profile-capture";
 import { IconSprite, Icon } from "./icons";
+import RallyLogo from "@/lib/brand/logo";
 import type {
   RsvpStatus, ProfileCaptureInput, TravelerProfile,
 } from "@shared/types";
@@ -126,13 +127,16 @@ export default function RsvpFlow({
   return (
     <main className="min-h-dvh">
       <IconSprite />
-      <div className="max-w-2xl mx-auto px-5 sm:px-8 py-10">
-        <Link
-          href={`/invite/${shareToken}`}
-          className="text-xs text-muted tracking-widest uppercase font-semibold hover:text-ink"
-        >
-          ← {tripName}
-        </Link>
+      <div className="max-w-2xl mx-auto px-5 sm:px-8 py-6">
+        <header className="mb-6 flex items-center justify-between">
+          <RallyLogo size="md" />
+          <Link
+            href={`/invite/${shareToken}`}
+            className="text-xs text-muted tracking-widest uppercase font-semibold hover:text-ink"
+          >
+            ← {tripName}
+          </Link>
+        </header>
 
         {stage === "identify" && (
           <form onSubmit={startLookup} className="mt-6 grid gap-5">

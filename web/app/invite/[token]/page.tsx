@@ -23,6 +23,7 @@ import type {
 import RsvpButtons from "./rsvp-buttons";
 import ActivitySection from "./activity-section";
 import { themeClass, type ThemeStyle } from "@/lib/themes";
+import RallyLogo from "@/lib/brand/logo";
 
 interface PageProps {
   params: Promise<{ token: string }>;
@@ -79,7 +80,10 @@ export default async function InvitePage({ params }: PageProps) {
 
   return (
     <main className={`min-h-dvh ${t.root}`}>
-      <div className="max-w-2xl mx-auto px-5 sm:px-8 py-10">
+      <div className="max-w-2xl mx-auto px-5 sm:px-8 py-6">
+        <header className="mb-6">
+          <RallyLogo size="md" />
+        </header>
         {/* ─── Cover ──────────────────────────────────── */}
         {trip.cover_image_url ? (
           <div

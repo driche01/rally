@@ -17,6 +17,7 @@ import EditableHero from "./editable-hero";
 import GenerationProvider from "@/lib/generation/provider";
 import EffectOverlay from "@/lib/effects/effect-overlay";
 import StylePicker from "./style-picker";
+import RallyLogo from "@/lib/brand/logo";
 
 export default async function TripLayout({
   children,
@@ -66,7 +67,10 @@ export default async function TripLayout({
         currentEffect={trip.effect ?? null}
       />
       <GenerationProvider>
-        <div className="max-w-3xl mx-auto px-6 pt-10 relative">
+        <div className="max-w-3xl mx-auto px-6 pt-6 relative">
+          <header className="mb-6">
+            <RallyLogo size="md" />
+          </header>
           <EditableHero
             tripId={trip.id}
             canEdit={canEdit}

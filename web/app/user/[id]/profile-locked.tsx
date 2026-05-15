@@ -12,6 +12,7 @@
  */
 
 import { useRouter } from "next/navigation";
+import RallyLogo from "@/lib/brand/logo";
 
 export default function ProfileLocked({
   firstName,
@@ -33,7 +34,11 @@ export default function ProfileLocked({
   const initial = (firstName.charAt(0) || "?").toUpperCase();
 
   return (
-    <main className="min-h-dvh bg-cream flex items-center justify-center px-6 py-12">
+    <main className="min-h-dvh bg-cream flex flex-col px-6 py-6">
+      <header className="mb-8">
+        <RallyLogo size="md" />
+      </header>
+      <div className="flex-1 flex items-center justify-center -mt-12">
       <div className="bg-card border border-line rounded-[28px] p-8 sm:p-10 max-w-md w-full text-center">
         {/* Generic initial-letter avatar — NEVER their real avatar,
             even blurred. That would still be content leakage. */}
@@ -64,6 +69,7 @@ export default function ProfileLocked({
         >
           ← Back
         </button>
+      </div>
       </div>
     </main>
   );
