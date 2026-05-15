@@ -120,12 +120,15 @@ export async function GET(
     const endISO = isoDateBasic(addDays(endSource, 1));
     const summary = trip.name;
     const statusTag = isHostish ? "(host)" : rsvp ? `(${rsvp.replace(/_/g, " ")})` : "";
+    // Join with raw newlines; escapeIcs will turn them into RFC5545
+    // literal "\n" sequences (a single backslash + n in the wire
+    // format — calendar apps render that as a line break).
     const description = [
       trip.destination ? `Destination: ${trip.destination}` : null,
       trip.description ? trip.description : null,
       statusTag ? `Status: ${statusTag.replace(/[()]/g, "")}` : null,
       `View: ${baseUrl}/trips/${trip.id}`,
-    ].filter(Boolean).join("\\n");
+    ].filter(Boolean).join("\n");
     lines.push("BEGIN:VEVENT");
     lines.push(`UID:trip-${trip.id}@rally`);
     lines.push(`DTSTAMP:${nowStamp()}`);
