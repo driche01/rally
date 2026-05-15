@@ -13,7 +13,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { themeClass } from "@/lib/themes";
 import type { Trip } from "@shared/types";
 import TabNav from "./tabs";
-import EditableHero from "./editable-hero";
+import { EditableCover, EditableTripHeader } from "./editable-hero";
 import GenerationProvider from "@/lib/generation/provider";
 import EffectOverlay from "@/lib/effects/effect-overlay";
 import StylePicker from "./style-picker";
@@ -67,28 +67,48 @@ export default async function TripLayout({
         currentEffect={trip.effect ?? null}
       />
       <GenerationProvider>
-        <div className="max-w-3xl mx-auto px-6 pt-6 relative">
+        <div className="max-w-6xl mx-auto px-6 pt-6 relative">
           <header className="mb-6">
             <RallyLogo size="md" />
           </header>
-          <EditableHero
-            tripId={trip.id}
-            canEdit={canEdit}
-            initial={{
-              name:             trip.name,
-              destination:      trip.destination,
-              start_date:       trip.start_date,
-              end_date:         trip.end_date,
-              book_by_date:     trip.book_by_date,
-              cover_image_url:  trip.cover_image_url,
-              theme:            trip.theme,
-              status:           trip.status,
-            }}
-          />
 
-          <TabNav tripId={trip.id} />
+          {/* 2-column layout on lg+: sticky cover on the left,
+              scrolling header+tabs+content on the right. Below lg,
+              stacks single-column with cover on top (mobile-first
+              fallback). */}
+          <div className="lg:grid lg:grid-cols-[5fr_7fr] lg:gap-10">
+            <div className="lg:sticky lg:top-6 lg:self-start mb-6 lg:mb-0">
+              <EditableCover
+                tripId={trip.id}
+                canEdit={canEdit}
+                initial={{
+                  name:            trip.name,
+                  cover_image_url: trip.cover_image_url,
+                  theme:           trip.theme,
+                }}
+              />
+            </div>
 
-          <div className="pb-12">{children}</div>
+            <div>
+              <EditableTripHeader
+                tripId={trip.id}
+                canEdit={canEdit}
+                initial={{
+                  name:         trip.name,
+                  destination:  trip.destination,
+                  start_date:   trip.start_date,
+                  end_date:     trip.end_date,
+                  book_by_date: trip.book_by_date,
+                  theme:        trip.theme,
+                  status:       trip.status,
+                }}
+              />
+
+              <TabNav tripId={trip.id} />
+
+              <div className="pb-12">{children}</div>
+            </div>
+          </div>
         </div>
       </GenerationProvider>
     </main>

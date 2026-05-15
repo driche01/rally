@@ -88,10 +88,13 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
     root:          "bg-[#F8F1E0]",
     display:       "font-display italic text-green tracking-tight",
     body:          "text-ink",
-    meta:          "text-muted italic",
+    meta:          "text-[#6E5530] italic",
+    // Eyebrow needs to read on a cream-gold root; the original
+    // gold #F3C96A was borderline. Use a saturated burnt-gold that
+    // hits ~5.5:1 contrast on cream-gold.
     cover:         "bg-[#F8F1E0] border-2 border-[var(--color-gold)]/50",
     coverInk:      "font-display italic text-green-2",
-    eyebrow:       "text-gold tracking-[0.4em] uppercase text-[10px] font-bold",
+    eyebrow:       "text-[#8B5A1E] tracking-[0.4em] uppercase text-[10px] font-bold",
     accent:        "bg-[var(--color-gold)]/20 text-[color:color-mix(in_oklab,var(--color-gold)_70%,black)]",
     surface:       "bg-[#FCF6E5]",
     surfaceBorder: "border-[var(--color-gold)]/30",
@@ -136,10 +139,12 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
     root:          "bg-[#FAF6EE]",
     display:       "font-display font-normal text-green tracking-[-0.02em]",
     body:          "text-ink/90",
-    meta:          "text-muted tracking-wide",
+    meta:          "text-[#6B5F4A] tracking-wide",
     cover:         "bg-gradient-to-br from-cream to-[#E8D9B5]",
     coverInk:      "font-display text-green",
-    eyebrow:       "font-display italic text-gold tracking-[0.3em] uppercase text-[11px]",
+    // Same gold-on-cream contrast issue as fancy — bump to
+    // burnt-gold so the eyebrow is legible.
+    eyebrow:       "font-display italic text-[#8B5A1E] tracking-[0.3em] uppercase text-[11px]",
     accent:        "bg-[var(--color-gold)]/15 text-[color:color-mix(in_oklab,var(--color-gold)_70%,black)]",
     surface:       "bg-[#FCF8EE]",
     surfaceBorder: "border-[var(--color-gold)]/25",
@@ -151,13 +156,14 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
   // ─── Light ────────────────────────────────────────────────────────
   mist: {
     root:          "bg-[#F0F4F8]",
-    display:       "font-display text-[#2D4658] tracking-tight",
-    body:          "text-[#2D4658]",
-    meta:          "text-[#7E8FA1]",
+    display:       "font-display text-[#1F3447] tracking-tight",
+    body:          "text-[#1F3447]",
+    // Meta was too pale (#7E8FA1 ≈ 3.1:1). Darker slate hits 5:1.
+    meta:          "text-[#54667A]",
     cover:         "bg-gradient-to-b from-[#CCDCEA] via-[#E8EEF5] to-[#F0F4F8]",
-    coverInk:      "font-display text-[#2D4658]",
-    eyebrow:       "text-[#4A7FA8] tracking-[0.2em] uppercase font-semibold text-[11px]",
-    accent:        "bg-[#CCDCEA] text-[#2D4658]",
+    coverInk:      "font-display text-[#1F3447]",
+    eyebrow:       "text-[#2A5C82] tracking-[0.2em] uppercase font-semibold text-[11px]",
+    accent:        "bg-[#CCDCEA] text-[#1F3447]",
     surface:       "bg-white/70 backdrop-blur-sm",
     surfaceBorder: "border-[#D9E3ED]",
     label:         "Mist",
@@ -167,13 +173,17 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
 
   blossom: {
     root:          "bg-[#FCF1EE]",
-    display:       "font-display text-[#7C3F4A]",
-    body:          "text-[#5C2F38]",
-    meta:          "text-[#A87D85]",
+    display:       "font-display text-[#5C1F2A]",
+    body:          "text-[#4A1820]",
+    // Meta was washed-out mauve (#A87D85 ≈ 3:1). Bring it down to
+    // 5:1 by deepening.
+    meta:          "text-[#8B5660]",
     cover:         "bg-gradient-to-br from-[#FFE1DB] via-[#FFD5E5] to-[#F8D6CC]",
-    coverInk:      "font-display text-[#7C3F4A]",
-    eyebrow:       "text-[#C56A7E] tracking-[0.22em] uppercase font-bold text-[11px]",
-    accent:        "bg-[#FFD5E5] text-[#7C3F4A]",
+    coverInk:      "font-display text-[#5C1F2A]",
+    // Eyebrow pink (#C56A7E) was a hair under 4.5:1 on pink-cream.
+    // Deepen for clear AA contrast.
+    eyebrow:       "text-[#9F3A52] tracking-[0.22em] uppercase font-bold text-[11px]",
+    accent:        "bg-[#FFD5E5] text-[#5C1F2A]",
     surface:       "bg-[#FFF9F7]",
     surfaceBorder: "border-[#EFD5D0]",
     label:         "Blossom",
@@ -183,13 +193,15 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
 
   sage: {
     root:          "bg-[#EFF2EB]",
-    display:       "font-display text-[#2F4A36]",
-    body:          "text-[#2F4A36]",
-    meta:          "text-[#6E7E70]",
+    display:       "font-display text-[#1F3526]",
+    body:          "text-[#1F3526]",
+    // Meta was same-tone gray-green (#6E7E70) which blends. Deepen
+    // for clear hierarchy.
+    meta:          "text-[#4E5E50]",
     cover:         "bg-gradient-to-br from-[#C8D4BA] via-[#DFE8D2] to-[#EFF2EB]",
-    coverInk:      "font-display text-[#2F4A36]",
-    eyebrow:       "text-[#4F6B53] tracking-[0.22em] uppercase font-semibold text-[11px]",
-    accent:        "bg-[#DFE8D2] text-[#2F4A36]",
+    coverInk:      "font-display text-[#1F3526]",
+    eyebrow:       "text-[#385140] tracking-[0.22em] uppercase font-semibold text-[11px]",
+    accent:        "bg-[#DFE8D2] text-[#1F3526]",
     surface:       "bg-[#F6F8F2]",
     surfaceBorder: "border-[#D5DCC9]",
     label:         "Sage",
@@ -249,13 +261,14 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
   // ─── Vibes (new) ─────────────────────────────────────────────────
   sunset: {
     root:          "bg-[#FFF1E8]",
-    display:       "font-display text-[#6E2C3A]",
-    body:          "text-[#5C2F38]",
-    meta:          "text-[#9A6878]",
+    display:       "font-display text-[#5C1F2E]",
+    body:          "text-[#4A1D26]",
+    meta:          "text-[#7A4858]",
     cover:         "bg-gradient-to-br from-[#FF6A45] via-[#F38EAC] to-[#A973C3]",
-    coverInk:      "font-display text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.25)]",
-    eyebrow:       "text-[#D85A30] tracking-[0.3em] uppercase font-bold text-[11px]",
-    accent:        "bg-[#FFD2C2] text-[#6E2C3A]",
+    // Bump shadow on cover ink so it reads on every gradient stop.
+    coverInk:      "font-display text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)] [text-shadow:0_0_12px_rgba(80,30,40,0.5)]",
+    eyebrow:       "text-[#B33D14] tracking-[0.3em] uppercase font-bold text-[11px]",
+    accent:        "bg-[#FFD2C2] text-[#5C1F2E]",
     surface:       "bg-[#FFF8F0]",
     surfaceBorder: "border-[#F5D5C5]",
     label:         "Sunset",
@@ -282,13 +295,16 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
   // ─── Seasonal ────────────────────────────────────────────────────
   spring: {
     root:          "bg-[#F4F8EE]",
-    display:       "font-display text-[#3F5F3F]",
-    body:          "text-[#3F5F3F]",
-    meta:          "text-[#7E9080]",
+    display:       "font-display text-[#264028]",
+    body:          "text-[#264028]",
+    meta:          "text-[#5A6E5C]",
+    // Cover gradient passes through a pastel pink mid-stop, so the
+    // ink needs a drop-shadow to stay legible across all three
+    // hues without fighting the gradient.
     cover:         "bg-gradient-to-br from-[#E8F0C7] via-[#FFD7DD] to-[#C8E6D2]",
-    coverInk:      "font-display text-[#3F5F3F]",
-    eyebrow:       "text-[#D67891] tracking-[0.22em] uppercase font-bold text-[11px]",
-    accent:        "bg-[#E8F0C7] text-[#3F5F3F]",
+    coverInk:      "font-display text-[#264028] drop-shadow-[0_1px_2px_rgba(255,255,255,0.6)]",
+    eyebrow:       "text-[#A93D5A] tracking-[0.22em] uppercase font-bold text-[11px]",
+    accent:        "bg-[#E8F0C7] text-[#264028]",
     surface:       "bg-[#F8FBF2]",
     surfaceBorder: "border-[#DCE5D1]",
     label:         "Spring",
@@ -298,13 +314,17 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
 
   summer: {
     root:          "bg-[#FFF6E3]",
-    display:       "font-display text-[#7A4416]",
-    body:          "text-[#7A4416]",
-    meta:          "text-[#B98A56]",
+    display:       "font-display text-[#6B380F]",
+    body:          "text-[#6B380F]",
+    // #B98A56 on cream-yellow ≈ 3.4:1 — borderline. Deepen.
+    meta:          "text-[#946B3D]",
     cover:         "bg-gradient-to-br from-[#FFCD3A] via-[#FF8C4B] to-[#F35F77]",
-    coverInk:      "font-display text-white drop-shadow-[0_2px_8px_rgba(122,68,22,0.4)]",
-    eyebrow:       "text-[#D9530A] tracking-[0.25em] uppercase font-bold text-[11px]",
-    accent:        "bg-[#FFE0A2] text-[#7A4416]",
+    // White over yellow-orange-pink gradient is the weakest link.
+    // Layer two shadows: a tight dark one (for crispness on the
+    // yellow stop) + a soft glow (for the orange/pink stops).
+    coverInk:      "font-display text-white drop-shadow-[0_1px_2px_rgba(60,30,0,0.55)] [text-shadow:0_0_12px_rgba(60,30,0,0.45)]",
+    eyebrow:       "text-[#B53F00] tracking-[0.25em] uppercase font-bold text-[11px]",
+    accent:        "bg-[#FFE0A2] text-[#6B380F]",
     surface:       "bg-[#FFFBF0]",
     surfaceBorder: "border-[#F2DCB0]",
     label:         "Summer",
@@ -314,13 +334,13 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
 
   autumn: {
     root:          "bg-[#F8EFE4]",
-    display:       "font-display text-[#5C2E14]",
-    body:          "text-[#5C2E14]",
-    meta:          "text-[#9C7251]",
+    display:       "font-display text-[#4A210C]",
+    body:          "text-[#4A210C]",
+    meta:          "text-[#7A5235]",
     cover:         "bg-gradient-to-br from-[#D8722A] via-[#A8421A] to-[#5F2E1A]",
     coverInk:      "font-display text-[#F7E0BC]",
-    eyebrow:       "text-[#A8421A] tracking-[0.25em] uppercase font-bold text-[11px]",
-    accent:        "bg-[#E8C8A0] text-[#5C2E14]",
+    eyebrow:       "text-[#8B3110] tracking-[0.25em] uppercase font-bold text-[11px]",
+    accent:        "bg-[#E8C8A0] text-[#4A210C]",
     surface:       "bg-[#FCF6EC]",
     surfaceBorder: "border-[#E0CCB0]",
     label:         "Autumn",
@@ -330,13 +350,13 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
 
   winter: {
     root:          "bg-[#EFF4F8]",
-    display:       "font-display text-[#283F58]",
-    body:          "text-[#283F58]",
-    meta:          "text-[#7E92A8]",
+    display:       "font-display text-[#1B2F44]",
+    body:          "text-[#1B2F44]",
+    meta:          "text-[#54667E]",
     cover:         "bg-gradient-to-b from-[#D5E2EE] via-[#E8EEF5] to-[#F0F4F8] border border-[#283F58]/15",
-    coverInk:      "font-display text-[#283F58]",
-    eyebrow:       "text-[#5878A0] tracking-[0.28em] uppercase font-bold text-[10px]",
-    accent:        "bg-[#D5E2EE] text-[#283F58]",
+    coverInk:      "font-display text-[#1B2F44]",
+    eyebrow:       "text-[#365F8B] tracking-[0.28em] uppercase font-bold text-[10px]",
+    accent:        "bg-[#D5E2EE] text-[#1B2F44]",
     surface:       "bg-white/80 backdrop-blur-sm",
     surfaceBorder: "border-[#D5DDE5]",
     label:         "Winter",
