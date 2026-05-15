@@ -151,7 +151,7 @@ export default function CoverEditor({
             <img
               src={currentUrl}
               alt=""
-              className="w-full aspect-[16/10] rounded-2xl object-cover border border-line"
+              className="w-full aspect-square rounded-2xl object-cover border border-line"
             />
           )}
 

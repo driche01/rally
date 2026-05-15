@@ -87,12 +87,12 @@ export default async function InvitePage({ params }: PageProps) {
         {/* ─── Cover ──────────────────────────────────── */}
         {trip.cover_image_url ? (
           <div
-            className={`aspect-[16/10] w-full rounded-[28px] mb-8 bg-cover bg-center ${t.cover}`}
+            className={`aspect-square w-full rounded-[28px] mb-8 bg-cover bg-center ${t.cover}`}
             style={{ backgroundImage: `url(${escapeCss(trip.cover_image_url)})` }}
             aria-hidden="true"
           />
         ) : (
-          <div className={`aspect-[16/10] w-full rounded-[28px] mb-8 ${t.cover}`}>
+          <div className={`aspect-square w-full rounded-[28px] mb-8 ${t.cover}`}>
             <div className="h-full flex items-center justify-center px-6">
               <span className={`text-3xl sm:text-4xl text-center ${t.coverInk}`}>
                 {trip.name}

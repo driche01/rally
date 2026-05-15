@@ -75,8 +75,12 @@ export function EditableCover({
   }
 
   // Shared classes — same aspect ratio + rounded shape across all
-  // three render states (busy / cover present / no cover).
-  const FRAME = "block w-full aspect-[16/10] rounded-[28px] relative overflow-hidden";
+  // three render states (busy / cover present / no cover). Square
+  // so it pairs cleanly with the sticky vertical-center positioning
+  // on lg+ (taller portrait would collide with the viewport edges
+  // on shorter screens; landscape would feel mismatched against
+  // the scrolling text column).
+  const FRAME = "block w-full aspect-square rounded-[28px] relative overflow-hidden";
 
   if (coverBusy) {
     return (

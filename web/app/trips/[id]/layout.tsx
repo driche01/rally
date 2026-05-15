@@ -72,12 +72,20 @@ export default async function TripLayout({
             <RallyLogo size="md" />
           </header>
 
-          {/* 2-column layout on lg+: sticky cover on the left,
-              scrolling header+tabs+content on the right. Below lg,
+          {/* 2-column layout on lg+: cover sticks on the left + is
+              vertically centered in the viewport as the user scrolls;
+              header+tabs+content scrolls on the right. Below lg,
               stacks single-column with cover on top (mobile-first
-              fallback). */}
+              fallback).
+
+              Vertical-center sticky: the wrapper sticks at top:50vh
+              and translates up by half its own height so the cover's
+              midpoint always sits at viewport center.  `self-start`
+              is load-bearing — without it CSS Grid stretches the
+              item to fill the column height and `sticky` becomes a
+              no-op. */}
           <div className="lg:grid lg:grid-cols-[5fr_7fr] lg:gap-10">
-            <div className="lg:sticky lg:top-6 lg:self-start mb-6 lg:mb-0">
+            <div className="lg:sticky lg:top-[50vh] lg:-translate-y-1/2 lg:self-start mb-6 lg:mb-0">
               <EditableCover
                 tripId={trip.id}
                 canEdit={canEdit}
