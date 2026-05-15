@@ -2,8 +2,8 @@
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { THEMES, themeClass } from "@/lib/themes";
-import type { TripTheme } from "@shared/types";
+import { THEMES, THEME_CATEGORIES, themeClass } from "@/lib/themes";
+import type { TripTheme, ThemeCategory } from "@shared/types";
 
 const GROUP_BUCKETS = [
   { value: "0-4",  label: "1–4" },
@@ -75,6 +75,10 @@ export default function TripForm() {
   const [s, setS] = useState<FormState>(EMPTY);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Category filter for the theme picker — 18 themes spread across
+  // four buckets, default Vibes (the biggest, 8 themes). Each bucket
+  // holds ≤9 themes which keeps the grid at 3×3 max without scrolling.
+  const [themeCategory, setThemeCategory] = useState<ThemeCategory>("vibes");
 
   // Cover image state
   const [coverMode, setCoverMode] = useState<CoverMode>("upload");
@@ -352,8 +356,39 @@ export default function TripForm() {
 
       {/* ─── Theme picker (mini-flyer previews) ───────────── */}
       <Field label="Theme">
+        {/* Category chips — Vibes / Light / Dark / Seasonal. Each
+            bucket holds ≤9 themes so the grid below renders as 3×3 max,
+            keeping the rest of the form within easy scroll reach. If
+            the user's currently picked theme falls outside the active
+            bucket, we auto-jump to its bucket so they can see it
+            highlighted (no "where did my pick go?" confusion). */}
+        <div className="flex flex-wrap gap-2 mb-3">
+          {THEME_CATEGORIES.map((cat) => {
+            const active = themeCategory === cat.value;
+            const count = THEMES.filter((t) => t.style.category === cat.value).length;
+            return (
+              <button
+                key={cat.value}
+                type="button"
+                onClick={() => setThemeCategory(cat.value)}
+                className={
+                  "inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full text-sm font-semibold border transition-colors " +
+                  (active
+                    ? "bg-ink text-cream border-ink"
+                    : "bg-card text-ink border-line hover:border-green")
+                }
+              >
+                <span aria-hidden="true">{cat.emoji}</span>
+                {cat.label}
+                <span className={"text-xs " + (active ? "opacity-70" : "text-muted")}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
         <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
-          {THEMES.map((t) => {
+          {THEMES.filter((t) => t.style.category === themeCategory).map((t) => {
             const picked = s.theme === t.value;
             return (
               <button
