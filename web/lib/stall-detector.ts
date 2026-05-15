@@ -97,8 +97,8 @@ export async function detectStallForBanner(
       return {
         reason: "headcount_soft_pre_booking",
         headline: "Headcount still soft.",
-        detail:   "About 3 weeks until booking lodging + travel. Worth confirming who's actually in so you can start locking final details.",
-        cta:      "hey [Name] — booking lodging + travel soon. quick yes/no so we can lock final headcount →",
+        detail:   "We're booking the trip in about 3 weeks. Worth confirming who's actually in so you can start locking final details.",
+        cta:      "hey [Name] — we're booking the trip soon. quick yes/no so we can lock final headcount →",
         defaultSegment: "unresponded",
       };
     }
@@ -110,9 +110,9 @@ export async function detectStallForBanner(
     if (unresponded > 0) {
       return {
         reason: "booking_imminent",
-        headline: "Booking's 2 weeks out.",
+        headline: "We're booking the trip in 2 weeks.",
         detail:   "Confirm the final RSVPs so you can lock in headcount for bookings.",
-        cta:      "hey [Name] — booking in 2 weeks. need a final yes/no from you so we can lock headcount →",
+        cta:      "hey [Name] — we're booking the trip in 2 weeks. need a final yes/no from you so we can lock headcount →",
         defaultSegment: "unresponded",
       };
     }
