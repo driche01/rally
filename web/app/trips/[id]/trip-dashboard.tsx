@@ -1,21 +1,25 @@
 "use client";
 
 /**
- * Overview tab content — stats, actions, roster, activity preview.
+ * Overview tab content — stats, roster, activity preview.
  *
- * The trip hero + header + tab nav live in /trips/[id]/layout.tsx
- * (post-Phase-B Step 4 refactor). This component is just the
- * Overview tab's body.
+ * The trip hero + header + tab nav live in /trips/[id]/layout.tsx.
+ * Host actions (Invite, Copy share, Send blast, Clone, Cancel) also
+ * live in the layout under the cover image — see trip-actions.tsx.
+ *
+ * This component owns: the stall-signal nudge banner (which renders
+ * its own pre-filled blast composer separate from the layout's
+ * blank-state composer), the editable description, stats, roster,
+ * and the activity-feed preview.
  */
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Trip, Respondent, ActivityFeedEntry, RsvpStatus } from "@shared/types";
 import type { StallSignal } from "@/lib/stall-detector";
 import { themeClass } from "@/lib/themes";
 import { EditableTextarea } from "@/lib/editable";
 import Roster from "./roster";
-import InviteModal from "./invite-modal";
 import BlastComposer from "./blast-composer";
 
 export default function TripDashboard({
@@ -29,19 +33,14 @@ export default function TripDashboard({
   canEdit: boolean;
 }) {
   const router = useRouter();
-  const [, startTrans] = useTransition();
   const [respondents, setRespondents] = useState<Respondent[]>(initialRespondents);
-  const [activityFeed, setActivityFeed] = useState<ActivityFeedEntry[]>(activity);
-  const [showInvite, setShowInvite] = useState(false);
+  const [activityFeed] = useState<ActivityFeedEntry[]>(activity);
   const [showBlast, setShowBlast]   = useState(false);
   const [blastPrefill, setBlastPrefill] = useState<{
     body: string;
     segment: "going" | "maybe" | "invited" | "all" | "unresponded";
     source: string;
   } | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [cloning, setCloning] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
   const cancelled = Boolean(trip.cancelled_at);
 
   function openBlastFromBanner() {
@@ -63,64 +62,6 @@ export default function TripDashboard({
   function closeBlast() {
     setShowBlast(false);
     setBlastPrefill(null);
-  }
-
-  async function cancelTrip() {
-    const note =
-      "Cancel this trip? This will:\n" +
-      "• Notify every guest via SMS\n" +
-      "• Lock the trip page (no new RSVPs or activity)\n" +
-      "• Post a system entry to the activity feed\n\n" +
-      "This cannot be undone.";
-    if (!confirm(note)) return;
-    setCancelling(true);
-    try {
-      const res = await fetch(`/api/trips/${trip.id}/cancel`, { method: "POST" });
-      const body = await res.json();
-      if (!res.ok || !body.ok) {
-        alert(`Cancel failed: ${body?.error?.code ?? res.status}`);
-        return;
-      }
-      const sms = body.data?.sms;
-      alert(
-        `Trip cancelled. SMS: ${sms?.sent ?? 0} sent` +
-          (sms?.failed ? `, ${sms.failed} failed` : "") +
-          (sms?.suppressed_opted_out ? `, ${sms.suppressed_opted_out} suppressed (opted out)` : ""),
-      );
-      router.refresh();
-    } catch {
-      alert("Couldn't reach Rally. Try again.");
-    } finally {
-      setCancelling(false);
-    }
-  }
-
-  async function clone() {
-    if (!confirm("Clone this trip? You'll get a fresh draft with the same name, theme, destination, and budget — but no invitees, itinerary, lodging, travel, meals, or shopping.")) return;
-    setCloning(true);
-    try {
-      const res = await fetch(`/api/trips/${trip.id}/clone`, { method: "POST" });
-      const body = await res.json();
-      if (!res.ok || !body.ok) {
-        alert(`Clone failed: ${body?.error?.code ?? res.status}`);
-        return;
-      }
-      startTrans(() => router.push(`/trips/${body.data.trip.id}`));
-    } catch {
-      alert("Couldn't reach Rally. Try again.");
-    } finally {
-      setCloning(false);
-    }
-  }
-
-  async function copyLink() {
-    try {
-      await navigator.clipboard.writeText(inviteUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      window.prompt("Copy this link:", inviteUrl);
-    }
   }
 
   async function handleOverride(respondent_id: string, rsvp_status: RsvpStatus) {
@@ -153,16 +94,6 @@ export default function TripDashboard({
       setRespondents(prevRespondents);
       alert("Couldn't reach Rally. Try again.");
     }
-  }
-
-  function handleInvitationsSent(newRespondents: Respondent[], summary: ActivityFeedEntry | null) {
-    setRespondents((prev) => {
-      const map = new Map(prev.map((r) => [r.id, r]));
-      for (const r of newRespondents) map.set(r.id, r);
-      return Array.from(map.values());
-    });
-    if (summary) setActivityFeed((prev) => [summary, ...prev]);
-    setShowInvite(false);
   }
 
   const counts = countByStatus(respondents);
@@ -236,48 +167,6 @@ export default function TripDashboard({
         <Stat label="Can't go" value={counts.cant_go} t={t} />
       </div>
 
-      {/* ─── Actions ───────────────────────────────── */}
-      <div className="flex flex-wrap gap-3 mb-8">
-        <button
-          onClick={() => setShowInvite(true)}
-          disabled={cancelled}
-          className="h-12 px-6 rounded-full bg-green text-cream font-bold hover:bg-green-2 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Invite people →
-        </button>
-        <button
-          onClick={copyLink}
-          className={`h-12 px-5 rounded-full ${t.surface} text-ink border ${t.surfaceBorder} hover:border-green`}
-        >
-          {copied ? "Copied ✓" : "Copy share link"}
-        </button>
-        <button
-          onClick={() => setShowBlast(true)}
-          disabled={cancelled}
-          className={`h-12 px-5 rounded-full ${t.surface} text-ink border ${t.surfaceBorder} hover:border-green disabled:opacity-50 disabled:cursor-not-allowed`}
-        >
-          Send blast →
-        </button>
-        <button
-          onClick={clone}
-          disabled={cloning}
-          className={`h-12 px-5 rounded-full ${t.surface} text-ink border ${t.surfaceBorder} hover:border-green disabled:opacity-50`}
-          title="Duplicate trip metadata + cohosts. No invitees / itinerary / lodging / etc. carry over."
-        >
-          {cloning ? "Cloning…" : "Clone trip"}
-        </button>
-        {!cancelled && (
-          <button
-            onClick={cancelTrip}
-            disabled={cancelling}
-            className="h-12 px-5 rounded-full bg-card text-orange border border-orange/40 hover:bg-orange/10 disabled:opacity-50"
-            title="Cancel the trip. Notifies every guest via SMS and locks the page."
-          >
-            {cancelling ? "Cancelling…" : "Cancel trip"}
-          </button>
-        )}
-      </div>
-
       {/* ─── Roster ────────────────────────────────── */}
       <Roster respondents={respondents} onOverride={handleOverride} />
 
@@ -299,16 +188,6 @@ export default function TripDashboard({
             ))}
           </ul>
         </section>
-      )}
-
-      {showInvite && (
-        <InviteModal
-          tripId={trip.id}
-          tripName={trip.name}
-          shareLink={inviteUrl}
-          onClose={() => setShowInvite(false)}
-          onSent={handleInvitationsSent}
-        />
       )}
 
       {showBlast && (

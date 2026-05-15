@@ -14,10 +14,13 @@ import { themeClass } from "@/lib/themes";
 import type { Trip } from "@shared/types";
 import TabNav from "./tabs";
 import { EditableCover, EditableTripHeader } from "./editable-hero";
+import TripActions from "./trip-actions";
 import GenerationProvider from "@/lib/generation/provider";
 import EffectOverlay from "@/lib/effects/effect-overlay";
 import StylePicker from "./style-picker";
 import RallyLogo from "@/lib/brand/logo";
+import { getSiteUrl } from "@/lib/site-url";
+import type { Respondent } from "@shared/types";
 
 export default async function TripLayout({
   children,
@@ -33,7 +36,7 @@ export default async function TripLayout({
 
   const { data: tripRow, error } = await r.supabase
     .from("trips")
-    .select("id, name, destination, start_date, end_date, book_by_date, theme, effect, cover_image_url, status, share_token, created_by")
+    .select("id, name, destination, start_date, end_date, book_by_date, theme, effect, cover_image_url, status, share_token, created_by, cancelled_at")
     .eq("id", id)
     .maybeSingle();
   if (error) {
@@ -44,15 +47,31 @@ export default async function TripLayout({
     );
   }
   if (!tripRow) notFound();
-  const trip = tripRow as Pick<Trip, "id" | "name" | "destination" | "start_date" | "end_date" | "book_by_date" | "theme" | "effect" | "cover_image_url" | "status" | "share_token" | "created_by">;
+  const trip = tripRow as Pick<Trip, "id" | "name" | "destination" | "start_date" | "end_date" | "book_by_date" | "theme" | "effect" | "cover_image_url" | "status" | "share_token" | "created_by" | "cancelled_at">;
 
   // Host-or-cohost gate for edit affordances.
   let canEdit = trip.created_by === r.authUid;
+  const svc = createServiceClient();
   if (!canEdit) {
-    const svc = createServiceClient();
     const { data: cohost } = await svc.from("trip_cohosts")
       .select("trip_id").eq("trip_id", id).eq("user_id", r.authUid).maybeSingle();
     canEdit = !!cohost;
+  }
+
+  // Hosts get the action row under the cover (Invite + Copy share +
+  // Send blast + overflow). Load the respondents up here so the
+  // blast composer has the segment counts on first paint.
+  let respondents: Respondent[] = [];
+  let inviteUrl = "";
+  if (canEdit) {
+    const { data: respRows } = await svc
+      .from("respondents")
+      .select("*")
+      .eq("trip_id", id)
+      .order("created_at", { ascending: true });
+    respondents = (respRows ?? []) as Respondent[];
+    const baseUrl = await getSiteUrl();
+    inviteUrl = `${baseUrl}/invite/${trip.share_token}`;
   }
 
   const t = themeClass(trip.theme);
@@ -95,6 +114,20 @@ export default async function TripLayout({
                   theme:           trip.theme,
                 }}
               />
+              {canEdit && (
+                <div className="mt-4">
+                  <TripActions
+                    trip={{
+                      id:           trip.id,
+                      name:         trip.name,
+                      theme:        trip.theme,
+                      cancelled_at: trip.cancelled_at,
+                    }}
+                    respondents={respondents}
+                    inviteUrl={inviteUrl}
+                  />
+                </div>
+              )}
             </div>
 
             <div>
