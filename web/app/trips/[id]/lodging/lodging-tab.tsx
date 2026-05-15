@@ -145,7 +145,16 @@ export default function LodgingTab({
 
   async function select(optionId: string) {
     setErr(null);
-    setBusy(true);
+    // Optimistic: flip status='selected' on the picked option and
+    // 'option' on everything else so the green-soft LOCKED IN card
+    // appears immediately. Server-side reconcile via router.refresh
+    // on completion or error.
+    setOptions((prev) =>
+      prev.map((o) => ({
+        ...o,
+        status: o.id === optionId ? "selected" : (o.status === "selected" ? "option" : o.status),
+      })),
+    );
     try {
       const res = await fetch(`/api/trips/${tripId}/lodging/${optionId}/select`, {
         method: "POST",
@@ -153,18 +162,42 @@ export default function LodgingTab({
       if (!res.ok) {
         const body = await res.json().catch(() => null);
         setErr(body?.error?.code || `Select failed (${res.status})`);
+        startTrans(() => router.refresh());
         return;
       }
       startTrans(() => router.refresh());
     } catch {
       setErr("Couldn't reach Rally. Try again.");
-    } finally {
-      setBusy(false);
+      startTrans(() => router.refresh());
     }
   }
 
   async function assignMember(optionId: string, room_label: string, respondent_id: string, nights: number, cost_owed_cents: number) {
     setErr(null);
+    // Optimistic: push the assignment locally so the chip appears
+    // in the room layout immediately. The real id is generated
+    // server-side; use a temp id that router.refresh() will replace.
+    const tempId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    setOptions((prev) =>
+      prev.map((o) =>
+        o.id === optionId
+          ? {
+              ...o,
+              assignments: [
+                ...o.assignments,
+                {
+                  id: tempId,
+                  respondent_id,
+                  room_label,
+                  nights,
+                  cost_owed_cents,
+                  payment_status: "unpaid" as const,
+                },
+              ],
+            }
+          : o,
+      ),
+    );
     try {
       const res = await fetch(`/api/trips/${tripId}/lodging/${optionId}/assignments`, {
         method: "POST",
@@ -174,6 +207,7 @@ export default function LodgingTab({
       if (!res.ok) {
         const body = await res.json().catch(() => null);
         setErr(body?.error?.code || `Assign failed (${res.status})`);
+        startTrans(() => router.refresh());
         return;
       }
       startTrans(() => router.refresh());

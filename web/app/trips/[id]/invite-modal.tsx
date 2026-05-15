@@ -366,7 +366,9 @@ function SummaryView({
 }
 
 function placeholderMessage(tripName: string) {
-  return `[Planner] invited you to ${tripName}.`;
+  // Mirrors composeBody() in /api/trips/[id]/invitations — keeps
+  // the modal preview honest about what actually goes out.
+  return `[Planner] is putting together ${tripName}. Tap to see the deets + RSVP — bookings get locked in by [book-by date]`;
 }
 
 async function refreshAndNotify(

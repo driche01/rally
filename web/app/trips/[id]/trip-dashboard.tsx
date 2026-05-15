@@ -124,19 +124,35 @@ export default function TripDashboard({
   }
 
   async function handleOverride(respondent_id: string, rsvp_status: RsvpStatus) {
-    const res = await fetch(`/api/trips/${trip.id}/memberships`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ respondent_id, rsvp_status }),
-    });
-    const body = await res.json();
-    if (!res.ok || !body.ok) {
-      alert(`Override failed: ${body?.error?.code ?? res.status}`);
-      return;
-    }
+    // Optimistic: flip the chip immediately so the menu close +
+    // status update feel instant. Snapshot the old value so we can
+    // roll back if the server rejects.
+    const prevRespondents = respondents;
     setRespondents((prev) =>
-      prev.map((r) => (r.id === respondent_id ? (body.data as Respondent) : r)),
+      prev.map((r) => (r.id === respondent_id
+        ? { ...r, rsvp_status, rsvp_status_updated_at: new Date().toISOString() }
+        : r)),
     );
+    try {
+      const res = await fetch(`/api/trips/${trip.id}/memberships`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ respondent_id, rsvp_status }),
+      });
+      const body = await res.json();
+      if (!res.ok || !body.ok) {
+        setRespondents(prevRespondents);
+        alert(`Override failed: ${body?.error?.code ?? res.status}`);
+        return;
+      }
+      // Reconcile with authoritative server data.
+      setRespondents((prev) =>
+        prev.map((r) => (r.id === respondent_id ? (body.data as Respondent) : r)),
+      );
+    } catch {
+      setRespondents(prevRespondents);
+      alert("Couldn't reach Rally. Try again.");
+    }
   }
 
   function handleInvitationsSent(newRespondents: Respondent[], summary: ActivityFeedEntry | null) {

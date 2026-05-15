@@ -74,7 +74,7 @@ export async function POST(
   // 1. Authorize: caller is planner or cohost of this trip.
   const { data: trip, error: tripErr } = await r.supabase
     .from("trips")
-    .select("id, name, created_by, share_token, cancelled_at")
+    .select("id, name, created_by, share_token, cancelled_at, destination, start_date, end_date, book_by_date")
     .eq("id", trip_id)
     .maybeSingle();
   if (tripErr)  return jsonErr(500, "trip_read_failed", tripErr.message);
@@ -222,6 +222,10 @@ export async function POST(
       recipientName: c.name,
       plannerName,
       tripName: trip.name,
+      destination: trip.destination,
+      startDate: trip.start_date,
+      endDate: trip.end_date,
+      bookByDate: trip.book_by_date,
       customMessage: custom_message,
       inviteUrl,
     });
@@ -261,24 +265,93 @@ export async function POST(
   return jsonOk({ sent, failed, recipients: results });
 }
 
+/**
+ * Compose the invitation SMS body.
+ *
+ * Voice: warm + concrete + actionable. The recipient sees their first
+ * name + who's inviting + where + when + a clear booking deadline + a
+ * one-tap link. The custom-message slot lets the planner add a
+ * personal note that lands BETWEEN the hook and the next-steps line.
+ *
+ * Shape (no custom message):
+ *   ✈️ [First] — [Planner] is putting together [Trip] in [Destination]
+ *   [Date range]. Tap to see the deets + RSVP — bookings get locked in
+ *   by [book-by] so a quick yes/no helps lock plans: [URL]
+ *
+ * Shape (with custom message):
+ *   ✈️ [First] — [Planner] is putting together [Trip] in [Destination]
+ *   [Date range]. "[custom message]" Tap to RSVP — bookings get locked
+ *   in by [book-by]: [URL]
+ *
+ * Each segment renders only when its data is set, so trips without a
+ * destination or dates degrade gracefully.
+ */
 function composeBody({
   recipientName,
   plannerName,
   tripName,
+  destination,
+  startDate,
+  endDate,
+  bookByDate,
   customMessage,
   inviteUrl,
 }: {
   recipientName: string;
   plannerName: string;
   tripName: string;
+  destination: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  bookByDate: string | null;
   customMessage: string;
   inviteUrl: string;
 }): string {
-  const first = recipientName.split(/\s+/)[0];
-  const intro = customMessage
-    ? customMessage
-    : `${plannerName} invited you to ${tripName}.`;
-  return `Hey ${first} — ${intro} RSVP: ${inviteUrl}`;
+  const first = recipientName.split(/\s+/)[0] ?? recipientName;
+
+  // Opening hook — "✈️ [First] — [Planner] is putting together [Trip]"
+  let hook = `✈️ ${first} — ${plannerName} is putting together ${tripName}`;
+  if (destination)             hook += ` in ${destination}`;
+  const dateRange = formatDateRange(startDate, endDate);
+  if (dateRange)               hook += ` ${dateRange}`;
+  hook += ".";
+
+  // Optional planner note in quotes — separator after the hook.
+  const note = customMessage.trim() ? ` "${customMessage.trim()}"` : "";
+
+  // Call to action — book-by-aware so the urgency is visible from the
+  // start, per user directive.
+  const bookBy = bookByDate ? formatShortDate(bookByDate) : null;
+  const cta = bookBy
+    ? ` Tap to see the deets + RSVP — bookings get locked in by ${bookBy} so a quick yes/no helps lock plans: ${inviteUrl}`
+    : ` Tap to see the deets + RSVP: ${inviteUrl}`;
+
+  return `${hook}${note}${cta}`;
+}
+
+function formatDateRange(start: string | null, end: string | null): string {
+  if (!start && !end) return "";
+  if (start && end) {
+    const s = formatShortDate(start);
+    const e = formatShortDate(end);
+    // Same month: "Dec 12–19"; otherwise "Dec 12 – Jan 3".
+    const sMonth = s.split(" ")[0];
+    const eMonth = e.split(" ")[0];
+    if (sMonth === eMonth) {
+      const eDay = e.split(" ")[1] ?? "";
+      return `(${s}–${eDay})`;
+    }
+    return `(${s} – ${e})`;
+  }
+  if (start) return `(starts ${formatShortDate(start)})`;
+  return `(ends ${formatShortDate(end!)})`;
+}
+
+function formatShortDate(iso: string): string {
+  const [, m, d] = iso.slice(0, 10).split("-").map(Number);
+  if (!m || !d) return iso;
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${months[m - 1]} ${d}`;
 }
 
 async function safeJson(req: Request): Promise<Record<string, unknown> | null> {
