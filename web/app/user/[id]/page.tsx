@@ -24,6 +24,8 @@ import { canViewUserProfile } from "@/lib/profile-visibility";
 import { computeBadges, type Badge } from "@/lib/badges";
 import AppHeader from "@/lib/brand/app-header";
 import ProfileLocked from "./profile-locked";
+import TravelProfileSection from "./travel-profile-section";
+import type { TravelerProfile } from "@shared/types";
 
 export default async function UserProfilePage({
   params,
@@ -173,16 +175,22 @@ export default async function UserProfilePage({
   // 8. Compute badges + stats.
   const { stats, badges } = await computeBadges(svc, targetUserId);
 
-  // 9. Travel profile (via phone, per Q2).
-  let profile: TravelerProfileSummary | null = null;
+  // 9. Travel profile (via phone, per Q2). Selecting * because the
+  // client editor reads every vibe/dietary/budget field; the few
+  // legacy Expo columns we don't display cost nothing to ship.
+  let profile: Partial<TravelerProfile> | null = null;
   if (target.phone) {
     const { data: tp } = await svc
       .from("traveler_profiles")
       .select("home_airport, vibe_beach_or_mountain, vibe_spa_or_hike, vibe_foodie_or_casual, vibe_social_or_chill, vibe_culture_or_relaxation, budget_comfort, dietary_restrictions")
       .eq("phone", target.phone)
       .maybeSingle();
-    if (tp) profile = tp as TravelerProfileSummary;
+    if (tp) profile = tp as Partial<TravelerProfile>;
   }
+
+  // Is the viewer looking at their own page? Drives the "Edit" /
+  // "Add your travel vibes" affordance below.
+  const isSelf = viewerUserId === targetUserId;
 
   return (
     <main className="min-h-dvh bg-cream px-6 py-10">
@@ -230,12 +238,10 @@ export default async function UserProfilePage({
           </Section>
         )}
 
-        {/* Travel profile */}
-        {profile && (
-          <Section title="Travel vibes">
-            <TravelProfileCard p={profile} />
-          </Section>
-        )}
+        {/* Travel profile — editable when the viewer is the target.
+            The component decides whether to render (read-only card,
+            editable card, empty-state CTA, or nothing). */}
+        <TravelProfileSection initial={profile} isSelf={isSelf} />
 
         {/* Mutuals leaderboard — top 5 by shared trip count */}
         {topMutuals.length > 0 && (
@@ -342,52 +348,6 @@ function TripPill({ trip }: { trip: TripRowShape }) {
   );
 }
 
-interface TravelerProfileSummary {
-  home_airport: string | null;
-  vibe_beach_or_mountain: string | null;
-  vibe_spa_or_hike: string | null;
-  vibe_foodie_or_casual: string | null;
-  vibe_social_or_chill: string | null;
-  vibe_culture_or_relaxation: string | null;
-  budget_comfort: string | null;
-  dietary_restrictions: string[] | null;
-}
-
-function TravelProfileCard({ p }: { p: TravelerProfileSummary }) {
-  const vibes: string[] = [];
-  if (p.vibe_beach_or_mountain && p.vibe_beach_or_mountain !== "both") vibes.push(p.vibe_beach_or_mountain);
-  if (p.vibe_spa_or_hike && p.vibe_spa_or_hike !== "both")             vibes.push(p.vibe_spa_or_hike);
-  if (p.vibe_foodie_or_casual && p.vibe_foodie_or_casual !== "both")   vibes.push(p.vibe_foodie_or_casual);
-  if (p.vibe_social_or_chill && p.vibe_social_or_chill !== "both")     vibes.push(p.vibe_social_or_chill);
-  if (p.vibe_culture_or_relaxation && p.vibe_culture_or_relaxation !== "both") vibes.push(p.vibe_culture_or_relaxation);
-
-  return (
-    <div className="bg-card border border-line rounded-2xl p-5 grid gap-3 text-sm">
-      {p.home_airport && (
-        <Row label="Home airport" value={p.home_airport} />
-      )}
-      {p.budget_comfort && (
-        <Row label="Budget" value={capitalize(p.budget_comfort)} />
-      )}
-      {vibes.length > 0 && (
-        <Row label="Vibes" value={vibes.map(capitalize).join(" · ")} />
-      )}
-      {p.dietary_restrictions && p.dietary_restrictions.length > 0 && (
-        <Row label="Dietary" value={p.dietary_restrictions.join(", ")} />
-      )}
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <span className="text-xs uppercase tracking-widest font-semibold text-muted">{label}</span>
-      <span className="text-ink text-right">{value}</span>
-    </div>
-  );
-}
-
 // ─── helpers ──────────────────────────────────────────────────────
 
 function formatTripDates(start: string | null, end: string | null): string {
@@ -414,6 +374,3 @@ function formatRelative(iso: string): string {
   return `${Math.floor(days / 365)}y ago`;
 }
 
-function capitalize(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " ");
-}

@@ -12,6 +12,7 @@
  */
 
 import { requireRallyUserId } from "@/lib/auth";
+import { createServiceClient } from "@/lib/supabase/server";
 import { jsonErr, jsonOk } from "@/lib/http";
 import type {
   TravelerProfile,
@@ -31,7 +32,10 @@ export async function GET() {
   const r = await requireRallyUserId();
   if (!r.ok) return jsonErr(r.status, r.status === 404 ? "rally_user_not_found" : "unauthenticated");
 
-  // Get the caller's phone, then their profile row.
+  // Get the caller's phone, then their profile row. Service-role on
+  // the traveler_profiles read for the same reason the PUT uses it
+  // (anon SELECT on that table is planner-side-only). The auth gate
+  // above guarantees we're only returning the caller's own row.
   const { data: u, error: uErr } = await r.supabase
     .from("users")
     .select("phone")
@@ -40,7 +44,8 @@ export async function GET() {
   if (uErr) return jsonErr(500, "user_lookup_failed", uErr.message);
   if (!u?.phone) return jsonErr(404, "no_phone_on_record");
 
-  const { data, error } = await r.supabase
+  const svc = createServiceClient();
+  const { data, error } = await svc
     .from("traveler_profiles")
     .select("*")
     .eq("phone", u.phone)
@@ -96,7 +101,14 @@ export async function PUT(req: Request) {
     vibe_captured_at:           anyVibe ? new Date().toISOString() : null,
   };
 
-  const { data, error } = await r.supabase
+  // Service-role for the write: traveler_profiles RLS doesn't permit
+  // a phone-keyed owner upsert under the user JWT (the policy is
+  // planner-side-only — Phase A's RSVP route already used service-
+  // role for the same reason). We've already gated on the caller's
+  // identity via requireRallyUserId + the phone derived from their
+  // users row, so this stays safe.
+  const svc = createServiceClient();
+  const { data, error } = await svc
     .from("traveler_profiles")
     .upsert(upsert, { onConflict: "phone" })
     .select("*")
