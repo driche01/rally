@@ -30,13 +30,23 @@ interface Arrangement {
   gear_notes: string | null;
 }
 
+export interface GroupingMemberView {
+  respondent_id: string;
+  pre_assigned: boolean;
+}
+
+export type SpaceComfort = "tight" | "comfortable" | "spacious";
+
 export interface GroupingView {
   id: string;
   direction: "outbound" | "return";
   departure_datetime: string;
   driver_respondent_id: string | null;
   notes: string | null;
-  member_respondent_ids: string[];
+  seats_total: number | null;
+  space_comfort: SpaceComfort | null;
+  ride_notes: string | null;
+  members: GroupingMemberView[];
 }
 
 interface FlightOption {
@@ -55,7 +65,7 @@ interface FlightOption {
 
 export default function TravelTab({
   tripId, tripTheme, destination, startDate, endDate,
-  canManage, members, groupings,
+  canManage, callerRespondentId, members, groupings,
 }: {
   tripId: string;
   tripTheme: Trip["theme"];
@@ -63,6 +73,7 @@ export default function TravelTab({
   startDate: string | null;
   endDate: string | null;
   canManage: boolean;
+  callerRespondentId: string | null;
   members: TravelMember[];
   groupings: GroupingView[];
 }) {
@@ -130,14 +141,25 @@ export default function TravelTab({
     }
   }
 
-  async function createGrouping(direction: "outbound" | "return", departure_datetime: string) {
+  async function createGrouping(
+    direction: "outbound" | "return",
+    departure_datetime: string,
+    extras: { driver_respondent_id?: string | null; seats_total?: number | null; space_comfort?: SpaceComfort | null; ride_notes?: string | null } = {},
+  ) {
     setBusy(true);
     setErr(null);
     try {
       const res = await fetch(`/api/trips/${tripId}/travel/groupings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ direction, departure_datetime }),
+        body: JSON.stringify({
+          direction,
+          departure_datetime,
+          driver_respondent_id: extras.driver_respondent_id ?? null,
+          seats_total: extras.seats_total ?? null,
+          space_comfort: extras.space_comfort ?? null,
+          ride_notes: extras.ride_notes ?? null,
+        }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
@@ -152,17 +174,77 @@ export default function TravelTab({
     }
   }
 
-  async function toggleGroupingMember(grouping_id: string, respondent_id: string, currently_in: boolean) {
+  async function patchGrouping(
+    grouping_id: string,
+    patch: Partial<Pick<GroupingView, "seats_total" | "space_comfort" | "ride_notes" | "notes" | "departure_datetime" | "driver_respondent_id">>,
+  ) {
+    setErr(null);
+    try {
+      const res = await fetch(`/api/trips/${tripId}/travel/groupings/${grouping_id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setErr(body?.error?.code || `Update failed (${res.status})`);
+        return;
+      }
+      startTrans(() => router.refresh());
+    } catch {
+      setErr("Couldn't reach Rally. Try again.");
+    }
+  }
+
+  async function preAssignMember(grouping_id: string, respondent_id: string) {
     setErr(null);
     try {
       const res = await fetch(`/api/trips/${tripId}/travel/groupings/${grouping_id}/members`, {
-        method: currently_in ? "DELETE" : "POST",
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ respondent_id, pre_assigned: true }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setErr(body?.error?.code || `Add failed (${res.status})`);
+        return;
+      }
+      startTrans(() => router.refresh());
+    } catch {
+      setErr("Couldn't reach Rally. Try again.");
+    }
+  }
+
+  async function removeMember(grouping_id: string, respondent_id: string) {
+    setErr(null);
+    try {
+      const res = await fetch(`/api/trips/${tripId}/travel/groupings/${grouping_id}/members`, {
+        method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ respondent_id }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
         setErr(body?.error?.code || `Update failed (${res.status})`);
+        return;
+      }
+      startTrans(() => router.refresh());
+    } catch {
+      setErr("Couldn't reach Rally. Try again.");
+    }
+  }
+
+  async function joinRide(grouping_id: string) {
+    setErr(null);
+    try {
+      const res = await fetch(`/api/trips/${tripId}/travel/groupings/${grouping_id}/signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setErr(body?.error?.code || `Couldn't join (${res.status})`);
         return;
       }
       startTrans(() => router.refresh());
@@ -244,12 +326,46 @@ export default function TravelTab({
           <h3 className={`text-xs ${t.eyebrow}`}>Ride shares</h3>
           {canManage && (
             <CreateGroupingForm onSubmit={createGrouping} busy={busy} t={t}
-              defaultDepart={startDate ? `${startDate}T08:00` : ""} />
+              defaultDepart={startDate ? `${startDate}T08:00` : ""}
+              drivers={members.filter((m) => m.arrangement?.arrival_mode === "drive")} />
           )}
         </div>
+
+        {/* Driver bootstrap: callers whose own arrangement is "drive"
+            with a capacity can one-shot create their outbound ride. */}
+        {callerRespondentId && (() => {
+          const me = members.find((m) => m.respondent_id === callerRespondentId);
+          const drivesOut = me?.arrangement?.arrival_mode === "drive";
+          const hasOutbound = groupings.some(
+            (g) => g.direction === "outbound" && g.driver_respondent_id === callerRespondentId,
+          );
+          if (!drivesOut || hasOutbound) return null;
+          return (
+            <div className={`${t.surface} border ${t.surfaceBorder} rounded-2xl p-4 mb-4`}>
+              <p className={`text-sm ${t.body} mb-2`}>
+                You&rsquo;re driving. Want to offer your car as a ride share?
+              </p>
+              <button
+                onClick={() =>
+                  createGrouping("outbound",
+                    startDate ? `${startDate}T08:00:00` : new Date().toISOString(),
+                    {
+                      driver_respondent_id: callerRespondentId,
+                      seats_total: me?.arrangement?.vehicle_capacity ?? null,
+                    })
+                }
+                disabled={busy}
+                className="h-10 px-4 rounded-full bg-green text-cream font-bold text-sm hover:bg-green-2 disabled:opacity-50"
+              >
+                Make this a ride share →
+              </button>
+            </div>
+          );
+        })()}
+
         {groupings.length === 0 ? (
           <p className={`text-sm ${t.meta}`}>
-            No ride shares yet. {canManage ? "Add one above to start grouping members by departure time." : ""}
+            No ride shares yet.{canManage ? " Add one above to start grouping members by departure time." : ""}
           </p>
         ) : (
           <ul className="grid gap-3">
@@ -260,7 +376,11 @@ export default function TravelTab({
                   members={members}
                   t={t}
                   canManage={canManage}
-                  onToggleMember={(memId, inGroup) => toggleGroupingMember(g.id, memId, inGroup)}
+                  callerRespondentId={callerRespondentId}
+                  onPatch={(patch) => patchGrouping(g.id, patch)}
+                  onPreAssign={(memId) => preAssignMember(g.id, memId)}
+                  onRemoveMember={(memId) => removeMember(g.id, memId)}
+                  onJoin={() => joinRide(g.id)}
                   onDelete={() => deleteGrouping(g.id)}
                 />
               </li>
@@ -548,15 +668,17 @@ function FlightSuggestionsPanel({
 }
 
 function CreateGroupingForm({
-  onSubmit, busy, t, defaultDepart,
+  onSubmit, busy, t, defaultDepart, drivers,
 }: {
-  onSubmit: (dir: "outbound" | "return", dt: string) => void;
+  onSubmit: (dir: "outbound" | "return", dt: string, extras?: { driver_respondent_id?: string | null; seats_total?: number | null }) => void;
   busy: boolean;
   t: ReturnType<typeof themeClass>;
   defaultDepart: string;
+  drivers: TravelMember[];
 }) {
   const [direction, setDirection] = useState<"outbound" | "return">("outbound");
   const [departure, setDeparture] = useState(defaultDepart);
+  const [driverId, setDriverId]   = useState<string>("");
   return (
     <div className="flex gap-2 flex-wrap items-center">
       <select
@@ -573,10 +695,27 @@ function CreateGroupingForm({
         onChange={(e) => setDeparture(e.target.value)}
         className={`h-9 px-2 rounded-full bg-cream border ${t.surfaceBorder} text-xs`}
       />
+      <select
+        value={driverId}
+        onChange={(e) => setDriverId(e.target.value)}
+        className={`h-9 px-2 rounded-full bg-cream border ${t.surfaceBorder} text-xs max-w-[140px]`}
+        title="Driver — optional"
+      >
+        <option value="">No driver yet</option>
+        {drivers.map((d) => (
+          <option key={d.respondent_id} value={d.respondent_id}>{d.name}</option>
+        ))}
+      </select>
       <button
         type="button"
         disabled={busy || !departure}
-        onClick={() => onSubmit(direction, departure)}
+        onClick={() => {
+          const driver = drivers.find((d) => d.respondent_id === driverId);
+          onSubmit(direction, departure, {
+            driver_respondent_id: driverId || null,
+            seats_total: driver?.arrangement?.vehicle_capacity ?? null,
+          });
+        }}
         className="h-9 px-3 rounded-full bg-green text-cream font-bold text-xs hover:bg-green-2 disabled:opacity-50"
       >
         + Add
@@ -586,55 +725,249 @@ function CreateGroupingForm({
 }
 
 function GroupingCard({
-  grouping, members, t, canManage, onToggleMember, onDelete,
+  grouping, members, t, canManage, callerRespondentId,
+  onPatch, onPreAssign, onRemoveMember, onJoin, onDelete,
 }: {
   grouping: GroupingView;
   members: TravelMember[];
   t: ReturnType<typeof themeClass>;
   canManage: boolean;
-  onToggleMember: (memId: string, inGroup: boolean) => void;
+  callerRespondentId: string | null;
+  onPatch: (patch: Partial<Pick<GroupingView, "seats_total" | "space_comfort" | "ride_notes" | "departure_datetime" | "driver_respondent_id">>) => void;
+  onPreAssign: (memId: string) => void;
+  onRemoveMember: (memId: string) => void;
+  onJoin: () => void;
   onDelete: () => void;
 }) {
-  const inGroupIds = new Set(grouping.member_respondent_ids);
+  const driver = grouping.driver_respondent_id
+    ? members.find((m) => m.respondent_id === grouping.driver_respondent_id) ?? null
+    : null;
+  const memberRowById = new Map(grouping.members.map((gm) => [gm.respondent_id, gm]));
+  const callerInRide = callerRespondentId ? memberRowById.has(callerRespondentId) : false;
+  const callerIsDriver = !!callerRespondentId && grouping.driver_respondent_id === callerRespondentId;
+  const canEditRide = canManage || callerIsDriver;
+  const seatsTaken  = grouping.members.length;
+  const seatsTotal  = grouping.seats_total;
+  const seatsLeft   = seatsTotal != null ? Math.max(0, seatsTotal - seatsTaken) : null;
+  const isFull      = seatsLeft === 0;
+
+  const [adding, setAdding]   = useState("");
+  const [editing, setEditing] = useState(false);
+
+  const goingAndMaybe = members.filter(
+    (m) => !memberRowById.has(m.respondent_id) && m.respondent_id !== grouping.driver_respondent_id,
+  );
 
   return (
     <article className={`${t.surface} border ${t.surfaceBorder} rounded-2xl p-4`}>
-      <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
-        <div>
+      <div className="flex items-start justify-between flex-wrap gap-3 mb-3">
+        <div className="min-w-0">
           <p className={`text-[10px] uppercase tracking-widest font-bold ${t.meta}`}>
             {grouping.direction === "outbound" ? "Outbound" : "Return"}
+            {driver && <> · driver: <span className={t.body}>{driver.name}</span></>}
           </p>
           <p className={`font-bold ${t.body}`}>{formatDt(grouping.departure_datetime)}</p>
-          {grouping.notes && <p className={`text-xs ${t.meta}`}>{grouping.notes}</p>}
+          {grouping.ride_notes && (
+            <p className={`text-xs ${t.body} mt-1 whitespace-pre-line italic`}>
+              &ldquo;{grouping.ride_notes}&rdquo;
+            </p>
+          )}
+          {grouping.notes && (
+            <p className={`text-xs ${t.meta} mt-1`}>{grouping.notes}</p>
+          )}
         </div>
-        {canManage && (
-          <button onClick={onDelete} className={`text-xs ${t.meta} hover:text-orange`}>
-            Remove
+
+        <div className="flex flex-col items-end gap-2">
+          {seatsTotal != null ? (
+            <p className={`text-xs ${t.meta}`}>
+              <span className={`font-bold ${t.body}`}>{seatsTaken}</span>
+              {" / "}{seatsTotal} seats {isFull && <span className="text-orange font-semibold">· full</span>}
+            </p>
+          ) : (
+            <p className={`text-xs ${t.meta}`}>{seatsTaken} on board</p>
+          )}
+          {grouping.space_comfort && (
+            <span className={`text-[10px] uppercase tracking-widest font-bold ${
+              grouping.space_comfort === "tight" ? "text-orange"
+              : grouping.space_comfort === "comfortable" ? "text-green"
+              : "text-green"
+            }`}>
+              {grouping.space_comfort === "tight" ? "🚐 tight fit" : grouping.space_comfort === "comfortable" ? "👌 comfortable" : "🛋 lots of room"}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Edit-ride controls (driver or planner) */}
+      {canEditRide && (
+        <div className="flex flex-wrap gap-2 mb-3">
+          <button
+            type="button"
+            onClick={() => setEditing((v) => !v)}
+            className={`h-8 px-3 rounded-full ${t.surface} border ${t.surfaceBorder} text-xs hover:border-green`}
+          >
+            {editing ? "Done editing" : "Edit ride →"}
+          </button>
+          {canManage && (
+            <button onClick={onDelete} className={`text-xs ${t.meta} hover:text-orange self-center`}>
+              Remove ride
+            </button>
+          )}
+        </div>
+      )}
+      {editing && canEditRide && (
+        <RideEditForm grouping={grouping} t={t} onPatch={onPatch} />
+      )}
+
+      {/* Member chips — pre-assigned shows 🔒 */}
+      {grouping.members.length > 0 && (
+        <ul className="flex flex-wrap gap-1.5 mb-3">
+          {grouping.members.map((gm) => {
+            const member = members.find((m) => m.respondent_id === gm.respondent_id);
+            const name = member?.name ?? "(unknown)";
+            const isSelf = callerRespondentId === gm.respondent_id;
+            return (
+              <li
+                key={gm.respondent_id}
+                className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-semibold border ${
+                  gm.pre_assigned ? "bg-green-soft text-green border-green/40" : "bg-cream text-ink border-line"
+                }`}
+              >
+                {gm.pre_assigned && <span aria-hidden title="Pre-assigned by driver">🔒</span>}
+                <span>{name}</span>
+                {(canEditRide || isSelf) && gm.respondent_id !== grouping.driver_respondent_id && (
+                  <button
+                    type="button"
+                    onClick={() => onRemoveMember(gm.respondent_id)}
+                    className={`text-xs ${t.meta} hover:text-orange ml-1`}
+                    aria-label={`Remove ${name}`}
+                  >
+                    ×
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {/* Bottom action row */}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Passenger Join button */}
+        {callerRespondentId && !callerInRide && !callerIsDriver && !isFull && (
+          <button
+            type="button"
+            onClick={onJoin}
+            className="h-9 px-4 rounded-full bg-green text-cream font-bold text-xs hover:bg-green-2"
+          >
+            Join this ride →
           </button>
         )}
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        {members.map((m) => {
-          const inGroup = inGroupIds.has(m.respondent_id);
-          return (
-            <button
-              key={m.respondent_id}
-              type="button"
-              disabled={!canManage}
-              onClick={() => onToggleMember(m.respondent_id, inGroup)}
-              className={
-                "h-8 px-3 rounded-full text-xs font-semibold border transition-colors " +
-                (inGroup
-                  ? "bg-green text-cream border-green"
-                  : `bg-cream ${t.surfaceBorder} text-ink hover:border-green disabled:opacity-50`)
-              }
+        {/* Caller already in the ride — quick leave */}
+        {callerRespondentId && callerInRide && !callerIsDriver && (
+          <button
+            type="button"
+            onClick={() => onRemoveMember(callerRespondentId)}
+            className={`h-9 px-4 rounded-full ${t.surface} border ${t.surfaceBorder} text-xs hover:border-orange hover:text-orange`}
+          >
+            Leave ride
+          </button>
+        )}
+        {/* Driver / planner pre-assign dropdown */}
+        {canEditRide && goingAndMaybe.length > 0 && !isFull && (
+          <>
+            <select
+              value={adding}
+              onChange={(e) => setAdding(e.target.value)}
+              className={`h-9 px-2 rounded-full bg-cream border ${t.surfaceBorder} text-xs`}
             >
-              {m.name}
+              <option value="">Pre-assign someone…</option>
+              {goingAndMaybe.map((m) => (
+                <option key={m.respondent_id} value={m.respondent_id}>{m.name}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={!adding}
+              onClick={() => { if (adding) { onPreAssign(adding); setAdding(""); } }}
+              className="h-9 px-3 rounded-full bg-green text-cream font-bold text-xs hover:bg-green-2 disabled:opacity-50"
+            >
+              + Add
             </button>
-          );
-        })}
+          </>
+        )}
+        {isFull && callerRespondentId && !callerInRide && !callerIsDriver && (
+          <p className={`text-xs ${t.meta}`}>This ride is full.</p>
+        )}
       </div>
     </article>
+  );
+}
+
+function RideEditForm({
+  grouping, t, onPatch,
+}: {
+  grouping: GroupingView;
+  t: ReturnType<typeof themeClass>;
+  onPatch: (p: Partial<Pick<GroupingView, "seats_total" | "space_comfort" | "ride_notes" | "departure_datetime">>) => void;
+}) {
+  const [seats,   setSeats]   = useState<number | "">(grouping.seats_total ?? "");
+  const [comfort, setComfort] = useState<SpaceComfort | "">(grouping.space_comfort ?? "");
+  const [notes,   setNotes]   = useState(grouping.ride_notes ?? "");
+
+  return (
+    <div className={`bg-cream border border-line rounded-xl p-3 grid gap-2 mb-3`}>
+      <div className="flex flex-wrap gap-2">
+        <label className="flex items-center gap-1.5">
+          <span className={`text-[10px] uppercase tracking-widest font-bold ${t.meta}`}>Seats</span>
+          <input
+            type="number"
+            min={1}
+            max={20}
+            value={seats}
+            onChange={(e) => setSeats(e.target.value === "" ? "" : Number(e.target.value))}
+            className={`h-8 w-16 px-2 rounded-md border ${t.surfaceBorder} text-sm`}
+          />
+        </label>
+        <label className="flex items-center gap-1.5">
+          <span className={`text-[10px] uppercase tracking-widest font-bold ${t.meta}`}>Comfort</span>
+          <select
+            value={comfort}
+            onChange={(e) => setComfort(e.target.value as SpaceComfort | "")}
+            className={`h-8 px-2 rounded-md border ${t.surfaceBorder} text-sm`}
+          >
+            <option value="">—</option>
+            <option value="tight">Tight fit</option>
+            <option value="comfortable">Comfortable</option>
+            <option value="spacious">Lots of room</option>
+          </select>
+        </label>
+      </div>
+      <label className="grid gap-1">
+        <span className={`text-[10px] uppercase tracking-widest font-bold ${t.meta}`}>Notes to passengers</span>
+        <textarea
+          rows={2}
+          value={notes}
+          maxLength={500}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Leaving at 6am sharp · gas stop in Modesto · happy to swing by Oakland for pickup"
+          className={`rounded-md border ${t.surfaceBorder} bg-card px-3 py-2 text-sm`}
+        />
+      </label>
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => onPatch({
+            seats_total: seats === "" ? null : seats,
+            space_comfort: (comfort || null) as SpaceComfort | null,
+            ride_notes: notes.trim() === "" ? null : notes.trim(),
+          })}
+          className="h-8 px-3 rounded-full bg-green text-cream font-bold text-xs hover:bg-green-2"
+        >
+          Save
+        </button>
+      </div>
+    </div>
   );
 }
 

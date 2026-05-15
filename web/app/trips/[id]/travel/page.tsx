@@ -45,27 +45,37 @@ export default async function TravelPage({
   const canManage = isPlanner || isCohost;
 
   const svc = createServiceClient();
-  const [respondentsRes, arrangementsRes, profilesRes, groupingsRes, groupingMembersRes] = await Promise.all([
+  const [respondentsRes, arrangementsRes, profilesRes, groupingsRes, groupingMembersRes, callerUserRes] = await Promise.all([
     svc.from("respondents")
-       .select("id, name, phone, rsvp_status, is_planner")
+       .select("id, name, phone, rsvp_status, is_planner, user_id")
        .eq("trip_id", id),
     svc.from("travel_arrangements")
        .select("id, respondent_id, arrival_mode, arrival_datetime, departure_datetime, flight_number, flight_origin_airport, flight_destination_airport, vehicle_capacity, gear_notes")
        .eq("trip_id", id),
     svc.from("traveler_profiles").select("phone, home_airport"),
     svc.from("travel_groupings")
-       .select("id, direction, departure_datetime, driver_respondent_id, notes, created_at")
+       .select("id, direction, departure_datetime, driver_respondent_id, notes, seats_total, space_comfort, ride_notes, created_at")
        .eq("trip_id", id)
        .order("departure_datetime", { ascending: true }),
     svc.from("travel_grouping_members")
-       .select("grouping_id, respondent_id"),
+       .select("grouping_id, respondent_id, pre_assigned, added_by_respondent_id"),
+    svc.from("users").select("id").eq("auth_user_id", r.authUid).maybeSingle(),
   ]);
 
-  const respondents = (respondentsRes.data ?? []) as { id: string; name: string; phone: string | null; rsvp_status: string | null; is_planner: boolean }[];
+  const respondents = (respondentsRes.data ?? []) as { id: string; name: string; phone: string | null; rsvp_status: string | null; is_planner: boolean; user_id: string | null }[];
   const arrangements = (arrangementsRes.data ?? []) as Record<string, unknown>[];
   const profiles = (profilesRes.data ?? []) as { phone: string; home_airport: string | null }[];
-  const groupings = (groupingsRes.data ?? []) as { id: string; direction: string; departure_datetime: string; driver_respondent_id: string | null; notes: string | null; created_at: string }[];
-  const groupingMembers = (groupingMembersRes.data ?? []) as { grouping_id: string; respondent_id: string }[];
+  const groupings = (groupingsRes.data ?? []) as { id: string; direction: string; departure_datetime: string; driver_respondent_id: string | null; notes: string | null; seats_total: number | null; space_comfort: string | null; ride_notes: string | null; created_at: string }[];
+  const groupingMembers = (groupingMembersRes.data ?? []) as { grouping_id: string; respondent_id: string; pre_assigned: boolean; added_by_respondent_id: string | null }[];
+
+  // Resolve the caller's respondent_id on this trip so the UI knows
+  // who "self" is — for "Join this ride" + "leave" affordances.
+  let callerRespondentId: string | null = null;
+  const callerUserId = callerUserRes.data?.id as string | undefined;
+  if (callerUserId) {
+    const caller = respondents.find((r) => r.user_id === callerUserId);
+    callerRespondentId = caller?.id ?? null;
+  }
 
   // Build a name + airport lookup keyed on phone.
   const airportByPhone = new Map<string, string>();
@@ -105,9 +115,15 @@ export default async function TravelPage({
     departure_datetime: g.departure_datetime,
     driver_respondent_id: g.driver_respondent_id,
     notes: g.notes,
-    member_respondent_ids: groupingMembers
+    seats_total: g.seats_total,
+    space_comfort: g.space_comfort as ("tight" | "comfortable" | "spacious") | null,
+    ride_notes: g.ride_notes,
+    members: groupingMembers
       .filter((gm) => gm.grouping_id === g.id)
-      .map((gm) => gm.respondent_id),
+      .map((gm) => ({
+        respondent_id: gm.respondent_id,
+        pre_assigned: gm.pre_assigned,
+      })),
   }));
 
   return (
@@ -118,6 +134,7 @@ export default async function TravelPage({
       startDate={trip.start_date}
       endDate={trip.end_date}
       canManage={canManage}
+      callerRespondentId={callerRespondentId}
       members={goingMembers}
       groupings={groupingViews}
     />
