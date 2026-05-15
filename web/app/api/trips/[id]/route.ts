@@ -9,18 +9,8 @@
 import { requireAuthUid } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { jsonErr, jsonOk } from "@/lib/http";
+import { ALLOWED_THEMES } from "@/lib/themes";
 import type { Trip, TripTheme, TripEffect } from "@shared/types";
-
-const ALLOWED_THEMES: ReadonlySet<TripTheme> = new Set([
-  // Vibes
-  "classic","eclectic","fancy","literary","digital","elegant","sunset","neon",
-  // Light
-  "mist","blossom","sage",
-  // Dark
-  "midnight","forest","noir",
-  // Seasonal
-  "spring","summer","autumn","winter",
-]);
 
 const ALLOWED_EFFECTS: ReadonlySet<TripEffect> = new Set([
   "sparkles","confetti","hearts","snowflakes","bubbles","petals","embers","stars",

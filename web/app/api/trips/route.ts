@@ -12,6 +12,7 @@ import { randomBytes } from "crypto";
 import { requireAuthUid } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/server";
 import { json, jsonErr, jsonOk } from "@/lib/http";
+import { ALLOWED_THEMES } from "@/lib/themes";
 import type { Trip, TripTheme } from "@shared/types";
 
 export async function GET() {
@@ -28,10 +29,6 @@ export async function GET() {
   if (error) return jsonErr(500, "trips_read_failed", error.message);
   return jsonOk(data as Trip[]);
 }
-
-const ALLOWED_THEMES: ReadonlySet<TripTheme> = new Set([
-  "classic","eclectic","fancy","literary","digital","elegant",
-]);
 
 export async function POST(req: Request) {
   const r = await requireAuthUid();

@@ -374,6 +374,17 @@ export const THEMES: { value: TripTheme; style: ThemeStyle }[] = (
   Object.keys(STYLES) as TripTheme[]
 ).map((value) => ({ value, style: STYLES[value] }));
 
+/**
+ * Allow-list for API validation. Derived from STYLES so it can never
+ * drift from the renderable set — any theme exposed in the picker is
+ * automatically accepted by POST/PATCH. The DB CHECK constraint on
+ * trips.theme is the final gate and must be kept in sync via
+ * migrations.
+ */
+export const ALLOWED_THEMES: ReadonlySet<TripTheme> = new Set(
+  Object.keys(STYLES) as TripTheme[],
+);
+
 /** Category label + emoji shown in the theme picker filter chips. */
 export const THEME_CATEGORIES: { value: ThemeCategory; label: string; emoji: string }[] = [
   { value: "vibes",    label: "Vibes",    emoji: "✨" },
