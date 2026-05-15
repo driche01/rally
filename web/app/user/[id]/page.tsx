@@ -220,21 +220,20 @@ export default async function UserProfilePage({
           </div>
         )}
 
-        {/* Upcoming trips */}
+        {/* Upcoming trips — aggregated badges by destination. Same
+            destination across multiple trips shows up once with a
+            count, so the section stays readable even when someone
+            has 6 "Yosemite (copy)" drafts. */}
         {upcoming.length > 0 && (
           <Section title="Upcoming">
-            <ul className="grid gap-2">
-              {upcoming.map((h) => <TripPill key={h.id} trip={h.trip} />)}
-            </ul>
+            <DestinationBadges trips={upcoming.map((h) => h.trip)} tone="upcoming" />
           </Section>
         )}
 
-        {/* Past trips */}
+        {/* Past trips — same treatment, just a tonal shift. */}
         {past.length > 0 && (
           <Section title="Past trips">
-            <ul className="grid gap-2">
-              {past.map((h) => <TripPill key={h.id} trip={h.trip} />)}
-            </ul>
+            <DestinationBadges trips={past.map((h) => h.trip)} tone="past" />
           </Section>
         )}
 
@@ -334,28 +333,77 @@ interface TripRowShape {
   cover_image_url: string | null;
 }
 
-function TripPill({ trip }: { trip: TripRowShape }) {
+function DestinationBadges({
+  trips, tone,
+}: { trips: TripRowShape[]; tone: "upcoming" | "past" }) {
+  // Group by destination (fallback: trip name). Same-named destinations
+  // collapse into a single chip with a count badge.
+  const groups = new Map<string, { label: string; count: number; earliest: string | null }>();
+  for (const trip of trips) {
+    const key = (trip.destination?.trim() || trip.name || "Untitled").toLowerCase();
+    const label = trip.destination?.trim() || trip.name || "Untitled";
+    const existing = groups.get(key);
+    if (existing) {
+      existing.count++;
+      // Track the earliest (upcoming) or latest (past) date so the
+      // chip can carry a "when" hint. Reuse `earliest` slot for both
+      // — for "past" we'll display max instead, picked by tone below.
+      if (trip.start_date) {
+        if (!existing.earliest || (
+          tone === "upcoming"
+            ? trip.start_date < existing.earliest
+            : trip.start_date > existing.earliest
+        )) {
+          existing.earliest = trip.start_date;
+        }
+      }
+    } else {
+      groups.set(key, { label, count: 1, earliest: trip.start_date });
+    }
+  }
+
+  const sorted = Array.from(groups.values()).sort((a, b) => {
+    // Upcoming: soonest first. Past: most recent first.
+    const da = a.earliest ?? "";
+    const db = b.earliest ?? "";
+    if (tone === "upcoming") return da.localeCompare(db);
+    return db.localeCompare(da);
+  });
+
+  const chipBase =
+    "inline-flex items-center gap-2 h-9 px-3.5 rounded-full text-sm font-semibold border ";
+  const chipTone = tone === "upcoming"
+    ? "bg-green-soft/40 text-ink border-green/30"
+    : "bg-card text-muted border-line";
+
   return (
-    <li className="bg-card border border-line rounded-2xl p-4 flex items-center justify-between gap-3">
-      <div className="min-w-0">
-        <p className="font-semibold text-ink truncate">{trip.name}</p>
-        <p className="text-xs text-muted">
-          {trip.destination ?? "—"}
-          {trip.start_date && <> · {formatTripDates(trip.start_date, trip.end_date)}</>}
-        </p>
-      </div>
-    </li>
+    <div className="flex flex-wrap gap-2">
+      {sorted.map((g) => (
+        <span key={g.label} className={chipBase + chipTone}>
+          <span className="truncate max-w-[12rem]">{g.label}</span>
+          {g.earliest && (
+            <span className={tone === "upcoming" ? "text-green text-xs" : "text-muted text-xs"}>
+              {formatMd(g.earliest)}
+            </span>
+          )}
+          {g.count > 1 && (
+            <span
+              aria-label={`${g.count} trips`}
+              className={
+                "inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold tabular-nums " +
+                (tone === "upcoming" ? "bg-green text-cream" : "bg-line text-ink")
+              }
+            >
+              ×{g.count}
+            </span>
+          )}
+        </span>
+      ))}
+    </div>
   );
 }
 
 // ─── helpers ──────────────────────────────────────────────────────
-
-function formatTripDates(start: string | null, end: string | null): string {
-  if (!start) return "";
-  const s = formatMd(start);
-  if (!end || end === start) return s;
-  return `${s} – ${formatMd(end)}`;
-}
 
 function formatMd(iso: string): string {
   const [year, month, day] = iso.slice(0, 10).split("-").map(Number);
