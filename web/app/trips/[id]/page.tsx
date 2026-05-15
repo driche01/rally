@@ -57,6 +57,7 @@ export default async function TripOverviewPage({
 
   const stallSignal = await detectStallForBanner(
     svc, trip.id, trip.start_date, trip.book_by_date, trip.cancelled_at,
+    trip.group_size_precise,
   );
 
   return (

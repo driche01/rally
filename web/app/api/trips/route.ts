@@ -70,13 +70,27 @@ export async function POST(req: Request) {
 
   // group_size_bucket has a CHECK constraint and is required on the
   // existing schema. Default to '5-8' for now; Step 3 UI will let
-  // the planner choose.
+  // the planner choose. If group_size_precise is set, the form
+  // auto-derives the bucket from it (see trip-form.tsx).
   const group_size_bucket = strOrNull(body.group_size_bucket) ?? "5-8";
+
+  // Alpha+ — precise count for planners who already know the
+  // group. When set, RSVP-related nudges are functionally moot
+  // (planner can still invite people, but won't push RSVPs).
+  let group_size_precise: number | null = null;
+  if (body.group_size_precise != null && body.group_size_precise !== "") {
+    const n = Number(body.group_size_precise);
+    if (!Number.isFinite(n) || n < 1 || n > 500) {
+      return jsonErr(400, "invalid_group_size_precise");
+    }
+    group_size_precise = Math.floor(n);
+  }
 
   const insert = {
     created_by:      r.authUid,
     name,
     group_size_bucket,
+    group_size_precise,
     theme,
     destination:     strOrNull(body.destination),
     description:     strOrNull(body.description),

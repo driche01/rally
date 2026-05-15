@@ -25,6 +25,7 @@ interface FormState {
   budget_max: string;
   theme: TripTheme | "";
   group_size_bucket: string;
+  group_size_precise: string;   // "" = use bucket; otherwise an integer
   is_public: boolean;
   status: "draft" | "active";
 }
@@ -41,9 +42,19 @@ const EMPTY: FormState = {
   budget_max: "",
   theme: "",
   group_size_bucket: "5-8",
+  group_size_precise: "",
   is_public: false,
   status: "active",
 };
+
+/** Derive a bucket from a precise count for backwards compat. */
+function bucketFromCount(n: number): string {
+  if (n <= 4)  return "0-4";
+  if (n <= 8)  return "5-8";
+  if (n <= 12) return "9-12";
+  if (n <= 20) return "13-20";
+  return "20+";
+}
 
 /**
  * Default suggestion for book_by_date when the planner sets a
@@ -103,6 +114,21 @@ export default function TripForm() {
       return;
     }
 
+    // Group size: if planner entered a precise count, use it and
+    // auto-derive the bucket. Otherwise stick with the bucket they
+    // picked.
+    let group_size_precise: number | null = null;
+    let group_size_bucket = s.group_size_bucket;
+    if (s.group_size_precise.trim() !== "") {
+      const n = Number(s.group_size_precise);
+      if (!Number.isFinite(n) || n < 1 || n > 500) {
+        setErr("Group size must be a number between 1 and 500.");
+        return;
+      }
+      group_size_precise = Math.floor(n);
+      group_size_bucket = bucketFromCount(group_size_precise);
+    }
+
     setBusy(true);
     try {
       const res = await fetch("/api/trips", {
@@ -113,6 +139,8 @@ export default function TripForm() {
           theme: s.theme || null,
           budget_min: min,
           budget_max: max,
+          group_size_bucket,
+          group_size_precise,
         }),
       });
       const body = await res.json();
@@ -277,21 +305,48 @@ export default function TripForm() {
       </div>
 
       <Field label="Group size">
-        <div className="flex flex-wrap gap-2">
-          {GROUP_BUCKETS.map((b) => (
-            <button
-              key={b.value}
-              type="button"
-              onClick={() => set("group_size_bucket", b.value)}
-              className={
-                s.group_size_bucket === b.value
-                  ? "px-4 h-11 rounded-full bg-green-soft text-green border border-green font-semibold"
-                  : "px-4 h-11 rounded-full bg-card text-ink border border-line"
-              }
-            >
-              {b.label}
-            </button>
-          ))}
+        <p className="text-xs text-muted mb-3">
+          Pick a bucket if you&rsquo;re collecting RSVPs and the final number is still fuzzy. Enter a precise count below if you already know exactly who&rsquo;s coming.
+        </p>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {GROUP_BUCKETS.map((b) => {
+            const disabled = s.group_size_precise.trim() !== "";
+            return (
+              <button
+                key={b.value}
+                type="button"
+                disabled={disabled}
+                onClick={() => set("group_size_bucket", b.value)}
+                className={
+                  s.group_size_bucket === b.value
+                    ? "px-4 h-11 rounded-full bg-green-soft text-green border border-green font-semibold disabled:opacity-50"
+                    : "px-4 h-11 rounded-full bg-card text-ink border border-line disabled:opacity-50"
+                }
+              >
+                {b.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs uppercase tracking-widest font-semibold text-muted">
+            or precise count
+          </span>
+          <input
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={500}
+            placeholder="e.g. 8"
+            value={s.group_size_precise}
+            onChange={(e) => set("group_size_precise", e.target.value)}
+            className="h-11 px-4 rounded-full border border-line bg-card text-ink w-32"
+          />
+          {s.group_size_precise.trim() !== "" && (
+            <span className="text-xs text-muted">
+              No RSVPs needed — you can still invite people for visibility, but Rally won&rsquo;t send RSVP reminders.
+            </span>
+          )}
         </div>
       </Field>
 

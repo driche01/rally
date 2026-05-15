@@ -37,9 +37,14 @@ export async function detectStallForBanner(
   startDate: string | null,
   bookByDate: string | null,
   cancelledAt: string | null,
+  groupSizePrecise: number | null,
   now: Date = new Date(),
 ): Promise<StallSignal | null> {
   if (cancelledAt) return null;
+  // "I already know" mode: headcount is locked, no RSVP-based
+  // banners apply. (Feed-silence A1 is about commitment confirmation;
+  // A2/A3 are explicitly about unresponded counts.)
+  if (groupSizePrecise != null) return null;
 
   // Re-key on book_by_date (Q35). For legacy trips with no
   // book_by_date set, fall back to start_date - 30d.

@@ -239,8 +239,24 @@ async function lazySchedule(admin: SupabaseClient, now: Date): Promise<number> {
 
   if (!candidates || candidates.length === 0) return 0;
 
+  // Alpha+ "I already know" mode: filter out respondents whose
+  // trip has group_size_precise set. Planner has a locked group,
+  // no RSVPs to chase.
+  const tripIds = Array.from(new Set(candidates.map((c) => c.trip_id as string)));
+  const { data: tripsForFilter } = await admin
+    .from('trips')
+    .select('id, group_size_precise')
+    .in('id', tripIds);
+  const preciseModeTrips = new Set(
+    (tripsForFilter ?? [])
+      .filter((t) => t.group_size_precise != null)
+      .map((t) => t.id as string),
+  );
+  const liveCandidates = candidates.filter((c) => !preciseModeTrips.has(c.trip_id as string));
+  if (liveCandidates.length === 0) return 0;
+
   // Filter out respondents that already have any rsvp_nudge row.
-  const respondentIds = candidates.map((c) => c.id);
+  const respondentIds = liveCandidates.map((c) => c.id);
   const { data: existing } = await admin
     .from('scheduled_reminders')
     .select('recipient_respondent_id')
@@ -248,7 +264,7 @@ async function lazySchedule(admin: SupabaseClient, now: Date): Promise<number> {
     .in('recipient_respondent_id', respondentIds);
 
   const haveScheduled = new Set((existing ?? []).map((e) => e.recipient_respondent_id));
-  const toSchedule = candidates.filter((c) => !haveScheduled.has(c.id));
+  const toSchedule = liveCandidates.filter((c) => !haveScheduled.has(c.id));
   if (toSchedule.length === 0) return 0;
 
   const rows = toSchedule.map((c) => ({
@@ -396,7 +412,9 @@ async function detectStallForTrip(
  */
 async function scheduleFinalRsvpReminder(admin: SupabaseClient, now: Date): Promise<number> {
   // Trips whose book_by_date is in the next 7 days (inclusive),
-  // active, not cancelled.
+  // active, not cancelled. Alpha+ "I already know" mode: skip
+  // trips where group_size_precise is set — the planner has a
+  // locked group, no RSVPs to chase.
   const lo = now.toISOString().slice(0, 10);
   const hi = new Date(now.getTime() + 7 * 86_400_000).toISOString().slice(0, 10);
 
@@ -404,6 +422,7 @@ async function scheduleFinalRsvpReminder(admin: SupabaseClient, now: Date): Prom
     .from('trips')
     .select('id, book_by_date')
     .is('cancelled_at', null)
+    .is('group_size_precise', null)
     .not('book_by_date', 'is', null)
     .gte('book_by_date', lo)
     .lte('book_by_date', hi)
