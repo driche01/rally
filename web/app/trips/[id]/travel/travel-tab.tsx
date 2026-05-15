@@ -5,7 +5,7 @@
  * Phase B Step 6 v0.
  */
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { themeClass } from "@/lib/themes";
 import { flightSearchFor } from "@/lib/deep-links";
@@ -177,7 +177,7 @@ export default function TravelTab({
   async function patchGrouping(
     grouping_id: string,
     patch: Partial<Pick<GroupingView, "seats_total" | "space_comfort" | "ride_notes" | "notes" | "departure_datetime" | "driver_respondent_id">>,
-  ) {
+  ): Promise<boolean> {
     setErr(null);
     try {
       const res = await fetch(`/api/trips/${tripId}/travel/groupings/${grouping_id}`, {
@@ -188,11 +188,13 @@ export default function TravelTab({
       if (!res.ok) {
         const body = await res.json().catch(() => null);
         setErr(body?.error?.code || `Update failed (${res.status})`);
-        return;
+        return false;
       }
       startTrans(() => router.refresh());
+      return true;
     } catch {
       setErr("Couldn't reach Rally. Try again.");
+      return false;
     }
   }
 
@@ -733,7 +735,7 @@ function GroupingCard({
   t: ReturnType<typeof themeClass>;
   canManage: boolean;
   callerRespondentId: string | null;
-  onPatch: (patch: Partial<Pick<GroupingView, "seats_total" | "space_comfort" | "ride_notes" | "departure_datetime" | "driver_respondent_id">>) => void;
+  onPatch: (patch: Partial<Pick<GroupingView, "seats_total" | "space_comfort" | "ride_notes" | "departure_datetime" | "driver_respondent_id">>) => Promise<boolean>;
   onPreAssign: (memId: string) => void;
   onRemoveMember: (memId: string) => void;
   onJoin: () => void;
@@ -909,11 +911,38 @@ function RideEditForm({
 }: {
   grouping: GroupingView;
   t: ReturnType<typeof themeClass>;
-  onPatch: (p: Partial<Pick<GroupingView, "seats_total" | "space_comfort" | "ride_notes" | "departure_datetime">>) => void;
+  onPatch: (p: Partial<Pick<GroupingView, "seats_total" | "space_comfort" | "ride_notes" | "departure_datetime">>) => Promise<boolean>;
 }) {
   const [seats,   setSeats]   = useState<number | "">(grouping.seats_total ?? "");
   const [comfort, setComfort] = useState<SpaceComfort | "">(grouping.space_comfort ?? "");
   const [notes,   setNotes]   = useState(grouping.ride_notes ?? "");
+  const [status,  setStatus]  = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  // After router.refresh() the grouping prop changes; sync the
+  // form's drafts so a re-edit starts from the latest persisted
+  // values (no stale-input drift across saves).
+  useEffect(() => {
+    setSeats(grouping.seats_total ?? "");
+    setComfort(grouping.space_comfort ?? "");
+    setNotes(grouping.ride_notes ?? "");
+  }, [grouping.seats_total, grouping.space_comfort, grouping.ride_notes]);
+
+  async function save() {
+    setStatus("saving");
+    const ok = await onPatch({
+      seats_total: seats === "" ? null : seats,
+      space_comfort: (comfort || null) as SpaceComfort | null,
+      ride_notes: notes.trim() === "" ? null : notes.trim(),
+    });
+    if (!ok) { setStatus("error"); return; }
+    setStatus("saved");
+    setTimeout(() => setStatus((s) => (s === "saved" ? "idle" : s)), 1800);
+  }
+
+  const dirty =
+    (seats === "" ? null : seats) !== (grouping.seats_total ?? null)
+    || ((comfort || null) as string | null) !== (grouping.space_comfort ?? null)
+    || (notes.trim() === "" ? null : notes.trim()) !== (grouping.ride_notes ?? null);
 
   return (
     <div className={`bg-cream border border-line rounded-xl p-3 grid gap-2 mb-3`}>
@@ -925,7 +954,7 @@ function RideEditForm({
             min={1}
             max={20}
             value={seats}
-            onChange={(e) => setSeats(e.target.value === "" ? "" : Number(e.target.value))}
+            onChange={(e) => { setSeats(e.target.value === "" ? "" : Number(e.target.value)); setStatus("idle"); }}
             className={`h-8 w-16 px-2 rounded-md border ${t.surfaceBorder} text-sm`}
           />
         </label>
@@ -933,7 +962,7 @@ function RideEditForm({
           <span className={`text-[10px] uppercase tracking-widest font-bold ${t.meta}`}>Comfort</span>
           <select
             value={comfort}
-            onChange={(e) => setComfort(e.target.value as SpaceComfort | "")}
+            onChange={(e) => { setComfort(e.target.value as SpaceComfort | ""); setStatus("idle"); }}
             className={`h-8 px-2 rounded-md border ${t.surfaceBorder} text-sm`}
           >
             <option value="">—</option>
@@ -949,22 +978,30 @@ function RideEditForm({
           rows={2}
           value={notes}
           maxLength={500}
-          onChange={(e) => setNotes(e.target.value)}
+          onChange={(e) => { setNotes(e.target.value); setStatus("idle"); }}
           placeholder="Leaving at 6am sharp · gas stop in Modesto · happy to swing by Oakland for pickup"
           className={`rounded-md border ${t.surfaceBorder} bg-card px-3 py-2 text-sm`}
         />
       </label>
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-2">
+        {status === "saved" && (
+          <span className="text-xs text-green font-semibold">Saved ✓</span>
+        )}
+        {status === "error" && (
+          <span className="text-xs text-orange font-semibold">Couldn&rsquo;t save — try again</span>
+        )}
         <button
           type="button"
-          onClick={() => onPatch({
-            seats_total: seats === "" ? null : seats,
-            space_comfort: (comfort || null) as SpaceComfort | null,
-            ride_notes: notes.trim() === "" ? null : notes.trim(),
-          })}
-          className="h-8 px-3 rounded-full bg-green text-cream font-bold text-xs hover:bg-green-2"
+          onClick={save}
+          disabled={status === "saving" || !dirty}
+          className={
+            "h-8 px-3 rounded-full text-xs font-bold transition-colors " +
+            (status === "saved"
+              ? "bg-green-soft text-green border border-green/40"
+              : "bg-green text-cream hover:bg-green-2 disabled:opacity-50 disabled:cursor-not-allowed")
+          }
         >
-          Save
+          {status === "saving" ? "Saving…" : status === "saved" ? "Saved ✓" : "Save"}
         </button>
       </div>
     </div>

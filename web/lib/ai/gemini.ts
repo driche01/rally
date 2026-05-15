@@ -136,11 +136,26 @@ export async function callGeminiJson<T>(args: CallArgs): Promise<CallResult<T> |
   let parsed: T;
   try {
     parsed = JSON.parse(stripped) as T;
-  } catch (e) {
-    const inTok = resp.usageMetadata?.promptTokenCount ?? null;
-    const outTok = resp.usageMetadata?.candidatesTokenCount ?? null;
-    await logRow(args, modelUsed, Date.now() - t0, inTok, outTok, "json_parse_failed");
-    return { ok: false, error: `gemini_bad_json: ${(e as Error).message}`, rawText: stripped };
+  } catch {
+    // Gemini occasionally emits malformed JSON — truncated strings
+    // when output hits the token limit, smart quotes inside string
+    // values, trailing commas, etc. Try `jsonrepair` before giving
+    // up. It handles the common shapes (unterminated strings,
+    // missing closing brackets, unescaped chars).
+    try {
+      const { jsonrepair } = await import("jsonrepair");
+      const repaired = jsonrepair(stripped);
+      parsed = JSON.parse(repaired) as T;
+    } catch (repairErr) {
+      const inTok = resp.usageMetadata?.promptTokenCount ?? null;
+      const outTok = resp.usageMetadata?.candidatesTokenCount ?? null;
+      await logRow(args, modelUsed, Date.now() - t0, inTok, outTok, "json_parse_failed_even_after_repair");
+      return {
+        ok: false,
+        error: `gemini_bad_json: ${(repairErr as Error).message}`,
+        rawText: stripped,
+      };
+    }
   }
 
   const inputTokens  = resp.usageMetadata?.promptTokenCount    ?? null;

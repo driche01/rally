@@ -5,7 +5,7 @@
  * Phase B Step 8 (the wow feature).
  */
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { themeClass } from "@/lib/themes";
 import type { Trip } from "@shared/types";
@@ -54,6 +54,13 @@ export default function ShoppingTab({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [, startTrans] = useTransition();
+
+  // After router.refresh() the parent re-fetches and hands down a
+  // new initialItems prop, but useState's initializer only fires
+  // on mount. Sync the local state when the prop changes so the
+  // "Build shopping list" + "Refresh from meals" flows actually
+  // repaint after the POST returns.
+  useEffect(() => { setItems(initialItems); }, [initialItems]);
 
   const t = themeClass(tripTheme);
   const hasItems = items.length > 0;
