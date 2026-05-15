@@ -23,13 +23,17 @@ import { createClient } from "@/lib/supabase/client";
 import SettingsModal from "./settings-modal";
 
 export interface AccountMenuProps {
-  profileId: string;
+  /** Rally-side users.id — the URL param /user/[id] expects. Null when
+   * the profile hasn't been linked to a users row yet (rare; usually
+   * means the account was created via Google SSO and never RSVP'd
+   * anywhere). In that case we hide View profile from the menu. */
+  usersId: string | null;
   displayName: string | null;
   avatarUrl:   string | null;
 }
 
 export default function AccountMenu({
-  profileId, displayName, avatarUrl,
+  usersId, displayName, avatarUrl,
 }: AccountMenuProps) {
   const router = useRouter();
   const [open, setOpen]         = useState(false);
@@ -96,14 +100,16 @@ export default function AccountMenu({
           role="menu"
           className="absolute right-0 top-full mt-2 min-w-[200px] bg-card border border-line rounded-2xl shadow-lg z-40 overflow-hidden"
         >
-          <Link
-            role="menuitem"
-            href={`/user/${profileId}`}
-            onClick={() => setOpen(false)}
-            className="block px-4 py-2.5 text-sm text-ink hover:bg-green-soft/50"
-          >
-            View profile
-          </Link>
+          {usersId && (
+            <Link
+              role="menuitem"
+              href={`/user/${usersId}`}
+              onClick={() => setOpen(false)}
+              className="block px-4 py-2.5 text-sm text-ink hover:bg-green-soft/50"
+            >
+              View profile
+            </Link>
+          )}
           <button
             role="menuitem"
             onClick={() => { setOpen(false); setSet(true); }}

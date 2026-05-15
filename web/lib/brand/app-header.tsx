@@ -43,20 +43,35 @@ export default async function AppHeader({
   // Resolve display + avatar for the authed branch.
   let displayName: string | null = null;
   let avatarUrl:   string | null = null;
-  let profileId:   string | null = null;
+  // `usersId` (not profileId) is what /user/[id] expects — that route
+  // gates on the Rally-side users table, looked up via
+  // users.auth_user_id = auth.uid. Without this resolve step, the
+  // "View profile" menu item 404s on the canonical link target.
+  let usersId:     string | null = null;
 
   if (authUser) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("id, name, last_name, avatar_url")
+      .select("id, name, last_name, phone, avatar_url")
       .eq("id", authUser.id)
       .maybeSingle();
     if (profile) {
-      profileId = profile.id;
       avatarUrl = profile.avatar_url;
       displayName = profile.last_name
         ? `${profile.name} ${profile.last_name}`
         : profile.name;
+      // Resolve users.id — first by auth_user_id (the FK Rally uses
+      // for new accounts), then by phone (fallback for older accounts
+      // where the linkage was never backfilled).
+      const svc = createServiceClient();
+      const byAuth = await svc
+        .from("users").select("id").eq("auth_user_id", authUser.id).maybeSingle();
+      usersId = byAuth.data?.id ?? null;
+      if (!usersId && profile.phone) {
+        const byPhone = await svc
+          .from("users").select("id").eq("phone", profile.phone).maybeSingle();
+        usersId = byPhone.data?.id ?? null;
+      }
     }
   }
 
@@ -93,7 +108,7 @@ export default async function AppHeader({
       <RallyLogo size="md" />
 
       <div className="flex items-center gap-2">
-        {authUser && profileId ? (
+        {authUser ? (
           <>
             {!hideNewTrip && (
               <Link
@@ -104,7 +119,7 @@ export default async function AppHeader({
               </Link>
             )}
             <AccountMenu
-              profileId={profileId}
+              usersId={usersId}
               displayName={displayName}
               avatarUrl={avatarUrl}
             />
