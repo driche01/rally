@@ -15,6 +15,8 @@ import type { Trip } from "@shared/types";
 import TabNav from "./tabs";
 import EditableHero from "./editable-hero";
 import GenerationProvider from "@/lib/generation/provider";
+import EffectOverlay from "@/lib/effects/effect-overlay";
+import StylePicker from "./style-picker";
 
 export default async function TripLayout({
   children,
@@ -30,7 +32,7 @@ export default async function TripLayout({
 
   const { data: tripRow, error } = await r.supabase
     .from("trips")
-    .select("id, name, destination, start_date, end_date, book_by_date, theme, cover_image_url, status, share_token, created_by")
+    .select("id, name, destination, start_date, end_date, book_by_date, theme, effect, cover_image_url, status, share_token, created_by")
     .eq("id", id)
     .maybeSingle();
   if (error) {
@@ -41,7 +43,7 @@ export default async function TripLayout({
     );
   }
   if (!tripRow) notFound();
-  const trip = tripRow as Pick<Trip, "id" | "name" | "destination" | "start_date" | "end_date" | "book_by_date" | "theme" | "cover_image_url" | "status" | "share_token" | "created_by">;
+  const trip = tripRow as Pick<Trip, "id" | "name" | "destination" | "start_date" | "end_date" | "book_by_date" | "theme" | "effect" | "cover_image_url" | "status" | "share_token" | "created_by">;
 
   // Host-or-cohost gate for edit affordances.
   let canEdit = trip.created_by === r.authUid;
@@ -55,9 +57,16 @@ export default async function TripLayout({
   const t = themeClass(trip.theme);
 
   return (
-    <main className={`min-h-dvh ${t.root}`}>
+    <main className={`min-h-dvh ${t.root} relative`}>
+      <EffectOverlay effect={trip.effect ?? null} />
+      <StylePicker
+        tripId={trip.id}
+        canEdit={canEdit}
+        currentTheme={trip.theme}
+        currentEffect={trip.effect ?? null}
+      />
       <GenerationProvider>
-        <div className="max-w-3xl mx-auto px-6 pt-10">
+        <div className="max-w-3xl mx-auto px-6 pt-10 relative">
           <EditableHero
             tripId={trip.id}
             canEdit={canEdit}

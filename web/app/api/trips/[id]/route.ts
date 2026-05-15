@@ -9,10 +9,21 @@
 import { requireAuthUid } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { jsonErr, jsonOk } from "@/lib/http";
-import type { Trip, TripTheme } from "@shared/types";
+import type { Trip, TripTheme, TripEffect } from "@shared/types";
 
 const ALLOWED_THEMES: ReadonlySet<TripTheme> = new Set([
-  "classic","eclectic","fancy","literary","digital","elegant",
+  // Vibes
+  "classic","eclectic","fancy","literary","digital","elegant","sunset","neon",
+  // Light
+  "mist","blossom","sage",
+  // Dark
+  "midnight","forest","noir",
+  // Seasonal
+  "spring","summer","autumn","winter",
+]);
+
+const ALLOWED_EFFECTS: ReadonlySet<TripEffect> = new Set([
+  "sparkles","confetti","hearts","snowflakes","bubbles","petals","embers","stars",
 ]);
 
 export async function GET(
@@ -81,6 +92,11 @@ export async function PATCH(
     const t = strOrNull(body.theme) as TripTheme | null;
     if (t && !ALLOWED_THEMES.has(t)) return jsonErr(400, "invalid_theme");
     patch.theme = t;
+  }
+  if ("effect"          in body) {
+    const e = strOrNull(body.effect) as TripEffect | null;
+    if (e && !ALLOWED_EFFECTS.has(e)) return jsonErr(400, "invalid_effect");
+    patch.effect = e;
   }
 
   // Date-coherence validation.

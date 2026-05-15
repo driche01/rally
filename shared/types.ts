@@ -18,12 +18,46 @@
 // ─── Trips ────────────────────────────────────────────────────────
 
 export type TripTheme =
+  // ─── Vibes (the original six) ───────────────────────────────────
   | "classic"
   | "eclectic"
   | "fancy"
   | "literary"
   | "digital"
-  | "elegant";
+  | "elegant"
+  // ─── Light ──────────────────────────────────────────────────────
+  | "mist"
+  | "blossom"
+  | "sage"
+  // ─── Dark ───────────────────────────────────────────────────────
+  | "midnight"
+  | "forest"
+  | "noir"
+  // ─── Vibes (new) ────────────────────────────────────────────────
+  | "sunset"
+  | "neon"
+  // ─── Seasonal ───────────────────────────────────────────────────
+  | "spring"
+  | "summer"
+  | "autumn"
+  | "winter";
+
+/** Category bucket for the theme picker filters. */
+export type ThemeCategory = "vibes" | "light" | "dark" | "seasonal";
+
+/** Visual effect rendered as an animated overlay on the trip page. */
+export type TripEffect =
+  | "sparkles"
+  | "confetti"
+  | "hearts"
+  | "snowflakes"
+  | "bubbles"
+  | "petals"
+  | "embers"
+  | "stars";
+
+/** Category bucket for the effect picker. */
+export type EffectCategory = "fun" | "classic" | "seasonal";
 
 export type TripStatus = "active" | "draft"; // 'closed' is dead but the CHECK still permits it
 
@@ -53,6 +87,9 @@ export interface Trip {
   // Alpha+ — booking deadline (Q35). DB nullable for legacy rows;
   // app-layer requires it at trip creation.
   book_by_date: string | null;      // ISO date 'YYYY-MM-DD'
+  // Alpha+ — animated overlay rendered on the trip page (Partiful-
+  // inspired). NULL = no effect.
+  effect: TripEffect | null;
 }
 
 // ─── Travel profile ───────────────────────────────────────────────
