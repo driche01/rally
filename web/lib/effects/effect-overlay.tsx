@@ -62,14 +62,21 @@ export default function EffectOverlay({ effect }: { effect: TripEffect | null | 
           key={p.i}
           className={"absolute select-none " + v.extraClass}
           style={{
-            left:            `${p.leftPct}%`,
-            top:             `-10%`,
-            fontSize:        `${p.size}rem`,
-            color:           v.color,
-            opacity:         p.opacity,
-            animation:       `${v.anim} ${p.duration}s linear infinite`,
-            animationDelay:  `${p.delay}s`,
-            textShadow:      effect === "sparkles" || effect === "stars" || effect === "embers"
+            left:                    `${p.leftPct}%`,
+            top:                     `-10%`,
+            fontSize:                `${p.size}rem`,
+            color:                   v.color,
+            opacity:                 p.opacity,
+            // Use longhand animation props so they don't conflict
+            // with each other during rerender (React warns when a
+            // shorthand like `animation` is mixed with a longhand
+            // like `animationDelay`).
+            animationName:           v.anim,
+            animationDuration:       `${p.duration}s`,
+            animationTimingFunction: "linear",
+            animationIterationCount: "infinite",
+            animationDelay:          `${p.delay}s`,
+            textShadow:              effect === "sparkles" || effect === "stars" || effect === "embers"
               ? `0 0 8px ${v.color}`
               : undefined,
           }}

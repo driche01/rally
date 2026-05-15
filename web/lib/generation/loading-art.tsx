@@ -21,8 +21,13 @@ export default function TravelLoadingDance() {
           key={i}
           className="inline-block"
           style={{
-            animation: "travel-bounce 1.4s ease-in-out infinite",
-            animationDelay: `${i * 140}ms`,
+            // Longhand props to avoid the React warning about mixing
+            // `animation` shorthand with `animationDelay`.
+            animationName:           "travel-bounce",
+            animationDuration:       "1.4s",
+            animationTimingFunction: "ease-in-out",
+            animationIterationCount: "infinite",
+            animationDelay:          `${i * 140}ms`,
           }}
         >
           {e}
