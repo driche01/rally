@@ -91,20 +91,24 @@ export default async function TripLayout({
             <RallyLogo size="md" />
           </header>
 
-          {/* 2-column layout on lg+: cover sticks on the left + is
-              vertically centered in the viewport as the user scrolls;
-              header+tabs+content scrolls on the right. Below lg,
-              stacks single-column with cover on top (mobile-first
-              fallback).
+          {/* 2-column layout on lg+: cover sticks on the left,
+              vertically centered in the viewport regardless of how
+              much content the right column has. Below lg, stacks
+              single-column with cover on top.
 
-              Vertical-center sticky: the wrapper sticks at top:50vh
-              and translates up by half its own height so the cover's
-              midpoint always sits at viewport center.  `self-start`
-              is load-bearing — without it CSS Grid stretches the
-              item to fill the column height and `sticky` becomes a
-              no-op. */}
+              Sticky-center pattern: the wrapper is `position:
+              sticky; top: 0; height: 100dvh` so it occupies the
+              full viewport height and stays pinned to the top as
+              the user scrolls. Inside, `flex flex-col justify-
+              center` keeps the cover (+ action row) visually
+              centered. This works whether the right column is
+              empty (Lodging before AI suggestions) or long
+              (Overview with stats + roster + activity feed) — no
+              more "translate-y-1/2 applied at natural position"
+              issue that made the cover sit too high on short
+              tabs. */}
           <div className="lg:grid lg:grid-cols-[5fr_7fr] lg:gap-10">
-            <div className="lg:sticky lg:top-[50vh] lg:-translate-y-1/2 lg:self-start mb-6 lg:mb-0">
+            <div className="lg:sticky lg:top-0 lg:h-[100dvh] lg:flex lg:flex-col lg:justify-center lg:gap-4 mb-6 lg:mb-0">
               <EditableCover
                 tripId={trip.id}
                 canEdit={canEdit}
@@ -115,18 +119,16 @@ export default async function TripLayout({
                 }}
               />
               {canEdit && (
-                <div className="mt-4">
-                  <TripActions
-                    trip={{
-                      id:           trip.id,
-                      name:         trip.name,
-                      theme:        trip.theme,
-                      cancelled_at: trip.cancelled_at,
-                    }}
-                    respondents={respondents}
-                    inviteUrl={inviteUrl}
-                  />
-                </div>
+                <TripActions
+                  trip={{
+                    id:           trip.id,
+                    name:         trip.name,
+                    theme:        trip.theme,
+                    cancelled_at: trip.cancelled_at,
+                  }}
+                  respondents={respondents}
+                  inviteUrl={inviteUrl}
+                />
               )}
             </div>
 
