@@ -589,27 +589,40 @@ function CalendarTab({
 function ToggleRow({
   icon, label, on, onChange,
 }: { icon: string; label: string; on: boolean; onChange: (v: boolean) => void }) {
+  // Visual notes:
+  //   - Track is taller (h-7 = 28px) so the 22px knob has breathing room.
+  //   - Knob uses bg-cream + a real border so off-state is legible
+  //     against the bg-line (cream-toned) off-track — pure cream-on-
+  //     cream was the old bug.
+  //   - Position via inline `left` instead of translate-x-* utilities;
+  //     Tailwind v4's arbitrary translate classes have purge edge cases
+  //     in dev that left the knob stuck on one side.
+  //   - `.no-press` class opts the button out of the global
+  //     active:scale-0.97 + bg-green hover-lift in globals.css — the
+  //     track shouldn't shrink mid-toggle.
   return (
-    <div className="flex items-center gap-3 px-4 py-3.5 border-b border-line last:border-b-0">
+    <label className="flex items-center gap-3 px-4 py-3.5 border-b border-line last:border-b-0 cursor-pointer">
       <span className="text-lg" aria-hidden="true">{icon}</span>
       <span className="flex-1 font-semibold text-ink">{label}</span>
       <button
+        type="button"
         role="switch"
         aria-checked={on}
+        aria-label={label}
         onClick={() => onChange(!on)}
         className={
-          "relative h-6 w-11 rounded-full transition-colors " +
-          (on ? "bg-green" : "bg-line")
+          "no-press relative inline-block h-7 w-12 rounded-full transition-colors flex-shrink-0 " +
+          (on ? "bg-green" : "bg-line border border-muted/30")
         }
+        style={{ transform: "none" }}
       >
         <span
-          className={
-            "absolute top-0.5 h-5 w-5 rounded-full bg-cream shadow transition-transform " +
-            (on ? "translate-x-5" : "translate-x-0.5")
-          }
+          aria-hidden="true"
+          className="absolute top-1/2 -translate-y-1/2 h-5 w-5 rounded-full bg-cream shadow-md border border-ink/10 transition-[left] duration-150"
+          style={{ left: on ? "calc(100% - 22px)" : "2px" }}
         />
       </button>
-    </div>
+    </label>
   );
 }
 

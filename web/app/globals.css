@@ -85,8 +85,9 @@ button.rounded-xl:not(:disabled):active:not(.no-press) {
 }
 
 /* Hover lift on the primary green pill button to telegraph
-   interactivity (subtle — no chrome creep). */
-button.bg-green:not(:disabled):hover {
+   interactivity (subtle — no chrome creep). Skipped on .no-press
+   (e.g. switch tracks) where movement would be distracting. */
+button.bg-green:not(:disabled):not(.no-press):hover {
   transform: translateY(-1px);
   box-shadow: var(--shadow-sm);
 }
