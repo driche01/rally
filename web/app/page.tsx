@@ -2,14 +2,13 @@
 // The marketing landing page that currently lives on rallysurveys.netlify.app
 // will eventually move here, but that's outside Phase A scope.
 
-import RallyLogo from "@/lib/brand/logo";
+import AppHeader from "@/lib/brand/app-header";
 
 export default function Home() {
   return (
     <main className="min-h-dvh flex flex-col p-6">
-      <header className="mb-12">
-        <RallyLogo size="md" asLink={false} />
-      </header>
+      <AppHeader />
+
       <div className="flex-1 flex items-center justify-center -mt-12">
         <div className="max-w-md text-center">
           <h1 className="font-display text-4xl leading-tight text-ink mb-3">

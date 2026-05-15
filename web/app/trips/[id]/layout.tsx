@@ -18,7 +18,7 @@ import TripActions from "./trip-actions";
 import GenerationProvider from "@/lib/generation/provider";
 import EffectOverlay from "@/lib/effects/effect-overlay";
 import StylePicker from "./style-picker";
-import RallyLogo from "@/lib/brand/logo";
+import AppHeader from "@/lib/brand/app-header";
 import { getSiteUrl } from "@/lib/site-url";
 import type { Respondent } from "@shared/types";
 
@@ -87,9 +87,8 @@ export default async function TripLayout({
       />
       <GenerationProvider>
         <div className="max-w-6xl mx-auto px-6 pt-6 relative">
-          <header className="mb-6">
-            <RallyLogo size="md" />
-          </header>
+          <AppHeader />
+
 
           {/* 2-column layout on lg+: cover sticks on the left,
               vertically centered in the viewport regardless of how

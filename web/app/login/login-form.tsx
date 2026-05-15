@@ -7,12 +7,17 @@ import { requestPhoneOtp, verifyPhoneOtp } from "@/lib/sb-functions";
 
 type Stage = "phone" | "code";
 
-export default function LoginForm({ next }: { next: string }) {
+export default function LoginForm({
+  next, initialPhone = "",
+}: {
+  next: string;
+  initialPhone?: string;
+}) {
   const router = useRouter();
   const supabase = createClient();
 
   const [stage, setStage] = useState<Stage>("phone");
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState(initialPhone);
   const [code, setCode] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

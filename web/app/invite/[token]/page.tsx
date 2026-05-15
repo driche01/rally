@@ -15,6 +15,7 @@
  * we whitelist columns to public ones only (no email / no phone).
  */
 
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import type {
@@ -23,7 +24,7 @@ import type {
 import RsvpButtons from "./rsvp-buttons";
 import ActivitySection from "./activity-section";
 import { themeClass, type ThemeStyle } from "@/lib/themes";
-import RallyLogo from "@/lib/brand/logo";
+import AppHeader from "@/lib/brand/app-header";
 
 interface PageProps {
   params: Promise<{ token: string }>;
@@ -75,15 +76,24 @@ export default async function InvitePage({ params }: PageProps) {
   const respondents = (respondentsRes.data ?? []) as Respondent[];
   const activity = (activityRes.data ?? []) as ActivityFeedEntry[];
 
+  // 4. Match the visitor to their respondent row via the session
+  // cookie set by /api/invite/[token]/rsvp. We use this to render
+  // the "you're going" state in <RsvpButtons> on return visits — no
+  // login required to remember an RSVP.
+  const cookieStore = await cookies();
+  const sessionToken = cookieStore.get("rally_session_token")?.value ?? null;
+  const me = sessionToken
+    ? respondents.find((r) => r.session_token === sessionToken) ?? null
+    : null;
+
   const buckets = bucketByStatus(respondents);
   const t = themeClass(trip.theme);
 
   return (
     <main className={`min-h-dvh ${t.root}`}>
       <div className="max-w-6xl mx-auto px-5 sm:px-8 py-6">
-        <header className="mb-6">
-          <RallyLogo size="md" />
-        </header>
+        <AppHeader />
+
 
         {/* Same 2-col layout as the planner trip page: cover sticks
             on the left with the primary CTA (RSVP buttons or, if
@@ -127,7 +137,12 @@ export default async function InvitePage({ params }: PageProps) {
                 </p>
               </div>
             ) : (
-              <RsvpButtons tripId={trip.id} shareToken={trip.share_token} />
+              <RsvpButtons
+                tripId={trip.id}
+                shareToken={trip.share_token}
+                myStatus={me?.rsvp_status ?? null}
+                myFirstName={me?.first_name ?? (me?.name ? me.name.split(" ")[0] : null)}
+              />
             )}
           </div>
 

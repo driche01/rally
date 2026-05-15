@@ -49,13 +49,13 @@ export async function GET(
     svc
       .from("traveler_profiles")
       .select(
-        "phone, home_airport, vibe_beach_or_mountain, vibe_spa_or_hike, vibe_foodie_or_casual, vibe_social_or_chill, vibe_culture_or_relaxation, budget_comfort, dietary_restrictions, vibe_captured_at",
+        "phone, first_name, last_name, home_airport, vibe_beach_or_mountain, vibe_spa_or_hike, vibe_foodie_or_casual, vibe_social_or_chill, vibe_culture_or_relaxation, budget_comfort, dietary_restrictions, vibe_captured_at",
       )
       .eq("phone", phone)
       .maybeSingle(),
     svc
       .from("respondents")
-      .select("id, name, phone, rsvp_status, session_token, note")
+      .select("id, name, first_name, last_name, phone, rsvp_status, session_token, note")
       .eq("trip_id", trip.id)
       .eq("phone", phone)
       .maybeSingle(),

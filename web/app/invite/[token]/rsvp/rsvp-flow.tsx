@@ -51,9 +51,12 @@ export default function RsvpFlow({
 
   const [stage, setStage] = useState<Stage>("identify");
   const [phone, setPhone] = useState("");
-  const [name, setName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName]   = useState("");
   const [note, setNote] = useState("");
   const [err, setErr] = useState<string | null>(null);
+  // Derived once for API payloads + greeting copy.
+  const name = `${firstName.trim()} ${lastName.trim()}`.trim();
 
   // From the lookup step
   const [existingProfile, setExistingProfile] = useState<Partial<TravelerProfile> | null>(null);
@@ -65,8 +68,8 @@ export default function RsvpFlow({
   async function startLookup(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
-    if (!phone.trim() || !name.trim()) {
-      setErr("Phone and name are both required.");
+    if (!phone.trim() || !firstName.trim()) {
+      setErr("Phone and first name are required.");
       return;
     }
     setStage("lookup");
@@ -97,7 +100,12 @@ export default function RsvpFlow({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          phone, name,
+          phone,
+          first_name: firstName.trim(),
+          last_name:  lastName.trim() || undefined,
+          // Send legacy `name` too so the API doesn't have to recompose
+          // it; helps if anything mid-pipeline reads the raw payload.
+          name,
           rsvp_status: choice,
           note: note || undefined,
           profile: profileToSend ?? undefined,
@@ -151,22 +159,38 @@ export default function RsvpFlow({
                 : "Let's lock it in."}
             </h1>
             <p className="text-muted">
-              Quick check — what&apos;s your name and phone? Your profile follows
-              you across every Rally trip, so you only fill it out once.
+              Quick check — your name and phone. We&apos;ll use this to track
+              your RSVP and set up your Rally account so you only fill it
+              out once.
             </p>
 
-            <label className="grid gap-2">
-              <span className="text-xs uppercase tracking-widest text-muted font-semibold">Name</span>
-              <input
-                type="text"
-                required
-                maxLength={30}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="What should the host call you?"
-                className="h-14 rounded-xl border border-line bg-card px-4 text-lg text-ink placeholder:text-muted focus:border-green focus:outline-none"
-              />
-            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="grid gap-2">
+                <span className="text-xs uppercase tracking-widest text-muted font-semibold">First name</span>
+                <input
+                  type="text"
+                  required
+                  maxLength={30}
+                  autoComplete="given-name"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="Sam"
+                  className="h-14 rounded-xl border border-line bg-card px-4 text-lg text-ink placeholder:text-muted focus:border-green focus:outline-none"
+                />
+              </label>
+              <label className="grid gap-2">
+                <span className="text-xs uppercase tracking-widest text-muted font-semibold">Last name</span>
+                <input
+                  type="text"
+                  maxLength={30}
+                  autoComplete="family-name"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="Rivera"
+                  className="h-14 rounded-xl border border-line bg-card px-4 text-lg text-ink placeholder:text-muted focus:border-green focus:outline-none"
+                />
+              </label>
+            </div>
             <label className="grid gap-2">
               <span className="text-xs uppercase tracking-widest text-muted font-semibold">Phone</span>
               <input

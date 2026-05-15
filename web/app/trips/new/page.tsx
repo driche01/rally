@@ -8,7 +8,7 @@
 import { redirect } from "next/navigation";
 import { requireAuthUid } from "@/lib/auth";
 import TripForm from "./trip-form";
-import RallyLogo from "@/lib/brand/logo";
+import AppHeader from "@/lib/brand/app-header";
 
 export default async function NewTripPage() {
   const r = await requireAuthUid();
@@ -17,9 +17,8 @@ export default async function NewTripPage() {
   return (
     <main className="min-h-dvh">
       <div className="max-w-2xl mx-auto px-6 py-6">
-        <header className="mb-8">
-          <RallyLogo size="md" />
-        </header>
+        <AppHeader className="mb-8" hideNewTrip />
+
         <p className="text-xs font-bold tracking-widest uppercase text-green mb-3">
           New trip
         </p>

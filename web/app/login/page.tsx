@@ -15,7 +15,7 @@ import RallyLogo from "@/lib/brand/logo";
 export default function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; phone?: string }>;
 }) {
   return (
     <main className="min-h-dvh flex flex-col items-center p-6">
@@ -38,8 +38,8 @@ export default function LoginPage({
 async function LoginFormWrapper({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; phone?: string }>;
 }) {
   const sp = await searchParams;
-  return <LoginForm next={sp.next ?? "/trips/new"} />;
+  return <LoginForm next={sp.next ?? "/trips/new"} initialPhone={sp.phone ?? ""} />;
 }

@@ -104,6 +104,8 @@ export type BudgetComfort         = "budget" | "mid" | "premium" | "luxury";
 export interface TravelerProfile {
   phone: string;                    // PK
   user_id: string | null;           // users.id
+  first_name: string | null;
+  last_name: string | null;
   home_airport: string | null;
   vibe_beach_or_mountain: VibeBeachOrMountain | null;
   vibe_spa_or_hike: VibeSpaOrHike | null;
@@ -145,7 +147,9 @@ export interface Respondent {
   id: string;
   trip_id: string;
   user_id: string | null;           // users.id
-  name: string;
+  name: string;                     // legacy full-name field; kept in sync with first_name + last_name
+  first_name: string | null;
+  last_name: string | null;
   phone: string | null;
   email: string | null;
   is_planner: boolean;
