@@ -82,14 +82,17 @@ export async function detectStallForBanner(
     }
   }
 
-  // Signal A2: book_by ≤ 30d out AND >25% of respondents still unresponded.
-  if (daysUntilBookBy <= 30 && daysUntilBookBy > 14) {
+  // Signal A2: book_by ≤ 21d out AND >25% of respondents still unresponded.
+  // Disjoint from A1 (which fires when book_by > 21d) and A3
+  // (which fires when book_by ≤ 14d). Each banner owns a clean
+  // window with no overlap.
+  if (daysUntilBookBy <= 21 && daysUntilBookBy > 14) {
     const { unresponded, total } = await countUnresponded();
     if (total > 0 && unresponded / total > 0.25) {
       return {
         reason: "headcount_soft_pre_booking",
         headline: "Headcount still soft.",
-        detail:   "We're about a month from booking lodging + travel. Worth confirming who's actually in so you can start locking final details.",
+        detail:   "About 3 weeks until booking lodging + travel. Worth confirming who's actually in so you can start locking final details.",
         cta:      "hey [Name] — booking lodging + travel soon. quick yes/no so we can lock final headcount →",
         defaultSegment: "unresponded",
       };
