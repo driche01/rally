@@ -71,6 +71,7 @@ import {
   buildBookingNudgeBody,
   buildPreTripSummaryBody,
   buildReEngagementBody,
+  buildFinalRsvpReminderBody,
   type BookingGaps,
   type PreTripSummary,
 } from './bodies.ts';
@@ -98,6 +99,9 @@ Deno.serve(async (req: Request) => {
   // ─── 1b. Re-engagement detection pass ───────────────────────────
   const reEngagementScheduled = await scheduleReEngagement(admin, now);
 
+  // ─── 1c. Final RSVP reminder pass (Q35) ─────────────────────────
+  const finalRsvpScheduled = await scheduleFinalRsvpReminder(admin, now);
+
   // ─── 2. Drain queue ──────────────────────────────────────────────
   const { data: due, error: dueErr } = await admin
     .from('scheduled_reminders')
@@ -111,7 +115,7 @@ Deno.serve(async (req: Request) => {
   }
   const queue = (due ?? []) as ScheduledReminderRow[];
   if (queue.length === 0) {
-    return json({ ok: true, lazy_scheduled: lazyScheduled, re_engagement_scheduled: reEngagementScheduled, scanned: 0, fired: 0, skipped: {} });
+    return json({ ok: true, lazy_scheduled: lazyScheduled, re_engagement_scheduled: reEngagementScheduled, final_rsvp_scheduled: finalRsvpScheduled, scanned: 0, fired: 0, skipped: {} });
   }
 
   // ─── 3. Batch-load trips, respondents, settings ──────────────────
@@ -119,7 +123,7 @@ Deno.serve(async (req: Request) => {
   const respondentIds = Array.from(new Set(queue.map((q) => q.recipient_respondent_id)));
 
   const [tripsRes, respRes, settingsRes] = await Promise.all([
-    admin.from('trips').select('id, name, share_token, destination, start_date, end_date, cancelled_at').in('id', tripIds),
+    admin.from('trips').select('id, name, share_token, destination, start_date, end_date, book_by_date, cancelled_at').in('id', tripIds),
     admin.from('respondents').select('id, trip_id, name, phone, email, is_planner, rsvp_status, rsvp_status_updated_at, invited_at, user_id').in('id', respondentIds),
     admin.from('trip_reminder_settings').select('*').in('trip_id', tripIds),
   ]);
@@ -213,6 +217,7 @@ Deno.serve(async (req: Request) => {
     ok: true,
     lazy_scheduled: lazyScheduled,
     re_engagement_scheduled: reEngagementScheduled,
+    final_rsvp_scheduled: finalRsvpScheduled,
     scanned: queue.length,
     fired,
     skipped,
@@ -377,6 +382,71 @@ async function detectStallForTrip(
   return null;
 }
 
+// ─── final RSVP reminder detection (Q35 alpha+) ──────────────────
+
+/**
+ * Schedule a final_rsvp_reminder for every respondent who's still
+ * 'invited' or 'maybe' on a trip whose book_by_date is between
+ * (now) and (now + 7 days) — i.e., final-call window — and who
+ * doesn't already have a final_rsvp_reminder row.
+ *
+ * Single-send per respondent per trip; the unique-pending index on
+ * scheduled_reminders prevents duplicate concurrent rows, and the
+ * "no existing row" filter prevents re-scheduling after a send.
+ */
+async function scheduleFinalRsvpReminder(admin: SupabaseClient, now: Date): Promise<number> {
+  // Trips whose book_by_date is in the next 7 days (inclusive),
+  // active, not cancelled.
+  const lo = now.toISOString().slice(0, 10);
+  const hi = new Date(now.getTime() + 7 * 86_400_000).toISOString().slice(0, 10);
+
+  const { data: trips } = await admin
+    .from('trips')
+    .select('id, book_by_date')
+    .is('cancelled_at', null)
+    .not('book_by_date', 'is', null)
+    .gte('book_by_date', lo)
+    .lte('book_by_date', hi)
+    .limit(500);
+
+  if (!trips || trips.length === 0) return 0;
+
+  let scheduled = 0;
+  for (const trip of trips) {
+    // Unresponded respondents on this trip.
+    const { data: unresponded } = await admin
+      .from('respondents')
+      .select('id')
+      .eq('trip_id', trip.id)
+      .in('rsvp_status', ['invited', 'maybe'])
+      .not('phone', 'is', null);
+    const candidates = (unresponded ?? []).map((r) => r.id as string);
+    if (candidates.length === 0) continue;
+
+    // Filter out anyone with an existing final_rsvp_reminder row.
+    const { data: existing } = await admin
+      .from('scheduled_reminders')
+      .select('recipient_respondent_id')
+      .eq('trip_id', trip.id)
+      .eq('message_type', 'final_rsvp_reminder')
+      .in('recipient_respondent_id', candidates);
+    const have = new Set((existing ?? []).map((e) => e.recipient_respondent_id as string));
+    const toSchedule = candidates.filter((id) => !have.has(id));
+    if (toSchedule.length === 0) continue;
+
+    const rows = toSchedule.map((respondentId) => ({
+      trip_id: trip.id,
+      recipient_respondent_id: respondentId,
+      message_type: 'final_rsvp_reminder' as ReminderMessageType,
+      scheduled_for: now.toISOString(),
+      status: 'pending',
+    }));
+    const { error } = await admin.from('scheduled_reminders').insert(rows);
+    if (!error) scheduled += rows.length;
+  }
+  return scheduled;
+}
+
 // ─── body dispatch ────────────────────────────────────────────────
 
 function buildBody(
@@ -390,6 +460,7 @@ function buildBody(
     case 'booking_nudge':             return buildBookingNudgeBody(trip, payload as BookingGaps);
     case 'pre_trip_summary':          return buildPreTripSummaryBody(trip, payload as PreTripSummary);
     case 're_engagement':             return buildReEngagementBody(trip, payload as string);
+    case 'final_rsvp_reminder':       return buildFinalRsvpReminderBody(trip);
   }
 }
 

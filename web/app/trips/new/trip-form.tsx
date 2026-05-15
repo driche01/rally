@@ -20,6 +20,7 @@ interface FormState {
   cover_image_url: string;
   start_date: string;
   end_date: string;
+  book_by_date: string;
   budget_min: string;
   budget_max: string;
   theme: TripTheme | "";
@@ -35,6 +36,7 @@ const EMPTY: FormState = {
   cover_image_url: "",
   start_date: "",
   end_date: "",
+  book_by_date: "",
   budget_min: "",
   budget_max: "",
   theme: "",
@@ -42,6 +44,18 @@ const EMPTY: FormState = {
   is_public: false,
   status: "active",
 };
+
+/**
+ * Default suggestion for book_by_date when the planner sets a
+ * start_date — 30 days before the trip starts. Planner can adjust.
+ */
+function defaultBookByDate(startDate: string): string {
+  if (!startDate) return "";
+  const d = new Date(`${startDate}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return "";
+  d.setDate(d.getDate() - 30);
+  return d.toISOString().slice(0, 10);
+}
 
 type CoverMode = "upload" | "generate" | "url";
 
@@ -72,6 +86,14 @@ export default function TripForm() {
     }
     if (s.start_date && s.end_date && s.start_date > s.end_date) {
       setErr("End date must come after the start date.");
+      return;
+    }
+    if (!s.book_by_date) {
+      setErr("Set a book-by date so we can time RSVP reminders correctly.");
+      return;
+    }
+    if (s.start_date && s.book_by_date > s.start_date) {
+      setErr("Book-by date should be before the trip starts.");
       return;
     }
     const min = s.budget_min === "" ? null : Number(s.budget_min);
@@ -193,7 +215,16 @@ export default function TripForm() {
           <input
             type="date"
             value={s.start_date}
-            onChange={(e) => set("start_date", e.target.value)}
+            onChange={(e) => {
+              const sd = e.target.value;
+              set("start_date", sd);
+              // Auto-suggest book_by_date = start − 30d when the
+              // planner hasn't touched it yet (or has it set to a
+              // previous default that matches).
+              if (sd && !s.book_by_date) {
+                set("book_by_date", defaultBookByDate(sd));
+              }
+            }}
             className={inputCls}
           />
         </Field>
@@ -206,6 +237,19 @@ export default function TripForm() {
           />
         </Field>
       </div>
+
+      <Field label="Book by" required>
+        <input
+          type="date"
+          required
+          value={s.book_by_date}
+          onChange={(e) => set("book_by_date", e.target.value)}
+          className={inputCls}
+        />
+        <p className="text-xs text-muted mt-1">
+          Last day to lock in lodging + travel bookings. RSVP reminders + headcount nudges key off this date.
+        </p>
+      </Field>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Budget min ($/person)">

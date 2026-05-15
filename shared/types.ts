@@ -50,6 +50,9 @@ export interface Trip {
   // Phase C — cancellation (migration 135)
   cancelled_at: string | null;
   cancelled_by: string | null;      // profiles.id
+  // Alpha+ — booking deadline (Q35). DB nullable for legacy rows;
+  // app-layer requires it at trip creation.
+  book_by_date: string | null;      // ISO date 'YYYY-MM-DD'
 }
 
 // ─── Travel profile ───────────────────────────────────────────────
@@ -175,6 +178,7 @@ export type SmsMessageType =
   | "booking_nudge"
   | "pre_trip_summary"
   | "re_engagement"
+  | "final_rsvp_reminder"
   | "cancellation_notice"
   | "planner_blast";
 
@@ -184,7 +188,8 @@ export type ReminderMessageType =
   | "profile_completion_nudge"
   | "booking_nudge"
   | "pre_trip_summary"
-  | "re_engagement";
+  | "re_engagement"
+  | "final_rsvp_reminder";
 
 export interface ThreadMessage {
   id: string;
@@ -252,7 +257,7 @@ export interface ScheduledReminder {
   updated_at: string;
 }
 
-export type RecipientSegment = "going" | "maybe" | "invited" | "all";
+export type RecipientSegment = "going" | "maybe" | "invited" | "all" | "unresponded";
 
 export interface PlannerBlast {
   id: string;
@@ -290,6 +295,8 @@ export interface TripReminderSettings {
   booking_nudge_enabled: boolean;
   pre_trip_summary_enabled: boolean;
   re_engagement_enabled: boolean;
+  final_rsvp_reminder_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
+

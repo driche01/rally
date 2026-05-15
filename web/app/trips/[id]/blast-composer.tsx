@@ -22,10 +22,11 @@ interface SendResult {
 }
 
 const SEGMENT_LABELS: Record<RecipientSegment, string> = {
-  going:   "Going",
-  maybe:   "Maybe",
-  invited: "Invited",
-  all:     "Everyone",
+  going:       "Going",
+  maybe:       "Maybe",
+  invited:     "Invited",
+  unresponded: "Unresponded",
+  all:         "Everyone",
 };
 
 const MAX_BODY = 1600;
@@ -61,12 +62,13 @@ export default function BlastComposer({
 
   // Segment counts from the roster the parent already loaded.
   const counts = useMemo(() => {
-    const c = { going: 0, maybe: 0, invited: 0, all: 0 };
+    const c = { going: 0, maybe: 0, invited: 0, unresponded: 0, all: 0 };
     for (const r of respondents) {
       if (!r.phone) continue;                       // unreachable
       if (!includePlanner && r.is_planner) continue; // exclude planner if box off
-      const s = (r.rsvp_status ?? "invited") as keyof typeof c;
-      if (s in c) c[s]++;
+      const s = (r.rsvp_status ?? "invited") as "going" | "maybe" | "invited" | "cant_go";
+      if (s === "going" || s === "maybe" || s === "invited") c[s]++;
+      if (s === "invited" || s === "maybe") c.unresponded++;
       c.all++;
     }
     return c;
@@ -152,7 +154,7 @@ export default function BlastComposer({
                 <p className="text-xs uppercase tracking-widest text-muted font-semibold mb-2">
                   Send to
                 </p>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                   {(Object.keys(SEGMENT_LABELS) as RecipientSegment[]).map((s) => (
                     <button
                       key={s}

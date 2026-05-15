@@ -56,7 +56,7 @@ export default async function TripOverviewPage({
   const inviteUrl = `${baseUrl}/invite/${trip.share_token}`;
 
   const stallSignal = await detectStallForBanner(
-    svc, trip.id, trip.start_date, trip.cancelled_at,
+    svc, trip.id, trip.start_date, trip.book_by_date, trip.cancelled_at,
   );
 
   return (

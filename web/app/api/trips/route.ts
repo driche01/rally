@@ -54,6 +54,14 @@ export async function POST(req: Request) {
     return jsonErr(400, "end_before_start");
   }
 
+  // Q35: book_by_date REQUIRED at trip creation. DB column stays
+  // nullable to support legacy rows; new trips must provide it.
+  const book_by_date = strOrNull(body.book_by_date);
+  if (!book_by_date) return jsonErr(400, "book_by_date_required");
+  if (start_date && book_by_date > start_date) {
+    return jsonErr(400, "book_by_after_start");
+  }
+
   const budget_min = numOrNull(body.budget_min);
   const budget_max = numOrNull(body.budget_max);
   if (budget_min != null && budget_max != null && budget_min > budget_max) {
@@ -76,6 +84,7 @@ export async function POST(req: Request) {
     is_public:       Boolean(body.is_public ?? false),
     start_date,
     end_date,
+    book_by_date,
     budget_min,
     budget_max,
     status:          body.status === "draft" ? "draft" : "active",

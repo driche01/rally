@@ -34,7 +34,7 @@ import type {
 } from "@shared/types";
 
 const ALLOWED_SEGMENTS: ReadonlySet<RecipientSegment> = new Set([
-  "going", "maybe", "invited", "all",
+  "going", "maybe", "invited", "all", "unresponded",
 ]);
 const MIN_BODY = 1;
 const MAX_BODY = 1600;
@@ -106,7 +106,9 @@ export async function POST(
     .select("id, name, phone, rsvp_status, is_planner")
     .eq("trip_id", trip_id)
     .not("phone", "is", null);
-  if (recipient_segment !== "all") {
+  if (recipient_segment === "unresponded") {
+    recipientQuery = recipientQuery.in("rsvp_status", ["invited", "maybe"]);
+  } else if (recipient_segment !== "all") {
     recipientQuery = recipientQuery.eq("rsvp_status", recipient_segment);
   }
   if (!include_planner) {

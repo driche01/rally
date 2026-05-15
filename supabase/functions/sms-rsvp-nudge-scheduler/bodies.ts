@@ -61,6 +61,25 @@ export function buildReEngagementBody(trip: TripRow, stallReason: string): strin
   return `hey [Name] — [Trip] looks stalled (${stallReason}). a quick blast to confirm who's still in would unstick it. open the dashboard → [Survey link]`;
 }
 
+/**
+ * Final-call RSVP reminder. Fires 7 days before book_by_date to
+ * respondents still at 'invited' or 'maybe'. Single send — this is
+ * the "today is the last day" moment.
+ */
+export function buildFinalRsvpReminderBody(trip: TripRow): string {
+  const bookByText = trip.book_by_date ? formatBookBy(trip.book_by_date) : 'soon';
+  return `⏰ [Name] — last call on [Trip]. RSVP today so we can lock headcount + book by ${bookByText}. tap → [Survey link]`;
+}
+
+function formatBookBy(iso: string): string {
+  // Renders an ISO date like 2026-12-12 as "Dec 12" without TZ
+  // shifts. Keeps the SMS body short.
+  const [, m, d] = iso.slice(0, 10).split('-').map(Number);
+  if (!m || !d) return iso;
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${months[m - 1]} ${d}`;
+}
+
 export function buildCancellationNoticeBody(trip: TripRow): string {
   return `[Name] — [Trip]${trip.destination ? ` (${trip.destination})` : ''} has been cancelled by the host. Details + activity feed still live at: [Survey link]`;
 }

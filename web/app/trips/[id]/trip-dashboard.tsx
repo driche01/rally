@@ -34,7 +34,7 @@ export default function TripDashboard({
   const [showBlast, setShowBlast]   = useState(false);
   const [blastPrefill, setBlastPrefill] = useState<{
     body: string;
-    segment: "going" | "maybe" | "invited" | "all";
+    segment: "going" | "maybe" | "invited" | "all" | "unresponded";
     source: string;
   } | null>(null);
   const [copied, setCopied] = useState(false);

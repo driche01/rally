@@ -46,6 +46,7 @@ export async function evaluateCondition(
     case 'booking_nudge':             return await bookingNudge(ctx);
     case 'pre_trip_summary':          return await preTripSummary(ctx);
     case 're_engagement':             return await reEngagement(ctx);
+    case 'final_rsvp_reminder':       return await finalRsvpReminder(ctx);
   }
 }
 
@@ -93,12 +94,16 @@ async function bookingNudge(ctx: ConditionContext): Promise<ConditionResult> {
   if (ctx.respondent.rsvp_status !== 'going') {
     return { proceed: false, reason: 'not_going' };
   }
-  if (!ctx.trip.start_date) {
-    return { proceed: false, reason: 'no_start_date' };
-  }
-  // Don't nudge if start is too close — pre_trip_summary takes over.
-  const daysUntil = (new Date(ctx.trip.start_date).getTime() - ctx.now.getTime()) / 86_400_000;
-  if (daysUntil < 3) return { proceed: false, reason: 'too_close' };
+  // Q35 alpha+: booking-nudge re-keys on book_by_date. Falls back
+  // to start_date - 30d only if book_by_date is unset (legacy trips).
+  const anchorIso = ctx.trip.book_by_date
+    ?? (ctx.trip.start_date
+        ? new Date(new Date(ctx.trip.start_date).getTime() - 30 * 86_400_000).toISOString().slice(0, 10)
+        : null);
+  if (!anchorIso) return { proceed: false, reason: 'no_anchor_date' };
+  const daysUntilAnchor = (new Date(anchorIso).getTime() - ctx.now.getTime()) / 86_400_000;
+  // Don't nudge after the booking window closes — too late.
+  if (daysUntilAnchor < 0) return { proceed: false, reason: 'past_book_by' };
 
   // Has a travel arrangement?
   const { data: travel } = await ctx.admin
@@ -171,6 +176,27 @@ async function reEngagement(ctx: ConditionContext): Promise<ConditionResult> {
     return { proceed: false, reason: 'no_longer_stalled' };
   }
   return { proceed: true, payload: stallSignals[0] };
+}
+
+/**
+ * Final RSVP reminder — Q35 alpha+. Fires once at ~7 days before
+ * book_by_date if respondent is still 'invited' or 'maybe'. Skip
+ * if they've already resolved (going/cant_go), if the trip has no
+ * book_by_date (legacy), or if we're already past it.
+ */
+async function finalRsvpReminder(ctx: ConditionContext): Promise<ConditionResult> {
+  const status = ctx.respondent.rsvp_status ?? 'invited';
+  if (status === 'going' || status === 'cant_go') {
+    return { proceed: false, reason: 'rsvp_resolved' };
+  }
+  if (!ctx.trip.book_by_date) {
+    return { proceed: false, reason: 'no_book_by_date' };
+  }
+  const bookBy = new Date(`${ctx.trip.book_by_date}T00:00:00`);
+  if (bookBy.getTime() < ctx.now.getTime()) {
+    return { proceed: false, reason: 'past_book_by' };
+  }
+  return { proceed: true, payload: null };
 }
 
 async function getStallSignals(ctx: ConditionContext): Promise<string[]> {
