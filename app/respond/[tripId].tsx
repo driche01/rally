@@ -1257,10 +1257,15 @@ export default function RespondScreen() {
   // Other respondents may add write-in options after this respondent
   // landed. A periodic refetch surfaces those new options live so the
   // UI matches the user's stated requirement: "they should be able to
-  // see what other group members have written in." Cheap query, public
-  // share token endpoint — 5s feels live without hammering the server.
+  // see what other group members have written in."
+  //
+  // Only set up the interval if the trip actually has a write-in poll —
+  // most trips don't, and the previous unconditional 5s poll was hitting
+  // Supabase 12×/min/visitor for no benefit. Bumped to 15s; still feels
+  // live for a feature that's already eventually-consistent.
+  const hasWriteInPoll = (trip?.polls ?? []).some((p) => p.allow_write_ins);
   useEffect(() => {
-    if (step !== 'polls' || !trip?.share_token) return;
+    if (step !== 'polls' || !trip?.share_token || !hasWriteInPoll) return;
     let cancelled = false;
     const id = setInterval(async () => {
       try {
@@ -1270,12 +1275,12 @@ export default function RespondScreen() {
       } catch {
         /* non-fatal — next tick will retry */
       }
-    }, 5000);
+    }, 15000);
     return () => {
       cancelled = true;
       clearInterval(id);
     };
-  }, [step, trip?.share_token]);
+  }, [step, trip?.share_token, hasWriteInPoll]);
 
   // ─── Load trip ────────────────────────────────────────────────────────────
   useEffect(() => {
