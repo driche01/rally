@@ -53,16 +53,21 @@ Netlify embeds anything prefixed that way in the client bundle.
 
 ```sh
 cd web
-netlify deploy --prod --build
+netlify deploy --prod --build --functions=.netlify/functions-internal
 ```
 
-`--build` runs `next build` first; `--prod` promotes the result to
-the live site.
+- `--build` runs `next build` first.
+- `--prod` promotes the result to the live site.
+- `--functions=.netlify/functions-internal` is **required for the
+  manual CLI deploy** — the Next.js plugin writes its SSR handler
+  there, and the CLI doesn't pick it up automatically without the
+  flag. Without it, every route 404s. (Git-based auto-deploy via the
+  Netlify dashboard wires this automatically — see the next section.)
 
 For a preview (without going to prod):
 
 ```sh
-netlify deploy --build         # returns a draft-deploy URL
+netlify deploy --build --functions=.netlify/functions-internal
 ```
 
 ## Auto-deploy from GitHub (recommended next step)
