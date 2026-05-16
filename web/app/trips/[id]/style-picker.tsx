@@ -13,7 +13,7 @@
  * tap re-opens to the latest selection.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { THEMES, THEME_CATEGORIES } from "@/lib/themes";
 import { EFFECT_CATALOG } from "@/lib/effects/effect-overlay";
@@ -36,6 +36,32 @@ export default function StylePicker({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState<PanelKind>(null);
+  // Collapsed = show just a single 🎨 tab instead of the full rail.
+  // Default collapsed on mobile (the rail was eating screen real
+  // estate the user couldn't get back); persist per trip via
+  // localStorage so the planner's choice sticks across visits.
+  // sm+ ignores this state — the rail is always rendered.
+  const collapsedKey = `rally.stylepicker.collapsed.${tripId}`;
+  const [collapsedMobile, setCollapsedMobile] = useState<boolean>(true);
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(collapsedKey);
+      // null = first visit on this device → keep the mobile default
+      // (collapsed). Explicit "0" / "1" override the default.
+      if (stored === "0") setCollapsedMobile(false);
+      else if (stored === "1") setCollapsedMobile(true);
+    } catch { /* ignore */ }
+  }, [collapsedKey]);
+
+  function toggleCollapsed() {
+    setCollapsedMobile((prev) => {
+      const next = !prev;
+      try { localStorage.setItem(collapsedKey, next ? "1" : "0"); } catch { /* ignore */ }
+      // Closing the rail also closes any open panel.
+      if (next) setOpen(null);
+      return next;
+    });
+  }
 
   if (!canEdit) return null;
 
@@ -51,8 +77,38 @@ export default function StylePicker({
 
   return (
     <>
-      {/* ─── Side rail ──────────────────────────────── */}
-      <div className="fixed right-3 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-2 bg-cream/95 backdrop-blur-sm rounded-2xl shadow-lg border border-line p-2">
+      {/* ─── Side rail (collapsed-mobile aware) ─────── */}
+      {/* Mobile collapsed: single floating 🎨 tab. Tap = expand. */}
+      <button
+        type="button"
+        onClick={toggleCollapsed}
+        aria-label="Open theme + effect picker"
+        className={
+          "fixed right-3 top-1/2 -translate-y-1/2 z-30 h-11 w-11 rounded-full bg-cream/95 backdrop-blur-sm shadow-lg border border-line items-center justify-center text-lg active:scale-95 transition-transform " +
+          (collapsedMobile ? "inline-flex sm:hidden" : "hidden")
+        }
+      >
+        🎨
+      </button>
+
+      {/* Mobile expanded + sm+ (always): full rail. */}
+      <div
+        className={
+          "fixed right-3 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-2 bg-cream/95 backdrop-blur-sm rounded-2xl shadow-lg border border-line p-2 " +
+          (collapsedMobile ? "hidden sm:flex" : "flex")
+        }
+      >
+        {/* Mobile collapse handle — surfaces only on phones to retire
+            the rail back to the single-tab state. Hidden on sm+ since
+            the desktop layout doesn't need it. */}
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          aria-label="Collapse picker"
+          className="sm:hidden h-7 w-9 rounded-lg hover:bg-line/40 text-xs text-muted self-end -mb-1"
+        >
+          ✕
+        </button>
         <RailButton
           label="Theme"
           emoji="🎨"
