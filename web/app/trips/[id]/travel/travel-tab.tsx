@@ -425,8 +425,14 @@ function MemberCard({
 
   return (
     <article className={`${t.surface} border ${t.surfaceBorder} rounded-2xl p-4`}>
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div className="min-w-0 flex-1">
+      {/* Mobile: stack the card contents — name + arrangement on top,
+          action pills as a horizontal-scrolling strip below. The old
+          `flex justify-between flex-wrap` layout squeezed the left
+          column so narrow that "No arrangement set yet" wrapped one
+          word per line and the right-hand pills overlapped the card
+          text (#9). sm+ keeps the original side-by-side layout. */}
+      <div className="grid gap-3 sm:flex sm:items-start sm:justify-between sm:gap-3 sm:flex-wrap">
+        <div className="min-w-0 sm:flex-1">
           <p className={`font-bold ${t.body}`}>
             {member.name}
             {member.is_planner && (
@@ -472,34 +478,36 @@ function MemberCard({
             </p>
           )}
         </div>
-        <div className="flex gap-2 flex-wrap">
-          {canManage && member.home_airport && (
-            <button
-              onClick={onSuggestFlights}
-              className={`h-9 px-3 rounded-full ${t.surface} border ${t.surfaceBorder} text-xs hover:border-green`}
-            >
-              Suggest flights
-            </button>
-          )}
-          {member.home_airport && trip.destination && trip.start_date && trip.end_date && (
-            <a
-              href={flightSearchFor(member.home_airport, trip)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`h-9 px-3 rounded-full ${t.surface} border ${t.surfaceBorder} text-xs hover:border-green inline-flex items-center text-ink`}
-              title={`Search Google Flights ${member.home_airport} → ${trip.destination}`}
-            >
-              Search flights ↗
-            </a>
-          )}
-          {canManage && (
-            <button
-              onClick={onEdit}
-              className={`h-9 px-3 rounded-full ${t.surface} border ${t.surfaceBorder} text-xs hover:border-green`}
-            >
-              {a ? "Edit" : "Add"}
-            </button>
-          )}
+        <div className="-mx-4 sm:mx-0 px-4 sm:px-0 overflow-x-auto sm:overflow-visible">
+          <div className="flex gap-2 sm:flex-wrap flex-nowrap">
+            {canManage && member.home_airport && (
+              <button
+                onClick={onSuggestFlights}
+                className={`h-9 px-3 rounded-full ${t.surface} border ${t.surfaceBorder} text-xs hover:border-green whitespace-nowrap flex-shrink-0`}
+              >
+                Suggest flights
+              </button>
+            )}
+            {member.home_airport && trip.destination && trip.start_date && trip.end_date && (
+              <a
+                href={flightSearchFor(member.home_airport, trip)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`h-9 px-3 rounded-full ${t.surface} border ${t.surfaceBorder} text-xs hover:border-green inline-flex items-center text-ink whitespace-nowrap flex-shrink-0`}
+                title={`Search Google Flights ${member.home_airport} → ${trip.destination}`}
+              >
+                Search flights ↗
+              </a>
+            )}
+            {canManage && (
+              <button
+                onClick={onEdit}
+                className={`h-9 px-3 rounded-full ${t.surface} border ${t.surfaceBorder} text-xs hover:border-green whitespace-nowrap flex-shrink-0`}
+              >
+                {a ? "Edit" : "Add"}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </article>

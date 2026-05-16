@@ -131,6 +131,25 @@ export default function TripsDashboard({
         </div>
       )}
 
+      {/* Live search feedback — visible whenever a query is active so
+          the user has a clear "yes, the filter applied" cue. Renders
+          right above the grid; counts update as they type. (#3) */}
+      {!isEmpty && query.trim() && (
+        <p className="text-xs text-muted mb-3" aria-live="polite">
+          Showing <strong className="text-ink">{visible.length}</strong> of{" "}
+          {trips.length} trip{trips.length === 1 ? "" : "s"} for{" "}
+          <strong className="text-ink">&ldquo;{query.trim()}&rdquo;</strong>
+          {" — "}
+          <button
+            type="button"
+            onClick={() => setQuery("")}
+            className="underline underline-offset-2 hover:text-ink"
+          >
+            clear
+          </button>
+        </p>
+      )}
+
       {/* ─── Grid / empty state ────────────────────────────────── */}
       {isEmpty ? (
         <EmptyFirstTrip greetingName={greetingName} />

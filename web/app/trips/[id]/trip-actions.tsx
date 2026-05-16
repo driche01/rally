@@ -122,30 +122,37 @@ export default function TripActions({
 
   return (
     <>
-      <div className="flex items-center gap-2 flex-nowrap">
+      {/* Mobile: stack vertically so each label fits without ellipses.
+          sm+: revert to the single-row layout (#6 in the mobile QA
+          batch). Each primary action gets a lucide-style icon so the
+          mobile stack still reads visually at a glance. */}
+      <div className="grid grid-cols-1 sm:flex sm:items-center gap-2 sm:flex-nowrap">
         <button
           onClick={() => setShowInvite(true)}
           disabled={cancelled}
-          className="flex-1 min-w-0 h-11 px-4 rounded-full bg-green text-cream font-bold text-sm hover:bg-green-2 disabled:opacity-50 disabled:cursor-not-allowed truncate"
+          className="h-11 px-4 rounded-full bg-green text-cream font-bold text-sm hover:bg-green-2 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2 sm:flex-1 sm:min-w-0"
         >
-          Invite people →
+          <IconUserPlus className="h-4 w-4" />
+          <span>Invite people</span>
         </button>
         <button
           onClick={copyLink}
-          className={`flex-1 min-w-0 h-11 px-3 rounded-full ${t.surface} text-ink border ${t.surfaceBorder} hover:border-green text-sm truncate`}
+          className={`h-11 px-3 rounded-full ${t.surface} text-ink border ${t.surfaceBorder} hover:border-green text-sm inline-flex items-center justify-center gap-2 sm:flex-1 sm:min-w-0`}
         >
-          {copied ? "Copied ✓" : "Copy share link"}
+          <IconLink className="h-4 w-4" />
+          <span>{copied ? "Copied" : "Copy share link"}</span>
         </button>
         <button
           onClick={() => setShowBlast(true)}
           disabled={cancelled}
-          className={`flex-1 min-w-0 h-11 px-3 rounded-full ${t.surface} text-ink border ${t.surfaceBorder} hover:border-green text-sm disabled:opacity-50 disabled:cursor-not-allowed truncate`}
+          className={`h-11 px-3 rounded-full ${t.surface} text-ink border ${t.surfaceBorder} hover:border-green text-sm disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2 sm:flex-1 sm:min-w-0`}
         >
-          Send blast →
+          <IconSend className="h-4 w-4" />
+          <span>Send blast</span>
         </button>
 
         {/* Overflow menu — Clone + Cancel. */}
-        <div className="relative flex-shrink-0" ref={overflowRef}>
+        <div className="relative flex-shrink-0 self-end sm:self-auto" ref={overflowRef}>
           <button
             onClick={() => setOverflowOpen((v) => !v)}
             aria-label="More actions"
@@ -206,5 +213,50 @@ export default function TripActions({
         />
       )}
     </>
+  );
+}
+
+// ─── Inline SVG icons (lucide-style, currentColor) ──────────────
+// Inlined rather than pulling lucide-react in as a dep — three
+// 24×24 glyphs aren't worth a runtime package.
+
+function IconUserPlus({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      className={className} aria-hidden="true"
+    >
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <line x1="19" y1="8" x2="19" y2="14" />
+      <line x1="22" y1="11" x2="16" y2="11" />
+    </svg>
+  );
+}
+
+function IconLink({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      className={className} aria-hidden="true"
+    >
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </svg>
+  );
+}
+
+function IconSend({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      className={className} aria-hidden="true"
+    >
+      <line x1="22" y1="2" x2="11" y2="13" />
+      <polygon points="22 2 15 22 11 13 2 9 22 2" />
+    </svg>
   );
 }
