@@ -15,6 +15,7 @@
 
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { personalizeBody } from './personalize.ts';
+import { findOrCreateUser } from './phone-user-linker.ts';
 
 const lastSendAt = new Map<string, number>();
 
@@ -46,6 +47,21 @@ export async function sendDm(
 ): Promise<SendDmResult> {
   if (!toPhone || !body) {
     return { sid: null, error: 'missing_args' };
+  }
+
+  // Per Phase C Q23: every outbound send checks users.opted_out.
+  // STOP/REJOIN handling in sms-inbound writes this flag; the send
+  // rail honors it. findOrCreateUser also keeps the phone↔user
+  // index seeded so downstream features (mutuals, etc.) get clean
+  // data even for SMS-only contacts. Failures here don't block the
+  // send — defaults to "not opted out" if lookup blows up.
+  try {
+    const user = await findOrCreateUser(admin, toPhone);
+    if (user.opted_out) {
+      return { sid: null, error: 'opted_out' };
+    }
+  } catch (err) {
+    console.warn('[dm-sender] opt-out lookup failed (sending anyway):', err);
   }
 
   if (opts.idempotencyKey) {

@@ -6,6 +6,19 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["-y", "serve", "-s", "dist-preview", "-l", "5173"],
       "port": 5173
+    },
+    {
+      "name": "phase-a-prototype",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["-y", "serve", "-s", "web/prototype/profile-capture", "-l", "5174", "--no-clipboard"],
+      "port": 5174
+    },
+    {
+      "name": "rally-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "web", "run", "dev"],
+      "port": 3000,
+      "autoPort": true
     }
   ]
 }

@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  />
+  <meta name="theme-color" content="#FBF7EF" />
+  <title>Rally — Travel Profile</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Live timer (Design Gate acceptance metric) -->
+  <div class="timer" id="timer" aria-live="polite" aria-atomic="true">
+    <span class="timer-label">Time</span>
+    <span class="timer-value" id="timer-value">0:00</span>
+  </div>
+
+  <!-- Step pager -->
+  <div class="pager" id="pager" aria-hidden="true"></div>
+
+  <main class="stage" id="stage">
+    <!-- ───────────────────── 0. Hello ──────────────────────────── -->
+    <section class="card card--intro" data-step="intro" data-active>
+      <div class="intro-eyebrow">Rally · Travel Profile</div>
+      <h1 class="intro-h">Before you RSVP, the vibe check.</h1>
+      <p class="intro-p">
+        Twenty-five seconds, six taps. We use it to draft the trip around how
+        you actually travel — not the form your friend's group chat keeps
+        half-filling out.
+      </p>
+      <button class="cta cta--primary" data-action="start">Let's go →</button>
+      <p class="intro-fine">
+        One time, ever. Edit any time from your account.
+      </p>
+    </section>
+
+    <!-- ───────────────────── 1. Beach / Mountain / Either ──────── -->
+    <section class="card card--vibe" data-step="vibe-1" data-key="vibe_beach_or_mountain">
+      <div class="vibe-eyebrow">1 of 6</div>
+      <h2 class="vibe-h">Where do you wake up?</h2>
+      <p class="vibe-sub">Pick the one that sounds like your kind of morning.</p>
+      <div class="options options--3">
+        <button class="option" data-value="beach">
+          <svg class="icon icon-lg"><use href="#i-sun" /></svg>
+          <span class="option-label">Beach</span>
+          <span class="option-cap">salt, sun, slow start</span>
+        </button>
+        <button class="option" data-value="mountain">
+          <svg class="icon icon-lg"><use href="#i-mountain" /></svg>
+          <span class="option-label">Mountain</span>
+          <span class="option-cap">cold air, hot coffee</span>
+        </button>
+        <button class="option" data-value="both">
+          <svg class="icon icon-lg"><use href="#i-half" /></svg>
+          <span class="option-label">Either</span>
+          <span class="option-cap">surprise me</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ───────────────────── 2. Spa / Hike / Both ──────────────── -->
+    <section class="card card--vibe" data-step="vibe-2" data-key="vibe_spa_or_hike">
+      <div class="vibe-eyebrow">2 of 6</div>
+      <h2 class="vibe-h">Day off, day on?</h2>
+      <p class="vibe-sub">What's your default move when there's nothing planned?</p>
+      <div class="options options--3">
+        <button class="option" data-value="spa">
+          <svg class="icon icon-lg"><use href="#i-leaf" /></svg>
+          <span class="option-label">Spa</span>
+          <span class="option-cap">slow it down</span>
+        </button>
+        <button class="option" data-value="hike">
+          <svg class="icon icon-lg"><use href="#i-footprints" /></svg>
+          <span class="option-label">Hike</span>
+          <span class="option-cap">earn the view</span>
+        </button>
+        <button class="option" data-value="both">
+          <svg class="icon icon-lg"><use href="#i-shuffle" /></svg>
+          <span class="option-label">Both</span>
+          <span class="option-cap">read the room</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ───────────────────── 3. Foodie / Casual / Mix ──────────── -->
+    <section class="card card--vibe" data-step="vibe-3" data-key="vibe_foodie_or_casual">
+      <div class="vibe-eyebrow">3 of 6</div>
+      <h2 class="vibe-h">Dinner on the trip is…</h2>
+      <p class="vibe-sub">No wrong answer. Just calibrating restaurant picks.</p>
+      <div class="options options--3">
+        <button class="option" data-value="foodie">
+          <svg class="icon icon-lg"><use href="#i-wine" /></svg>
+          <span class="option-label">A foodie thing</span>
+          <span class="option-cap">tasting menus, reservations</span>
+        </button>
+        <button class="option" data-value="casual">
+          <svg class="icon icon-lg"><use href="#i-utensils" /></svg>
+          <span class="option-label">Casual</span>
+          <span class="option-cap">tacos, dive bars, vibes</span>
+        </button>
+        <button class="option" data-value="both">
+          <svg class="icon icon-lg"><use href="#i-shuffle" /></svg>
+          <span class="option-label">Mix it up</span>
+          <span class="option-cap">one of each</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ───────────────────── 4. Social / Chill / Switch ────────── -->
+    <section class="card card--vibe" data-step="vibe-4" data-key="vibe_social_or_chill">
+      <div class="vibe-eyebrow">4 of 6</div>
+      <h2 class="vibe-h">Nightlife or nightcap?</h2>
+      <p class="vibe-sub">How do you want to spend the after-hours?</p>
+      <div class="options options--3">
+        <button class="option" data-value="social">
+          <svg class="icon icon-lg"><use href="#i-sparkles" /></svg>
+          <span class="option-label">Out</span>
+          <span class="option-cap">bars, dancing, late</span>
+        </button>
+        <button class="option" data-value="chill">
+          <svg class="icon icon-lg"><use href="#i-moon" /></svg>
+          <span class="option-label">In</span>
+          <span class="option-cap">cards, couch, conversation</span>
+        </button>
+        <button class="option" data-value="both">
+          <svg class="icon icon-lg"><use href="#i-swap" /></svg>
+          <span class="option-label">Switch off</span>
+          <span class="option-cap">depends on the night</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ───────────────────── 5. Culture / Relaxation / Mix ─────── -->
+    <section class="card card--vibe" data-step="vibe-5" data-key="vibe_culture_or_relaxation">
+      <div class="vibe-eyebrow">5 of 6</div>
+      <h2 class="vibe-h">Best trip you'd brag about?</h2>
+      <p class="vibe-sub">The story you'd want to tell when you got back.</p>
+      <div class="options options--3">
+        <button class="option" data-value="culture">
+          <svg class="icon icon-lg"><use href="#i-landmark" /></svg>
+          <span class="option-label">Saw it all</span>
+          <span class="option-cap">museums, walks, history</span>
+        </button>
+        <button class="option" data-value="relaxation">
+          <svg class="icon icon-lg"><use href="#i-waves" /></svg>
+          <span class="option-label">Did nothing</span>
+          <span class="option-cap">book, beach, repeat</span>
+        </button>
+        <button class="option" data-value="both">
+          <svg class="icon icon-lg"><use href="#i-scale" /></svg>
+          <span class="option-label">A bit of both</span>
+          <span class="option-cap">half on, half off</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ───────────────────── 6. Home airport (typeahead) ────────── -->
+    <section class="card card--airport" data-step="airport" data-key="home_airport">
+      <div class="vibe-eyebrow">6 of 6</div>
+      <h2 class="vibe-h">Home airport?</h2>
+      <p class="vibe-sub">We use it to suggest flight options, not for anything else.</p>
+      <div class="airport-search">
+        <input
+          type="text"
+          inputmode="search"
+          autocomplete="off"
+          autocapitalize="characters"
+          spellcheck="false"
+          class="airport-input"
+          id="airport-input"
+          placeholder="City or 3-letter code"
+        />
+        <ul class="airport-suggestions" id="airport-suggestions" role="listbox"></ul>
+      </div>
+      <button class="cta cta--ghost" data-action="skip-airport">Skip for now</button>
+    </section>
+
+    <!-- ───────────────────── 7. Dietary (optional) ──────────────── -->
+    <section class="card card--diet" data-step="dietary" data-key="dietary_restrictions">
+      <div class="vibe-eyebrow">Quick add-on</div>
+      <h2 class="vibe-h">Anything we should know at meals?</h2>
+      <p class="vibe-sub">Tap any that apply. Skip if none.</p>
+      <div class="chips" id="diet-chips">
+        <button class="chip" data-value="vegetarian">Vegetarian</button>
+        <button class="chip" data-value="vegan">Vegan</button>
+        <button class="chip" data-value="pescatarian">Pescatarian</button>
+        <button class="chip" data-value="gluten_free">Gluten-free</button>
+        <button class="chip" data-value="dairy_free">Dairy-free</button>
+        <button class="chip" data-value="nut_allergy">Nut allergy</button>
+        <button class="chip" data-value="shellfish_allergy">Shellfish allergy</button>
+        <button class="chip" data-value="halal">Halal</button>
+        <button class="chip" data-value="kosher">Kosher</button>
+        <button class="chip" data-value="no_pork">No pork</button>
+        <button class="chip" data-value="no_alcohol">No alcohol</button>
+      </div>
+      <div class="diet-actions">
+        <button class="cta cta--ghost" data-action="skip-diet">None of these</button>
+        <button class="cta cta--primary" data-action="continue-diet" id="continue-diet">Continue →</button>
+      </div>
+    </section>
+
+    <!-- ───────────────────── 8. Budget tier ─────────────────────── -->
+    <section class="card card--budget" data-step="budget" data-key="budget_comfort">
+      <div class="vibe-eyebrow">Last one</div>
+      <h2 class="vibe-h">What's a comfortable trip budget?</h2>
+      <p class="vibe-sub">Ballpark per person, including everything. Used to anchor lodging picks.</p>
+      <div class="tiers">
+        <button class="tier" data-value="budget">
+          <span class="tier-mark">$</span>
+          <span class="tier-label">Budget</span>
+          <span class="tier-range">Under $500</span>
+        </button>
+        <button class="tier" data-value="mid">
+          <span class="tier-mark">$$</span>
+          <span class="tier-label">Mid</span>
+          <span class="tier-range">$500–$1.5k</span>
+        </button>
+        <button class="tier" data-value="premium">
+          <span class="tier-mark">$$$</span>
+          <span class="tier-label">Premium</span>
+          <span class="tier-range">$1.5k–$3k</span>
+        </button>
+        <button class="tier" data-value="luxury">
+          <span class="tier-mark">$$$$</span>
+          <span class="tier-label">No ceiling</span>
+          <span class="tier-range">$3k+</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ───────────────────── 9. Done ────────────────────────────── -->
+    <section class="card card--done" data-step="done">
+      <div class="done-burst">
+        <svg class="icon"><use href="#i-check" /></svg>
+      </div>
+      <h2 class="done-h">You're set.</h2>
+      <p class="done-p">
+        Took <strong id="final-time">--</strong>. Your profile follows you
+        across every Rally trip — one-tap confirm next time.
+      </p>
+
+      <div class="summary" id="summary"></div>
+
+      <button class="cta cta--primary cta--block" data-action="rsvp">
+        RSVP to Tulum bachelorette →
+      </button>
+      <button class="cta cta--ghost" data-action="restart">Run it again</button>
+    </section>
+  </main>
+
+  <!-- Tiny corner badge so a reviewer knows this is the prototype -->
+  <div class="badge">Prototype · no backend · localhost only</div>
+
+  <!-- ─────────────── SVG icon sprite (Lucide-flavored) ─────────────── -->
+  <svg class="icon-sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <!-- Beach: sun + horizon -->
+      <symbol id="i-sun" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="4"></circle>
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path>
+      </symbol>
+      <!-- Mountain peaks -->
+      <symbol id="i-mountain" viewBox="0 0 24 24">
+        <path d="m8 3 4 8 5-5 5 15H2L8 3z"></path>
+      </symbol>
+      <!-- Half circle / either -->
+      <symbol id="i-half" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="9"></circle>
+        <path d="M12 3v18"></path>
+        <path d="M12 3a9 9 0 0 1 0 18Z" fill="currentColor" stroke="none"></path>
+      </symbol>
+      <!-- Leaf (spa) -->
+      <symbol id="i-leaf" viewBox="0 0 24 24">
+        <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"></path>
+        <path d="M2 21c0-3 1.85-5.36 5.08-6"></path>
+      </symbol>
+      <!-- Footprints (hike) -->
+      <symbol id="i-footprints" viewBox="0 0 24 24">
+        <path d="M4 16v-2.38c0-.954-.083-1.882.236-2.783C4.8 9.04 6.7 7 9 7c1.387 0 2.5.5 2.5 2.5 0 .87-.41 1.667-.94 2.41A11 11 0 0 0 8.5 18.5l-.41 2.55A1.5 1.5 0 0 1 6.59 22h-1.59A1.5 1.5 0 0 1 3.5 20.5L4 16Z"></path>
+        <path d="M20 16v-2.38c0-.954.083-1.882-.236-2.783C19.2 9.04 17.3 7 15 7c-1.387 0-2.5.5-2.5 2.5 0 .87.41 1.667.94 2.41A11 11 0 0 1 15.5 18.5l.41 2.55A1.5 1.5 0 0 0 17.41 22H19a1.5 1.5 0 0 0 1.5-1.5L20 16Z"></path>
+      </symbol>
+      <!-- Shuffle (both / mix) -->
+      <symbol id="i-shuffle" viewBox="0 0 24 24">
+        <path d="M16 3h5v5"></path>
+        <path d="M4 20 21 3"></path>
+        <path d="m21 16 3-3-3-3"></path>
+        <path d="M4 4l5 5"></path>
+        <path d="m15 15 6 6"></path>
+      </symbol>
+      <!-- Wine glass (foodie) -->
+      <symbol id="i-wine" viewBox="0 0 24 24">
+        <path d="M8 22h8"></path>
+        <path d="M12 17v5"></path>
+        <path d="M7 2h10v5a5 5 0 0 1-10 0V2Z"></path>
+        <path d="M7 7h10"></path>
+      </symbol>
+      <!-- Utensils (casual) -->
+      <symbol id="i-utensils" viewBox="0 0 24 24">
+        <path d="M3 2v7c0 1.1.9 2 2 2h2v11"></path>
+        <path d="M7 2v20"></path>
+        <path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"></path>
+      </symbol>
+      <!-- Sparkles (out / social) -->
+      <symbol id="i-sparkles" viewBox="0 0 24 24">
+        <path d="M12 3v3"></path>
+        <path d="M12 18v3"></path>
+        <path d="M4 12H1"></path>
+        <path d="M23 12h-3"></path>
+        <path d="m4.93 4.93 2.12 2.12"></path>
+        <path d="m16.95 16.95 2.12 2.12"></path>
+        <path d="m4.93 19.07 2.12-2.12"></path>
+        <path d="m16.95 7.05 2.12-2.12"></path>
+        <circle cx="12" cy="12" r="3"></circle>
+      </symbol>
+      <!-- Moon (in / chill) -->
+      <symbol id="i-moon" viewBox="0 0 24 24">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"></path>
+      </symbol>
+      <!-- Swap / arrow-right-left (switch off) -->
+      <symbol id="i-swap" viewBox="0 0 24 24">
+        <path d="m16 3 4 4-4 4"></path>
+        <path d="M20 7H4"></path>
+        <path d="m8 21-4-4 4-4"></path>
+        <path d="M4 17h16"></path>
+      </symbol>
+      <!-- Landmark / culture -->
+      <symbol id="i-landmark" viewBox="0 0 24 24">
+        <line x1="3" y1="22" x2="21" y2="22"></line>
+        <line x1="6" y1="18" x2="6" y2="11"></line>
+        <line x1="10" y1="18" x2="10" y2="11"></line>
+        <line x1="14" y1="18" x2="14" y2="11"></line>
+        <line x1="18" y1="18" x2="18" y2="11"></line>
+        <polygon points="12 2 20 7 4 7"></polygon>
+      </symbol>
+      <!-- Waves (relaxation) -->
+      <symbol id="i-waves" viewBox="0 0 24 24">
+        <path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"></path>
+        <path d="M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"></path>
+        <path d="M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"></path>
+      </symbol>
+      <!-- Scale / balance -->
+      <symbol id="i-scale" viewBox="0 0 24 24">
+        <path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"></path>
+        <path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"></path>
+        <path d="M7 21h10"></path>
+        <path d="M12 3v18"></path>
+        <path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"></path>
+      </symbol>
+      <!-- Check (done) -->
+      <symbol id="i-check" viewBox="0 0 24 24">
+        <path d="M20 6 9 17l-5-5"></path>
+      </symbol>
+    </defs>
+  </svg>
+
+  <script src="airports.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

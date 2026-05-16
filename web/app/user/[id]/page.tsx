@@ -1,0 +1,424 @@
+/**
+ * /user/[id] — persistent profile page.
+ *
+ * Alpha+ Sprint 3. Visible to anyone who has shared a `respondents`
+ * row on the same trip with the target user, ever (past or current,
+ * regardless of RSVP outcome). Q29 + Q29 graceful-locked-UX.
+ *
+ * Renders:
+ *   • Name + avatar (or initial-fallback)
+ *   • Trip count + mutuals count
+ *   • Going-trip history (past + upcoming), grouped by status
+ *   • Travel profile summary (vibes, home airport, budget, dietary)
+ *
+ * Server-rendered. RLS is loose-ish on the underlying tables (the
+ * profile-visibility helper is the real gate); we lift to the
+ * service-role client after passing the gate.
+ */
+
+import { redirect, notFound } from "next/navigation";
+import Link from "next/link";
+import { requireAuthUid } from "@/lib/auth";
+import { createServiceClient } from "@/lib/supabase/server";
+import { canViewUserProfile } from "@/lib/profile-visibility";
+import { computeBadges, type Badge } from "@/lib/badges";
+import AppHeader from "@/lib/brand/app-header";
+import ProfileLocked from "./profile-locked";
+import TravelProfileSection from "./travel-profile-section";
+import type { TravelerProfile } from "@shared/types";
+
+export default async function UserProfilePage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id: targetUserId } = await params;
+
+  const r = await requireAuthUid();
+  if (!r.ok) redirect(`/login?next=/user/${targetUserId}`);
+
+  const svc = createServiceClient();
+
+  // 1. Resolve viewer's users.id (via auth_user_id).
+  const { data: viewerRow } = await svc
+    .from("users")
+    .select("id")
+    .eq("auth_user_id", r.authUid)
+    .maybeSingle();
+  const viewerUserId = viewerRow?.id as string | undefined;
+  if (!viewerUserId) {
+    // The viewer is authenticated but has no users row — they're
+    // someone who logged in but never RSVPed anywhere. They can't
+    // view profiles (no possible shared respondents row).
+    return <ProfileLocked firstName="this user" tripCount={null} />;
+  }
+
+  // 2. Resolve target user row (must exist).
+  const { data: targetRow } = await svc
+    .from("users")
+    .select("id, phone, display_name, trip_count")
+    .eq("id", targetUserId)
+    .maybeSingle();
+  if (!targetRow) notFound();
+  const target = targetRow as {
+    id: string;
+    phone: string | null;
+    display_name: string | null;
+    trip_count: number | null;
+  };
+
+  // 3. Visibility check.
+  const canView = await canViewUserProfile(svc, viewerUserId, targetUserId);
+
+  // 4. Pick a display name. Priority order:
+  //    users.display_name → most recent respondents.name → "this user"
+  let displayName = target.display_name?.trim() || null;
+  if (!displayName) {
+    const { data: recentResp } = await svc
+      .from("respondents")
+      .select("name, created_at")
+      .eq("user_id", targetUserId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    displayName = recentResp?.name ?? null;
+  }
+  const safeName = displayName ?? "this user";
+  const firstName = safeName.split(/\s+/)[0] ?? safeName;
+
+  if (!canView) {
+    return <ProfileLocked firstName={firstName} tripCount={target.trip_count} />;
+  }
+
+  // 5. Pull trip history (going only, both past + upcoming, excluding
+  // cancelled). Joins trips for date + name + destination.
+  const { data: historyRows } = await svc
+    .from("respondents")
+    .select(`
+      id, rsvp_status,
+      trip:trips ( id, name, destination, start_date, end_date, theme, cancelled_at, cover_image_url )
+    `)
+    .eq("user_id", targetUserId)
+    .in("rsvp_status", ["going"])
+    .order("created_at", { ascending: false });
+
+  interface TripRowShape {
+    id: string;
+    name: string;
+    destination: string | null;
+    start_date: string | null;
+    end_date: string | null;
+    theme: string | null;
+    cancelled_at: string | null;
+    cover_image_url: string | null;
+  }
+  type HistoryEntry = { id: string; trip: TripRowShape };
+  const allHistory = (historyRows ?? [])
+    .map((h) => {
+      // PostgREST returns the nested trip as either a single object
+      // (when the FK is one-to-one and the relationship name resolves
+      // cleanly) or as an array (one-to-many style). Normalize.
+      const tripField = (h as { trip: unknown }).trip;
+      const tripRow = Array.isArray(tripField) ? (tripField[0] ?? null) : tripField;
+      return { id: h.id as string, trip: tripRow as TripRowShape | null };
+    })
+    .filter((h): h is HistoryEntry => h.trip !== null && !h.trip.cancelled_at);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const upcoming = allHistory.filter((h) => (h.trip.start_date ?? "9999") >= today);
+  const past     = allHistory.filter((h) => (h.trip.start_date ?? "0000") <  today);
+
+  // 6. Mutuals count + top names.
+  const { data: mutualRows } = await svc
+    .from("mutuals")
+    .select("mutual_user_id, shared_trip_count, last_traveled_together_at")
+    .eq("user_id", targetUserId)
+    .order("shared_trip_count", { ascending: false })
+    .limit(8);
+  const mutuals = (mutualRows ?? []) as {
+    mutual_user_id: string;
+    shared_trip_count: number;
+    last_traveled_together_at: string | null;
+  }[];
+
+  // 7. Resolve mutual user names for the mini-leaderboard.
+  let topMutuals: Array<{ id: string; name: string; shared_trip_count: number }> = [];
+  if (mutuals.length > 0) {
+    const ids = mutuals.slice(0, 5).map((m) => m.mutual_user_id);
+    const { data: nameRows } = await svc
+      .from("users")
+      .select("id, display_name")
+      .in("id", ids);
+    const nameMap = new Map<string, string | null>(
+      (nameRows ?? []).map((u) => [u.id as string, (u.display_name as string | null) ?? null]),
+    );
+    // Fallback to most-recent respondents.name when users.display_name is null.
+    const missing = ids.filter((id) => !nameMap.get(id));
+    if (missing.length > 0) {
+      const { data: respNames } = await svc
+        .from("respondents")
+        .select("user_id, name, created_at")
+        .in("user_id", missing)
+        .order("created_at", { ascending: false });
+      for (const id of missing) {
+        const r = (respNames ?? []).find((row) => row.user_id === id);
+        if (r) nameMap.set(id, (r.name as string) ?? null);
+      }
+    }
+    topMutuals = mutuals.slice(0, 5).map((m) => ({
+      id:    m.mutual_user_id,
+      name:  nameMap.get(m.mutual_user_id) ?? "a friend",
+      shared_trip_count: m.shared_trip_count,
+    }));
+  }
+
+  // 8. Compute badges + stats.
+  const { stats, badges } = await computeBadges(svc, targetUserId);
+
+  // 9. Travel profile (via phone, per Q2). Selecting * because the
+  // client editor reads every vibe/dietary/budget field; the few
+  // legacy Expo columns we don't display cost nothing to ship.
+  let profile: Partial<TravelerProfile> | null = null;
+  if (target.phone) {
+    const { data: tp } = await svc
+      .from("traveler_profiles")
+      .select("home_airport, vibe_beach_or_mountain, vibe_spa_or_hike, vibe_foodie_or_casual, vibe_social_or_chill, vibe_culture_or_relaxation, budget_comfort, dietary_restrictions")
+      .eq("phone", target.phone)
+      .maybeSingle();
+    if (tp) profile = tp as Partial<TravelerProfile>;
+  }
+
+  // Is the viewer looking at their own page? Drives the "Edit" /
+  // "Add your travel vibes" affordance below.
+  const isSelf = viewerUserId === targetUserId;
+
+  return (
+    <main className="min-h-dvh bg-cream px-6 py-10">
+      <div className="max-w-2xl mx-auto">
+        <AppHeader className="mb-8" />
+
+
+        {/* Header */}
+        <header className="flex items-center gap-5 mb-8">
+          <Avatar name={safeName} />
+          <div className="min-w-0 flex-1">
+            <h1 className="font-display text-3xl sm:text-4xl text-ink leading-tight mb-1 truncate">
+              {safeName}
+            </h1>
+            <p className="text-sm text-muted">
+              {stats.trips_attended} trip{stats.trips_attended === 1 ? "" : "s"} ·{" "}
+              {stats.distinct_destinations} destination{stats.distinct_destinations === 1 ? "" : "s"} ·{" "}
+              {stats.mutuals_count} traveled-with
+            </p>
+          </div>
+        </header>
+
+        {/* Badges */}
+        {badges.length > 0 && (
+          <div className="mb-10 flex flex-wrap gap-2">
+            {badges.map((b) => <BadgePill key={b.id} badge={b} />)}
+          </div>
+        )}
+
+        {/* Upcoming trips — aggregated badges by destination. Same
+            destination across multiple trips shows up once with a
+            count, so the section stays readable even when someone
+            has 6 "Yosemite (copy)" drafts. */}
+        {upcoming.length > 0 && (
+          <Section title="Upcoming">
+            <DestinationBadges trips={upcoming.map((h) => h.trip)} tone="upcoming" />
+          </Section>
+        )}
+
+        {/* Past trips — same treatment, just a tonal shift. */}
+        {past.length > 0 && (
+          <Section title="Past trips">
+            <DestinationBadges trips={past.map((h) => h.trip)} tone="past" />
+          </Section>
+        )}
+
+        {/* Travel profile — editable when the viewer is the target.
+            The component decides whether to render (read-only card,
+            editable card, empty-state CTA, or nothing). */}
+        <TravelProfileSection initial={profile} isSelf={isSelf} />
+
+        {/* Mutuals leaderboard — top 5 by shared trip count */}
+        {topMutuals.length > 0 && (
+          <Section title="Most-traveled-with">
+            <ul className="grid gap-2">
+              {topMutuals.map((m, i) => (
+                <li key={m.id}>
+                  <Link
+                    href={`/user/${m.id}`}
+                    className="flex items-center justify-between gap-3 bg-card border border-line rounded-2xl p-3 hover:border-green transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-xs font-bold text-muted w-5 tabular-nums">
+                        #{i + 1}
+                      </span>
+                      <span className="text-ink font-semibold truncate">{m.name}</span>
+                    </div>
+                    <span className="text-xs text-muted whitespace-nowrap">
+                      {m.shared_trip_count} {m.shared_trip_count === 1 ? "trip" : "trips"} together
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            {mutuals.length > topMutuals.length && (
+              <p className="text-xs text-muted mt-3">
+                + {mutuals.length - topMutuals.length} more
+              </p>
+            )}
+            {mutuals[0]?.last_traveled_together_at && (
+              <p className="text-xs text-muted mt-2">
+                Last shared trip: {formatRelative(mutuals[0].last_traveled_together_at)}
+              </p>
+            )}
+          </Section>
+        )}
+
+        {allHistory.length === 0 && !profile && (
+          <p className="text-sm text-muted text-center py-12">
+            {firstName} hasn&rsquo;t been on any trips yet.
+          </p>
+        )}
+      </div>
+    </main>
+  );
+}
+
+// ─── components ──────────────────────────────────────────────────
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="mb-10">
+      <h2 className="text-xs font-bold tracking-widest uppercase text-muted mb-3">
+        {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+function BadgePill({ badge }: { badge: Badge }) {
+  return (
+    <span
+      title={badge.hint}
+      className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-gold/15 text-ink border border-gold/40 text-xs font-semibold"
+    >
+      <span aria-hidden>{badge.emoji}</span>
+      {badge.label}
+    </span>
+  );
+}
+
+function Avatar({ name }: { name: string }) {
+  const initial = (name.charAt(0) || "?").toUpperCase();
+  return (
+    <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-full bg-green-soft text-green flex items-center justify-center font-display text-3xl sm:text-4xl font-bold flex-shrink-0">
+      {initial}
+    </div>
+  );
+}
+
+interface TripRowShape {
+  id: string;
+  name: string;
+  destination: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  theme: string | null;
+  cancelled_at: string | null;
+  cover_image_url: string | null;
+}
+
+function DestinationBadges({
+  trips, tone,
+}: { trips: TripRowShape[]; tone: "upcoming" | "past" }) {
+  // Group by destination (fallback: trip name). Same-named destinations
+  // collapse into a single chip with a count badge.
+  const groups = new Map<string, { label: string; count: number; earliest: string | null }>();
+  for (const trip of trips) {
+    const key = (trip.destination?.trim() || trip.name || "Untitled").toLowerCase();
+    const label = trip.destination?.trim() || trip.name || "Untitled";
+    const existing = groups.get(key);
+    if (existing) {
+      existing.count++;
+      // Track the earliest (upcoming) or latest (past) date so the
+      // chip can carry a "when" hint. Reuse `earliest` slot for both
+      // — for "past" we'll display max instead, picked by tone below.
+      if (trip.start_date) {
+        if (!existing.earliest || (
+          tone === "upcoming"
+            ? trip.start_date < existing.earliest
+            : trip.start_date > existing.earliest
+        )) {
+          existing.earliest = trip.start_date;
+        }
+      }
+    } else {
+      groups.set(key, { label, count: 1, earliest: trip.start_date });
+    }
+  }
+
+  const sorted = Array.from(groups.values()).sort((a, b) => {
+    // Upcoming: soonest first. Past: most recent first.
+    const da = a.earliest ?? "";
+    const db = b.earliest ?? "";
+    if (tone === "upcoming") return da.localeCompare(db);
+    return db.localeCompare(da);
+  });
+
+  const chipBase =
+    "inline-flex items-center gap-2 h-9 px-3.5 rounded-full text-sm font-semibold border ";
+  const chipTone = tone === "upcoming"
+    ? "bg-green-soft/40 text-ink border-green/30"
+    : "bg-card text-muted border-line";
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {sorted.map((g) => (
+        <span key={g.label} className={chipBase + chipTone}>
+          <span className="truncate max-w-[12rem]">{g.label}</span>
+          {g.earliest && (
+            <span className={tone === "upcoming" ? "text-green text-xs" : "text-muted text-xs"}>
+              {formatMd(g.earliest)}
+            </span>
+          )}
+          {g.count > 1 && (
+            <span
+              aria-label={`${g.count} trips`}
+              className={
+                "inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold tabular-nums " +
+                (tone === "upcoming" ? "bg-green text-cream" : "bg-line text-ink")
+              }
+            >
+              ×{g.count}
+            </span>
+          )}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// ─── helpers ──────────────────────────────────────────────────────
+
+function formatMd(iso: string): string {
+  const [year, month, day] = iso.slice(0, 10).split("-").map(Number);
+  if (!year || !month || !day) return iso;
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${months[month - 1]} ${day}, ${year}`;
+}
+
+function formatRelative(iso: string): string {
+  const ago = Date.now() - new Date(iso).getTime();
+  const days = Math.floor(ago / 86_400_000);
+  if (days < 1)   return "today";
+  if (days < 7)   return `${days}d ago`;
+  if (days < 30)  return `${Math.floor(days / 7)}w ago`;
+  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
+  return `${Math.floor(days / 365)}y ago`;
+}
+
