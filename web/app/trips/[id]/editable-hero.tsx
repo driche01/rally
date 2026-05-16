@@ -186,9 +186,14 @@ export function EditableTripHeader({
 
   return (
     <header>
-      <p className={`text-[11px] mb-2 ${t.eyebrow}`}>
-        {fields.status === "draft" ? "Draft" : "Live"} · {fields.theme ?? "no theme yet"}
-      </p>
+      {/* Status / theme eyebrow removed — "Live" and the theme name
+          were noise for both planners and respondents (they can see
+          the theme by looking at the page, and "Live" is the default
+          state). Draft status is still surfaced as a small badge
+          below when relevant. */}
+      {fields.status === "draft" && (
+        <p className={`text-[11px] mb-2 ${t.eyebrow}`}>Draft</p>
+      )}
 
       <h1 className={`text-3xl sm:text-4xl leading-tight mb-2 ${t.display}`}>
         <EditableText

@@ -44,6 +44,13 @@ html, body {
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Belt-and-suspenders horizontal-overflow guard. Some descendant
+     occasionally renders wider than the viewport for a frame (e.g.
+     animated buttons doing transform: scale, long unwrapped content
+     during a brief loading state). Clipping the body x-axis keeps
+     the whole document locked to viewport width so users never see a
+     horizontal scrollbar / sideways drift. */
+  overflow-x: hidden;
 }
 
 ::selection {

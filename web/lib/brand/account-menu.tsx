@@ -79,7 +79,11 @@ export default function AccountMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Open account menu"
-        className="flex items-center gap-2 h-9 pl-1 pr-3 rounded-full bg-card border border-line hover:border-green text-sm text-ink active:scale-95 transition-transform"
+        // Mobile: avatar-only, square button with no extra horizontal
+        // padding (the previous `pl-1 pr-3` left a dead-space gap to
+        // the right of the initial circle). sm+: expanded pill with
+        // name + caret.
+        className="flex items-center gap-2 h-9 p-1 sm:pl-1 sm:pr-3 rounded-full bg-card border border-line hover:border-green text-sm text-ink active:scale-95 transition-transform"
       >
         {avatarUrl ? (
           // eslint-disable-next-line @next/next/no-img-element

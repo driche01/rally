@@ -88,38 +88,46 @@ export default function TripsDashboard({
 
       {/* ─── Filter pills + search ─────────────────────────────── */}
       {!isEmpty && (
-        <div className="flex flex-wrap items-center gap-2 mb-6">
+        <div className="mb-6 grid gap-3 sm:flex sm:flex-wrap sm:items-center sm:gap-2">
           <SearchInput value={query} onChange={setQuery} />
-          {BUCKETS.map((b) => {
-            const n = counts[b.id];
-            const active = bucket === b.id;
-            const hasUnread = b.id === "invites" && n > 0;
-            return (
-              <button
-                key={b.id}
-                onClick={() => setBucket(b.id)}
-                className={
-                  "relative h-9 px-4 rounded-full text-sm font-semibold transition-colors " +
-                  (active
-                    ? "bg-ink text-cream"
-                    : "bg-card text-ink border border-line hover:border-green")
-                }
-              >
-                {b.label}
-                {n > 0 && (
-                  <span className={"ml-2 " + (active ? "opacity-80" : "text-muted")}>
-                    {n}
-                  </span>
-                )}
-                {hasUnread && !active && (
-                  <span
-                    aria-hidden="true"
-                    className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-orange ring-2 ring-cream"
-                  />
-                )}
-              </button>
-            );
-          })}
+          {/* Mobile: pills are a single horizontal-scrolling strip
+              (no wrap) so "All past" never gets orphaned on its own
+              line. Bleed the edges with -mx-5 sm:-mx-0 so the scroll
+              touches the screen edges. sm+: revert to the existing
+              flex-wrap layout where everything inlines next to the
+              search box. */}
+          <div className="-mx-5 sm:mx-0 px-5 sm:px-0 overflow-x-auto sm:overflow-visible flex flex-nowrap sm:flex-wrap sm:contents items-center gap-2">
+            {BUCKETS.map((b) => {
+              const n = counts[b.id];
+              const active = bucket === b.id;
+              const hasUnread = b.id === "invites" && n > 0;
+              return (
+                <button
+                  key={b.id}
+                  onClick={() => setBucket(b.id)}
+                  className={
+                    "relative h-9 px-4 rounded-full text-sm font-semibold transition-colors whitespace-nowrap flex-shrink-0 " +
+                    (active
+                      ? "bg-ink text-cream"
+                      : "bg-card text-ink border border-line hover:border-green")
+                  }
+                >
+                  {b.label}
+                  {n > 0 && (
+                    <span className={"ml-2 " + (active ? "opacity-80" : "text-muted")}>
+                      {n}
+                    </span>
+                  )}
+                  {hasUnread && !active && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-orange ring-2 ring-cream"
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -145,7 +153,7 @@ function SearchInput({
   value, onChange,
 }: { value: string; onChange: (v: string) => void }) {
   return (
-    <div className="relative">
+    <div className="relative w-full sm:w-44">
       <span
         aria-hidden="true"
         className="absolute left-3 top-1/2 -translate-y-1/2 text-muted"
@@ -156,8 +164,17 @@ function SearchInput({
         type="search"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        // Enter dismisses the keyboard on mobile (matches the
+        // mobile-app feel — the filter already applied while typing,
+        // there's no submit to wait for).
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
         placeholder="Search trips"
-        className="h-9 pl-8 pr-3 rounded-full bg-card border border-line text-sm text-ink placeholder:text-muted focus:border-green focus:outline-none w-44"
+        className="h-9 w-full pl-8 pr-3 rounded-full bg-card border border-line text-sm text-ink placeholder:text-muted focus:border-green focus:outline-none"
       />
     </div>
   );
