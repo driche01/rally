@@ -29,7 +29,7 @@ import { getTripByShareToken } from '@/lib/api/trips';
 import { enrollRespondentAsMember } from '@/lib/api/members';
 import { normalizePhone } from '@/lib/phone';
 import { EmailCapture } from '@/components/landing/EmailCapture';
-import { MultiDatePicker } from '@/components/MultiDatePicker';
+import { MultiDatePickerLazy as MultiDatePicker } from '@/components/MultiDatePickerLazy';
 import {
   getOrCreateRespondent,
   getExistingRespondentForTrip,
@@ -46,7 +46,7 @@ import { daysUntil, formatCadenceDate } from '@/lib/cadence';
 import { getResponseCountsForTrip } from '@/lib/api/responses';
 import { comparePollsByFormOrder } from '@/lib/pollFormUtils';
 import { getProfileByToken, upsertProfileByToken } from '@/lib/api/travelerProfiles';
-import { TravelerProfileForm } from '@/components/respond/TravelerProfileForm';
+import { TravelerProfileFormLazy as TravelerProfileForm } from '@/components/respond/TravelerProfileFormLazy';
 import type { TravelerProfile } from '@/types/profile';
 import { capture, Events } from '@/lib/analytics';
 import { log } from '@/lib/logger';

@@ -33,7 +33,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Input, PlacesAutocompleteInput } from '@/components/ui';
-import { MultiDatePicker, groupConsecutiveDays } from '@/components/MultiDatePicker';
+import { MultiDatePickerLazy as MultiDatePicker } from '@/components/MultiDatePickerLazy';
+import { groupConsecutiveDays } from '@/components/multiDatePickerUtils';
 import { CustomPollsSection, cleanCustomPoll } from '@/components/trips/CustomPollsSection';
 import { FormSectionHeader } from '@/components/trips/FormSectionHeader';
 import { BookByPicker } from '@/components/trips/BookByPicker';
