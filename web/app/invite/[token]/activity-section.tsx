@@ -11,7 +11,7 @@
  *     server inserts/deletes the row in activity_reactions.
  *   - Threaded replies. Each top-level entry exposes a Reply control
  *     that opens an inline composer keyed off parent_id.
- *   - GIF picker (Tenor proxy) + photo upload directly from the
+ *   - GIF picker (Giphy v1 proxy) + photo upload directly from the
  *     composer.
  *
  * Truly anonymous visitors (no cookie, no auth) still get the
@@ -534,7 +534,7 @@ function EntryBody({ entry }: { entry: ActivityFeedEntry }) {
   return <p className="text-ink whitespace-pre-line">{formatBody(entry)}</p>;
 }
 
-// ─── GIF picker (Tenor proxy) ───────────────────────────────────
+// ─── GIF picker (Giphy proxy) ───────────────────────────────────
 
 interface GifResult {
   id: string;
@@ -562,7 +562,7 @@ function GifPicker({
       if (!r.ok || !body.ok) {
         setErr(
           body?.error?.code === "key_missing"
-            ? "GIF search isn't configured yet. Ask the Rally team to add TENOR_API_KEY."
+            ? "GIF search isn't configured yet. Ask the Rally team to add GIPHY_API_KEY."
             : "GIF search hit a snag.",
         );
         setResults([]);

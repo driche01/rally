@@ -71,7 +71,7 @@ Project Settings → Environment Variables. Mirror
 | `TWILIO_PHONE_NUMBER` | Production | Rally Twilio number |
 | `GEMINI_API_KEY` | Production | Google AI Studio |
 | `ANTHROPIC_API_KEY` | Production | Anthropic console |
-| `TENOR_API_KEY` | Production (optional) | unset → GIF picker shows "not configured" |
+| `GIPHY_API_KEY` | Production (optional) | unset → GIF picker shows "not configured" |
 
 The non-public keys MUST NOT have the `NEXT_PUBLIC_` prefix —
 Netlify embeds anything prefixed that way in the client bundle.
@@ -127,7 +127,7 @@ Expected:
 - `/login` → `200`
 - `/trips` → `307` (redirects to `/login` for anon)
 - `whoami` → `401` (no session)
-- `gifs` → `503` if `TENOR_API_KEY` is unset, else `200`
+- `gifs` → `503` if `GIPHY_API_KEY` is unset, else `200`
 
 Then open `$PROD` on your phone, OTP in, walk the flows.
 

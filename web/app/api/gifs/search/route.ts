@@ -1,85 +1,90 @@
 /**
  * GET /api/gifs/search?q=<query>&limit=<n>
  *
- * Proxies the Tenor v2 search API so the TENOR_API_KEY stays
- * server-side. Returns a trimmed shape — only the URL + dimensions
- * the picker needs.
+ * Proxies the Giphy v1 search API so the GIPHY_API_KEY stays
+ * server-side. Returns a trimmed shape — only the URLs +
+ * dimensions the activity-feed picker needs.
  *
- * Tenor free tier: 1000 requests / day per key (sufficient for
- * alpha). Sign up at https://developers.google.com/tenor/guides/quickstart
+ * Giphy free tier:
+ *   - "Beta" key: 1000 req/hour, 10k req/day. Sign up at
+ *     https://developers.giphy.com/dashboard/ — create an SDK
+ *     app, copy the API key.
+ *   - No client_key concept like Tenor — single api_key handles
+ *     auth.
  *
- * If TENOR_API_KEY is unset, returns 503 with a `key_missing` code
- * so the client can render a "GIF picker not configured" message
- * gracefully without breaking the activity feed.
+ * If GIPHY_API_KEY is unset, returns 503 with a `key_missing`
+ * code so the client can render a "GIF picker not configured"
+ * message gracefully without breaking the activity feed.
  */
 
 import { jsonErr, jsonOk } from "@/lib/http";
 
-interface TenorMediaFormat {
+interface GiphyImage {
   url: string;
-  dims: [number, number];
-  duration?: number;
-  size?: number;
+  width: string;   // Giphy returns these as strings, not numbers
+  height: string;
 }
-interface TenorResult {
+interface GiphyResult {
   id: string;
   title: string;
-  content_description?: string;
-  media_formats: Record<string, TenorMediaFormat>;
+  images: Record<string, GiphyImage | undefined>;
 }
-interface TenorSearchResponse {
-  results?: TenorResult[];
-  next?: string;
+interface GiphySearchResponse {
+  data?: GiphyResult[];
+  meta?: { status: number; msg: string };
 }
 
 export async function GET(req: Request) {
-  const apiKey = process.env.TENOR_API_KEY;
+  const apiKey = process.env.GIPHY_API_KEY;
   if (!apiKey) {
-    return jsonErr(503, "key_missing", "Server-side TENOR_API_KEY env var is not set.");
+    return jsonErr(503, "key_missing", "Server-side GIPHY_API_KEY env var is not set.");
   }
 
   const url = new URL(req.url);
   const q = (url.searchParams.get("q") ?? "").trim();
-  const limit = Math.min(Math.max(parseInt(url.searchParams.get("limit") ?? "16", 10) || 16, 1), 32);
+  const limit = Math.min(
+    Math.max(parseInt(url.searchParams.get("limit") ?? "16", 10) || 16, 1),
+    32,
+  );
   if (!q) return jsonErr(400, "query_required");
 
-  // `client_key` is Tenor's recommended per-app identifier (free-text).
-  // `media_filter=tinygif,gif` trims response size to what the picker
-  // actually renders (tiny preview + full-quality post).
-  const tenorUrl =
-    `https://tenor.googleapis.com/v2/search?` +
+  // rating=pg-13 is the polite default for a planner-context app.
+  // The picker can be loosened later if needed.
+  const giphyUrl =
+    `https://api.giphy.com/v1/gifs/search?` +
     new URLSearchParams({
+      api_key: apiKey,
       q,
-      key: apiKey,
-      client_key: "rally-web",
-      limit: String(limit),
-      media_filter: "tinygif,gif",
-      contentfilter: "high",   // off / low / medium / high — alpha cohort = high
+      limit:  String(limit),
+      rating: "pg-13",
+      bundle: "messaging_non_clips",
     }).toString();
 
   let res: Response;
   try {
-    res = await fetch(tenorUrl, { cache: "no-store" });
+    res = await fetch(giphyUrl, { cache: "no-store" });
   } catch (e) {
-    return jsonErr(502, "tenor_unreachable", String(e));
+    return jsonErr(502, "giphy_unreachable", String(e));
   }
   if (!res.ok) {
-    return jsonErr(502, "tenor_bad_response", `${res.status} ${res.statusText}`);
+    return jsonErr(502, "giphy_bad_response", `${res.status} ${res.statusText}`);
   }
 
-  const body = (await res.json()) as TenorSearchResponse;
-  const gifs = (body.results ?? []).map((r) => {
-    const tiny = r.media_formats.tinygif ?? r.media_formats.gif;
-    const full = r.media_formats.gif ?? r.media_formats.tinygif;
+  const body = (await res.json()) as GiphySearchResponse;
+  const gifs = (body.data ?? []).map((r) => {
+    // `fixed_width_small` is the cheapest preview (good for the
+    // grid); `original` is the full-quality post the user picks.
+    const tiny = r.images.fixed_width_small ?? r.images.fixed_width ?? r.images.original;
+    const full = r.images.original ?? r.images.fixed_width ?? tiny;
     return {
       id: r.id,
-      title: r.content_description || r.title || "",
+      title: r.title || "",
       preview_url: tiny?.url ?? null,
-      preview_w:   tiny?.dims?.[0] ?? null,
-      preview_h:   tiny?.dims?.[1] ?? null,
+      preview_w:   tiny ? parseInt(tiny.width,  10) || null : null,
+      preview_h:   tiny ? parseInt(tiny.height, 10) || null : null,
       url:    full?.url ?? null,
-      width:  full?.dims?.[0] ?? null,
-      height: full?.dims?.[1] ?? null,
+      width:  full ? parseInt(full.width,  10) || null : null,
+      height: full ? parseInt(full.height, 10) || null : null,
     };
   });
 

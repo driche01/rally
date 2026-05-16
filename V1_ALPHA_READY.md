@@ -42,7 +42,7 @@ stays on Netlify).
   nav with preserved answers, returning-airport pre-fill, 5-vibe
   capture, dietary + budget.
 - **Activity feed v2:** comments, emoji reactions, threaded replies,
-  GIF picker (Tenor), photo upload. Realtime via Supabase publication.
+  GIF picker (Giphy), photo upload. Realtime via Supabase publication.
 - Cookie-based identity threading: post once you've RSVPed, no name
   re-entry.
 
@@ -97,7 +97,7 @@ When you open the deployed URL on your phone, walk these flows:
 
 ## Known scope gaps (intentional for alpha)
 
-- **GIF picker requires `TENOR_API_KEY`** — without it the picker
+- **GIF picker requires `GIPHY_API_KEY`** — without it the picker
   shows "GIF search isn't configured yet". Everything else in the
   feed works.
 - **Soft-session promotion** uses a synthetic email
@@ -122,7 +122,7 @@ See `web/.env.local.example`. For prod, set:
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_PHONE_NUMBER` | Twilio console |
 | `GEMINI_API_KEY` | Google AI Studio |
 | `ANTHROPIC_API_KEY` | Anthropic console |
-| `TENOR_API_KEY` | optional; disables GIF picker if unset |
+| `GIPHY_API_KEY` | optional; disables GIF picker if unset |
 
 ## Deploy command
 
