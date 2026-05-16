@@ -87,8 +87,16 @@ export default function TripsDashboard({
       </p>
 
       {/* ─── Filter pills + search ─────────────────────────────── */}
+      {/* Sticky to the top of the scroll viewport. When the user
+          scrolls past the greeting, this bar pins under the
+          AppHeader and stays accessible for filtering + search
+          without scrolling back up. The bg-cream/95 backdrop-blur
+          gives a clean separator over the cards behind it; the
+          negative -mx + px combo lets the bar visually bleed to
+          the edges of the page padding while keeping its content
+          aligned to the page gutter. */}
       {!isEmpty && (
-        <div className="mb-6 grid gap-3 sm:flex sm:flex-wrap sm:items-center sm:gap-2">
+        <div className="sticky top-0 z-20 -mx-5 sm:-mx-8 px-5 sm:px-8 pt-3 pb-3 mb-3 bg-cream/95 backdrop-blur-sm border-b border-line/60 grid gap-3 sm:flex sm:flex-wrap sm:items-center sm:gap-2">
           <SearchInput value={query} onChange={setQuery} />
           {/* Mobile: pills are a single horizontal-scrolling strip
               (no wrap) so "All past" never gets orphaned on its own
@@ -156,7 +164,7 @@ export default function TripsDashboard({
       ) : bucketEmpty ? (
         <BucketEmpty bucket={bucket} query={query} />
       ) : (
-        <div className="grid gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
           {visible.map((t) => (
             <TripCard key={t.trip.id} dt={t} today={today} />
           ))}
@@ -216,7 +224,7 @@ function TripCard({ dt, today }: { dt: DashboardTrip; today: string }) {
       href={href}
       className="group block"
     >
-      <div className="relative aspect-square rounded-[22px] overflow-hidden border border-line bg-card transition-transform group-active:scale-[0.98]">
+      <div className="relative aspect-square rounded-[16px] sm:rounded-[18px] overflow-hidden border border-line bg-card transition-transform group-active:scale-[0.98]">
         {trip.cover_image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -225,16 +233,16 @@ function TripCard({ dt, today }: { dt: DashboardTrip; today: string }) {
             className={"absolute inset-0 h-full w-full object-cover " + (past ? "saturate-50 opacity-90" : "")}
           />
         ) : (
-          <div className={`absolute inset-0 ${t.cover} flex items-center justify-center px-5`}>
-            <span className={`font-display text-2xl text-center leading-tight ${t.coverInk}`}>
+          <div className={`absolute inset-0 ${t.cover} flex items-center justify-center px-2`}>
+            <span className={`font-display text-sm sm:text-base text-center leading-tight ${t.coverInk}`}>
               {trip.name}
             </span>
           </div>
         )}
 
-        {/* Date pill (top-left) */}
+        {/* Date pill (top-left) — scaled down for the denser grid. */}
         {dateLabel && (
-          <span className="absolute top-3 left-3 inline-flex items-center px-2.5 py-1 rounded-full bg-ink/70 text-cream text-xs font-semibold backdrop-blur-sm">
+          <span className="absolute top-1.5 left-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full bg-ink/70 text-cream text-[9px] sm:text-[10px] font-semibold backdrop-blur-sm leading-none whitespace-nowrap">
             {dateLabel}
           </span>
         )}
@@ -243,10 +251,10 @@ function TripCard({ dt, today }: { dt: DashboardTrip; today: string }) {
         <StatusChip dt={dt} past={past} cancelled={cancelled} />
       </div>
 
-      <div className="mt-3 px-1">
-        <h3 className="font-display text-lg text-ink leading-tight truncate">{trip.name}</h3>
+      <div className="mt-1.5 px-0.5">
+        <h3 className="font-display text-xs sm:text-sm text-ink leading-tight truncate">{trip.name}</h3>
         {trip.destination && (
-          <p className="text-sm text-muted truncate">{trip.destination}</p>
+          <p className="text-[10px] sm:text-xs text-muted truncate">{trip.destination}</p>
         )}
       </div>
     </Link>
@@ -286,7 +294,7 @@ function StatusChip({
   return (
     <span
       className={
-        "absolute bottom-3 right-3 inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold " +
+        "absolute bottom-1.5 right-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold leading-none whitespace-nowrap " +
         cls
       }
     >
