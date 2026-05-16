@@ -164,7 +164,7 @@ export default function RsvpFlow({
               out once.
             </p>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <label className="grid gap-2">
                 <span className="text-xs uppercase tracking-widest text-muted font-semibold">First name</span>
                 <input
