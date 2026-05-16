@@ -68,19 +68,21 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
   // ─── Vibes (original 6) ───────────────────────────────────────────
   classic: CLASSIC,
 
+  // Reskinned 2026-05-16 — re-anchored to green + gold per the brand
+  // coral retirement. Same "bold" energy as before, brand-coherent now.
   eclectic: {
-    root:          "bg-[#FFF6E8]",
-    display:       "font-display text-ink",
+    root:          "bg-[#FAF1DC]",
+    display:       "font-display text-green",
     body:          "text-ink",
-    meta:          "text-[#7A5A3A]",
-    cover:         "bg-gradient-to-br from-[#FF6A45] via-[#F3C96A] to-[#DFE8D2]",
-    coverInk:      "font-display text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.15)]",
-    eyebrow:       "text-[#D85A30] tracking-[0.3em] uppercase font-bold",
-    accent:        "bg-[#FFDDB0] text-[#D85A30]",
+    meta:          "text-[#6B5530]",
+    cover:         "bg-gradient-to-br from-green via-[var(--color-gold)] to-green-soft",
+    coverInk:      "font-display text-cream drop-shadow-[0_2px_8px_rgba(0,0,0,0.25)]",
+    eyebrow:       "text-green tracking-[0.3em] uppercase font-bold",
+    accent:        "bg-[var(--color-gold)]/30 text-green",
     surface:       "bg-[#FFFBF1]",
-    surfaceBorder: "border-[#F3D9B8]",
+    surfaceBorder: "border-[#E8D9B8]",
     label:         "Eclectic",
-    mood:          "sunset, bold",
+    mood:          "bold + gold",
     category:      "vibes",
   },
 
@@ -259,20 +261,23 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
   },
 
   // ─── Vibes (new) ─────────────────────────────────────────────────
+  // Reskinned 2026-05-16 — "magic hour" reinterpreted as warm gold
+  // descending into deep green, no coral. Captures the time-of-day
+  // mood without leaving the brand palette.
   sunset: {
-    root:          "bg-[#FFF1E8]",
-    display:       "font-display text-[#5C1F2E]",
-    body:          "text-[#4A1D26]",
-    meta:          "text-[#7A4858]",
-    cover:         "bg-gradient-to-br from-[#FF6A45] via-[#F38EAC] to-[#A973C3]",
-    // Bump shadow on cover ink so it reads on every gradient stop.
-    coverInk:      "font-display text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)] [text-shadow:0_0_12px_rgba(80,30,40,0.5)]",
-    eyebrow:       "text-[#B33D14] tracking-[0.3em] uppercase font-bold text-[11px]",
-    accent:        "bg-[#FFD2C2] text-[#5C1F2E]",
-    surface:       "bg-[#FFF8F0]",
-    surfaceBorder: "border-[#F5D5C5]",
+    root:          "bg-[#F8EEDA]",
+    display:       "font-display text-[#3A2912]",
+    body:          "text-[#3A2912]",
+    meta:          "text-[#6E5530]",
+    cover:         "bg-gradient-to-br from-[var(--color-gold)] via-[#C18A2E] to-green",
+    // Cream ink with a layered shadow so it reads across gold→amber→green.
+    coverInk:      "font-display text-cream drop-shadow-[0_1px_2px_rgba(20,30,20,0.55)] [text-shadow:0_0_12px_rgba(40,30,10,0.45)]",
+    eyebrow:       "text-[#8B5A1E] tracking-[0.3em] uppercase font-bold text-[11px]",
+    accent:        "bg-[var(--color-gold)]/30 text-[#5C3F12]",
+    surface:       "bg-[#FFF8E8]",
+    surfaceBorder: "border-[#E8D5A8]",
     label:         "Sunset",
-    mood:          "magic hour",
+    mood:          "golden hour",
     category:      "vibes",
   },
 
