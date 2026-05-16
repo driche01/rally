@@ -19,6 +19,7 @@ import GenerationProvider from "@/lib/generation/provider";
 import EffectOverlay from "@/lib/effects/effect-overlay";
 import StylePicker from "./style-picker";
 import AppHeader from "@/lib/brand/app-header";
+import ScrollResetOnMount from "@/lib/scroll-reset";
 import { getSiteUrl } from "@/lib/site-url";
 import type { Respondent } from "@shared/types";
 
@@ -78,6 +79,7 @@ export default async function TripLayout({
 
   return (
     <main className={`min-h-dvh ${t.root} relative`}>
+      <ScrollResetOnMount />
       <EffectOverlay effect={trip.effect ?? null} />
       <StylePicker
         tripId={trip.id}
