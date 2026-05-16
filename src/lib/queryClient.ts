@@ -10,6 +10,11 @@ export const queryClient = new QueryClient({
       // isn't immediately GC'd before any component subscribes.
       gcTime: 1000 * 60 * 60 * 24,
       retry: 1,
+      // On web, every tab focus would otherwise refetch every active
+      // query — the share-link respond page becomes a Supabase chatter
+      // generator on a busy tab. Native doesn't trigger this anyway, so
+      // disabling globally is safe.
+      refetchOnWindowFocus: false,
     },
     mutations: {
       retry: 0,

@@ -16,6 +16,7 @@ import { prefetchTripDetail } from '@/lib/prefetchTripDetail';
 import { T } from '@/theme';
 import { FirstTimeEmptyState } from '@/components/trips/FirstTimeEmptyState';
 import { BrandMark } from '@/components/ui';
+import { heroBackground } from '@/assets/heroBackground';
 
 const SEASON_ICON: Record<string, React.ComponentProps<typeof Ionicons>['name']> = {
   Winter: 'snow-outline',
@@ -260,7 +261,7 @@ export default function HomeScreen() {
 
   return (
     <ImageBackground
-      source={require('../../../assets/yosemite.jpg')}
+      source={heroBackground}
       style={{ flex: 1, paddingTop: insets.top }}
       resizeMode="cover"
     >
