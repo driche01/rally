@@ -22,7 +22,9 @@ export default async function Home() {
       <div className="flex-1 flex items-center justify-center -mt-12">
         <div className="max-w-md text-center">
           <h1 className="font-display text-4xl sm:text-5xl leading-tight text-ink mb-4">
-            Plan the trip. Skip the chaos.
+            Plan the trip.
+            <br />
+            Skip the chaos.
           </h1>
           <Link
             href="/login"
