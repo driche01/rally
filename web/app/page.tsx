@@ -21,14 +21,9 @@ export default async function Home() {
 
       <div className="flex-1 flex items-center justify-center -mt-12">
         <div className="max-w-md text-center">
-          <h1 className="font-display text-4xl leading-tight text-ink mb-3">
-            Group trips with friends, planned together.
+          <h1 className="font-display text-4xl sm:text-5xl leading-tight text-ink mb-4">
+            Plan the trip. Skip the chaos.
           </h1>
-          <p className="text-muted mb-6">
-            Rally handles invites, RSVPs, lodging, and the itinerary
-            so the trip actually happens. Built for the group chat
-            that can&apos;t agree on a Saturday.
-          </p>
           <Link
             href="/login"
             className="inline-flex h-12 px-6 items-center rounded-full bg-green text-cream font-bold hover:bg-green-2 active:scale-95 transition-transform"

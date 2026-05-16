@@ -323,7 +323,7 @@ function composeBody({
   // start, per user directive.
   const bookBy = bookByDate ? formatShortDate(bookByDate) : null;
   const cta = bookBy
-    ? ` Tap to see the deets + RSVP — bookings get locked in by ${bookBy} so a quick yes/no helps lock plans: ${inviteUrl}`
+    ? ` Tap to see the deets + RSVP — bookings will get locked in by ${bookBy} so a quick yes/no helps solidify plans: ${inviteUrl}`
     : ` Tap to see the deets + RSVP: ${inviteUrl}`;
 
   return `${hook}${note}${cta}`;

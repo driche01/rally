@@ -119,6 +119,15 @@ export default function ProfileCapture({
     if (next) setStep(next);
   }
 
+  // State for each step is held in the parent (vibe1–5, airport,
+  // diet, budget), so going back is just `setStep(previous)` —
+  // every answer the user already gave is preserved and re-shown
+  // as the picked state when they return.
+  function back() {
+    const prev = STEPS[stepIndex - 1];
+    if (prev) setStep(prev);
+  }
+
   function pickAndAdvance<T>(
     setter: (v: T) => void,
     val: T,
@@ -145,20 +154,33 @@ export default function ProfileCapture({
 
   return (
     <div>
-      {/* Pager */}
-      <div className="flex justify-center gap-1.5 mb-6">
-        {STEPS.map((s, i) => (
-          <span
-            key={s}
-            className={
-              i < stepIndex
-                ? "h-1.5 w-1.5 rounded-full bg-green-soft"
-                : i === stepIndex
-                ? "h-1.5 w-4 rounded-full bg-green"
-                : "h-1.5 w-1.5 rounded-full bg-line"
-            }
-          />
-        ))}
+      {/* Top row — Back link on the left (hidden on first step), pager
+          centered. Lets the user revise an earlier answer without
+          starting over; every prior selection is preserved in state. */}
+      <div className="relative h-6 mb-6">
+        {stepIndex > 0 && (
+          <button
+            type="button"
+            onClick={back}
+            className="absolute left-0 top-0 text-xs font-bold tracking-widest uppercase text-muted hover:text-ink"
+          >
+            ← Back
+          </button>
+        )}
+        <div className="absolute inset-x-0 top-1 flex justify-center gap-1.5 pointer-events-none">
+          {STEPS.map((s, i) => (
+            <span
+              key={s}
+              className={
+                i < stepIndex
+                  ? "h-1.5 w-1.5 rounded-full bg-green-soft"
+                  : i === stepIndex
+                  ? "h-1.5 w-4 rounded-full bg-green"
+                  : "h-1.5 w-1.5 rounded-full bg-line"
+              }
+            />
+          ))}
+        </div>
       </div>
 
       {step === "vibe-1" && (
@@ -215,8 +237,10 @@ export default function ProfileCapture({
       {step === "airport" && (
         <AirportStep
           input={airportInput}
+          picked={airport}
           onInput={setAirportInput}
           onPick={(code) => { setAirport(code); setAirportInput(code); setTimeout(advance, 200); }}
+          onContinue={() => { advance(); }}
         />
       )}
 
@@ -285,13 +309,21 @@ function VibeCard<T extends string>({
 }
 
 function AirportStep({
-  input, onInput, onPick,
+  input, picked, onInput, onPick, onContinue,
 }: {
   input: string;
+  /** The airport already on file (if this is a returning respondent).
+      Drives the "Keep SFO" confirm UI vs. the search dropdown. */
+  picked: string | null;
   onInput: (s: string) => void;
   onPick: (code: string) => void;
+  onContinue: () => void;
 }) {
   const matches = searchAirports(input);
+  // Returning respondent: input still matches their stored airport →
+  // skip the dropdown and show a one-tap "keep it" CTA. Edit clears
+  // the input so they can search fresh.
+  const isUnchanged = picked != null && input.trim().toUpperCase() === picked.toUpperCase();
   return (
     <div>
       <p className="text-xs font-bold tracking-widest uppercase text-green mb-3">6 of 6</p>
@@ -313,7 +345,24 @@ function AirportStep({
           placeholder="City or 3-letter code"
           className="h-14 rounded-xl border border-line bg-card px-4 text-lg text-ink placeholder:text-muted focus:border-green focus:outline-none"
         />
-        {matches.length > 0 && (
+        {isUnchanged ? (
+          <div className="grid gap-2">
+            <button
+              type="button"
+              onClick={onContinue}
+              className="h-14 rounded-full bg-green text-cream font-bold hover:bg-green-2"
+            >
+              Keep {picked} →
+            </button>
+            <button
+              type="button"
+              onClick={() => onInput("")}
+              className="text-sm text-muted hover:text-ink underline underline-offset-2 self-center"
+            >
+              Change airport
+            </button>
+          </div>
+        ) : matches.length > 0 ? (
           <ul className="rounded-xl border border-line bg-card divide-y divide-line overflow-hidden">
             {matches.map((m) => (
               <li key={m.code}>
@@ -329,7 +378,7 @@ function AirportStep({
               </li>
             ))}
           </ul>
-        )}
+        ) : null}
       </div>
     </div>
   );
