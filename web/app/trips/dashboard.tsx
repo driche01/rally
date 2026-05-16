@@ -164,7 +164,7 @@ export default function TripsDashboard({
       ) : bucketEmpty ? (
         <BucketEmpty bucket={bucket} query={query} />
       ) : (
-        <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
+        <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {visible.map((t) => (
             <TripCard key={t.trip.id} dt={t} today={today} />
           ))}
@@ -224,7 +224,7 @@ function TripCard({ dt, today }: { dt: DashboardTrip; today: string }) {
       href={href}
       className="group block"
     >
-      <div className="relative aspect-square rounded-[16px] sm:rounded-[18px] overflow-hidden border border-line bg-card transition-transform group-active:scale-[0.98]">
+      <div className="relative aspect-square rounded-[16px] sm:rounded-[22px] overflow-hidden border border-line bg-card transition-transform group-active:scale-[0.98]">
         {trip.cover_image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -233,16 +233,18 @@ function TripCard({ dt, today }: { dt: DashboardTrip; today: string }) {
             className={"absolute inset-0 h-full w-full object-cover " + (past ? "saturate-50 opacity-90" : "")}
           />
         ) : (
-          <div className={`absolute inset-0 ${t.cover} flex items-center justify-center px-2`}>
-            <span className={`font-display text-sm sm:text-base text-center leading-tight ${t.coverInk}`}>
+          <div className={`absolute inset-0 ${t.cover} flex items-center justify-center px-2 sm:px-5`}>
+            <span className={`font-display text-sm sm:text-2xl text-center leading-tight ${t.coverInk}`}>
               {trip.name}
             </span>
           </div>
         )}
 
-        {/* Date pill (top-left) — scaled down for the denser grid. */}
+        {/* Date pill (top-left). Stays tiny on mobile to suit the
+            dense 2-col phone grid; scales up on sm+ where the cards
+            are 2× wider and the pill needs to read at arm's length. */}
         {dateLabel && (
-          <span className="absolute top-1.5 left-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full bg-ink/70 text-cream text-[9px] sm:text-[10px] font-semibold backdrop-blur-sm leading-none whitespace-nowrap">
+          <span className="absolute top-1.5 left-1.5 sm:top-3 sm:left-3 inline-flex items-center px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded-full bg-ink/70 text-cream text-[9px] sm:text-xs font-semibold backdrop-blur-sm leading-none whitespace-nowrap">
             {dateLabel}
           </span>
         )}
@@ -251,10 +253,10 @@ function TripCard({ dt, today }: { dt: DashboardTrip; today: string }) {
         <StatusChip dt={dt} past={past} cancelled={cancelled} />
       </div>
 
-      <div className="mt-1.5 px-0.5">
-        <h3 className="font-display text-xs sm:text-sm text-ink leading-tight truncate">{trip.name}</h3>
+      <div className="mt-1.5 sm:mt-3 px-0.5 sm:px-1">
+        <h3 className="font-display text-xs sm:text-lg text-ink leading-tight truncate">{trip.name}</h3>
         {trip.destination && (
-          <p className="text-[10px] sm:text-xs text-muted truncate">{trip.destination}</p>
+          <p className="text-[10px] sm:text-sm text-muted truncate">{trip.destination}</p>
         )}
       </div>
     </Link>
@@ -294,7 +296,7 @@ function StatusChip({
   return (
     <span
       className={
-        "absolute bottom-1.5 right-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold leading-none whitespace-nowrap " +
+        "absolute bottom-1.5 right-1.5 sm:bottom-3 sm:right-3 inline-flex items-center px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded-full text-[9px] sm:text-xs font-bold leading-none whitespace-nowrap " +
         cls
       }
     >
