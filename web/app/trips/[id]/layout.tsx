@@ -108,6 +108,29 @@ export default async function TripLayout({
               more "translate-y-1/2 applied at natural position"
               issue that made the cover sit too high on short
               tabs. */}
+          {/* Mobile-only: trip header (title + destination + dates +
+              hosted-by) ABOVE the banner image. On lg+ this is
+              suppressed and the header renders in the right column
+              of the two-col grid below. Rendered twice rather than
+              re-ordered via CSS so EditableCover stays alone in
+              its sticky-center left column at lg+ without grid
+              gymnastics. */}
+          <div className="lg:hidden mb-4">
+            <EditableTripHeader
+              tripId={trip.id}
+              canEdit={canEdit}
+              initial={{
+                name:         trip.name,
+                destination:  trip.destination,
+                start_date:   trip.start_date,
+                end_date:     trip.end_date,
+                book_by_date: trip.book_by_date,
+                theme:        trip.theme,
+                status:       trip.status,
+              }}
+            />
+          </div>
+
           <div className="lg:grid lg:grid-cols-[5fr_7fr] lg:gap-10">
             <div className="space-y-4 lg:space-y-0 lg:sticky lg:top-0 lg:h-[100dvh] lg:flex lg:flex-col lg:justify-center lg:gap-4 mb-6 lg:mb-0">
               <EditableCover
@@ -134,19 +157,23 @@ export default async function TripLayout({
             </div>
 
             <div>
-              <EditableTripHeader
-                tripId={trip.id}
-                canEdit={canEdit}
-                initial={{
-                  name:         trip.name,
-                  destination:  trip.destination,
-                  start_date:   trip.start_date,
-                  end_date:     trip.end_date,
-                  book_by_date: trip.book_by_date,
-                  theme:        trip.theme,
-                  status:       trip.status,
-                }}
-              />
+              {/* Desktop-only copy of the same header; mobile sees
+                  the duplicate-render at the top of the page. */}
+              <div className="hidden lg:block">
+                <EditableTripHeader
+                  tripId={trip.id}
+                  canEdit={canEdit}
+                  initial={{
+                    name:         trip.name,
+                    destination:  trip.destination,
+                    start_date:   trip.start_date,
+                    end_date:     trip.end_date,
+                    book_by_date: trip.book_by_date,
+                    theme:        trip.theme,
+                    status:       trip.status,
+                  }}
+                />
+              </div>
 
               <TabNav tripId={trip.id} />
 
