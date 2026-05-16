@@ -14,6 +14,7 @@ Rally is a group trip planning product launching as web + SMS (v1). Mobile app c
 6. **The current phase's build guide supersedes the scope doc on implementation questions.** Scope doc explains why; build guide governs how.
 7. **Do not proceed to a later phase without explicit human sign-off.** Phase A ends at its Definition of Done — stop, write the demo doc, wait. Same for B and C.
 8. **The Design Gate in Phase A is a hard stop.** Build the prototype, push to localhost, wait for review. Do not skip or rush past it.
+9. **Netlify deploys for Rally MUST go under the personal `driche01` team** (https://app.netlify.com/teams/driche01/projects). Never `cypress-health` or any other work team — Rally is personal infra, not work billing. Before running `netlify init`, `netlify sites:create`, or any deploy command that could create a new project: confirm with `netlify status` that the active CLI session is on `driche01`. If it isn't, `netlify logout && netlify login` with the `driche01@gmail.com` account FIRST. See `web/DEPLOY.md` for the full setup.
 
 ## Working agreement for every session
 

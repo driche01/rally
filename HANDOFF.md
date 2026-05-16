@@ -130,6 +130,7 @@ From `CLAUDE.md`:
 6. **Don't touch `/mobile` or `/expo`.** The Expo app is paused.
 7. **Don't run `supabase db reset` or anything that re-baselines.** Live DB has user data.
 8. **Stale `next dev` → unstyled pages.** Next 15 + Tailwind v4 dev-mode CSS chunking drifts after multi-day uptime + heavy HMR churn — the page HTML asks for `/_next/static/css/app/layout.css` but it 404s, leaving an unstyled DOM that still has all the right classes. Symptoms: one or more pages render naked, network tab shows the CSS link returning 404, the *built* CSS at `/_next/static/css/<hash>.css` still works. Fix: `npm run dev:clean` (added in `web/package.json`) — it `rm -rf .next` and restarts. **Don't debug the page**, restart the dev server first. Recycle proactively if it's been alive more than ~1 day or you just landed a globals.css / `@theme` / new top-level component change.
+9. **Netlify deploys for Rally MUST go to the personal `driche01` team — never `cypress-health`.** Rally is personal infra; Cypress Health is the day-job team. Before running `netlify init` / `netlify sites:create` / any deploy command that could create a new project, run `netlify status` and verify the `Teams:` line is `driche01`. If it isn't, `netlify logout && netlify login` with the `driche01@gmail.com` account first. The `rallysurveys.netlify.app` (Expo marketing) site is the ONE Rally project legitimately under `cypress-health` for historical reasons — don't add to it. See `web/DEPLOY.md` § "Hard rule — team".
 
 ---
 

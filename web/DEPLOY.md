@@ -5,28 +5,55 @@ Marketing pages on `rallysurveys.netlify.app` stay on Netlify
 (separate site, separate build); this app gets its own Netlify
 project pointed at `/web`.
 
+## Hard rule — team
+
+> **Rally Netlify projects MUST live under the personal `driche01`
+> Netlify team:** https://app.netlify.com/teams/driche01/projects
+>
+> They MUST NOT live under `cypress-health` (or any other work team).
+> The Rally repo is personal; deploying to a work team conflates
+> personal infra with the day job's billing + ownership.
+>
+> Before running ANY `netlify init` / `netlify sites:create` /
+> `netlify deploy --create-site`, **confirm the active team**:
+>
+> ```sh
+> netlify status                # check "Teams:" line
+> netlify api listAccountsForUser  # full team list
+> ```
+>
+> If the active CLI session isn't on `driche01`, do **NOT** create
+> the site. Run `netlify logout && netlify login` and sign in with
+> the `driche01@gmail.com` account first.
+
 ## One-time setup
 
-You're (probably) already authed to Netlify via the CLI — verify
-with `netlify status`. If not, `netlify login`.
+1. Sign into the right account:
 
-From `/web`, create the new site:
+   ```sh
+   netlify status                  # confirm: Teams: driche01
+   # if it shows cypress-health or anything else:
+   netlify logout
+   netlify login                   # browser prompt → sign in as driche01@gmail.com
+   netlify status                  # re-verify
+   ```
 
-```sh
-cd web
-netlify init
-```
+2. Create the site (only after step 1 passes):
 
-Answer the prompts:
-- **Create & configure a new site** (don't link to the existing
-  `rallysurveys` project — that's the Expo site).
-- **Team:** your Netlify team.
-- **Site name:** e.g. `rally-web` (becomes `rally-web.netlify.app`).
-- **Build command / publish dir / Base directory** — leave at
-  defaults; the `web/netlify.toml` here drives them.
+   ```sh
+   cd web
+   netlify sites:create --name rally-web --account-slug driche01
+   netlify link --id <new-site-id-from-output>
+   ```
+
+   Or `netlify init` interactively — when it asks "Team", pick
+   `driche01`.
+
+   Don't link to the existing `rallysurveys` project; that's the
+   Expo marketing site under a different team.
 
 Netlify writes `.netlify/state.json` with the new site ID.
-Don't commit it (it's already in `.gitignore` patterns).
+Don't commit it (already in `.gitignore`).
 
 ## Environment variables (set in Netlify dashboard)
 
