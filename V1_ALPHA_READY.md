@@ -1,194 +1,148 @@
-# Rally v1 — Alpha Readiness
+# Rally v1 alpha — readiness snapshot
 
-**Status:** ready for human go/no-go.
-**Date:** 2026-05-12.
-**Branch:** `claude/eager-sanderson-00015d`.
-**Schema head:** `140` (Phase C complete).
-**Edge functions deployed:** `sms-rsvp-nudge-scheduler` (polyglot, all 5 reminder types).
-**pg_cron:** `phase-c-reminder-scheduler-every-30min` active.
+State of the worktree as of the alpha-prep close-out (post-backlog
+batch). What ships, what's worth eyeballing on mobile, where the
+obvious next-pass work lives.
 
----
+**Branch:** `claude/eager-sanderson-00015d`
+**Schema head:** `149` (Phase C + alpha-plus + activity v2 + realtime publication)
+**Build:** `next build` from `/web` clean as of last commit.
+**Deploy guide:** `web/DEPLOY.md` (Vercel-first; marketing landing
+stays on Netlify).
 
-## TL;DR — recommendation
+## Feature surface (alpha)
 
-**Conditional go.** v1 is feature-complete against the build guide. The polyglot scheduler is live and confirmed working against prod (sent real SMS on first invocation). The web + SMS surfaces work end-to-end across Phases A → B → C. Several deferrals are real but manageable for a small (<10-person) alpha cohort — none are dealbreakers, but a few will sting if alpha scales past that threshold.
+### Identity + auth
+- Phone OTP login via existing edge functions
+  (`request-phone-login-otp` / `verify-phone-login-otp`).
+  Whitelisted alpha cohort.
+- **Soft-session promotion:** a respondent who's RSVPed via the
+  invite link gets promoted to a full Supabase auth user the moment
+  they click "+ New trip" or their profile chip. No second SMS step
+  (backlog #3 / #11).
+- Account dropdown (top-right): View profile · Settings · Sign out.
+- Settings modal: change phone (OTP), sign out, delete account
+  (typed-name confirmation), calendar sync.
 
-**One real blocker before any public-ish rollout: quiet-hours gating isn't wired into the scheduler send loop.** A reminder firing at 3am to a non-test phone would be a self-inflicted reputation hit. For a 5-person trusted-tester alpha where everyone knows what they signed up for, this is acceptable. For anything bigger, fix it first.
+### Trip flow
+- Create trip (`/trips/new`) with cover image upload + AI cover
+  generation, 18 themes across 4 chip-filtered categories
+  (3×3 grid), 8 animated effects.
+- Trip dashboard (`/trips/[id]`) with editable cover + header,
+  tabbed nav (Overview · Itinerary · Lodging · Travel · Meals ·
+  Shopping). All six tabs live.
+- Trip cards on `/trips` dashboard, filtered by Upcoming / Invites /
+  Hosting / Attended / All past + inline search.
+- Invite + Send-blast modals with `[Name] [Planner] [Trip]
+  [Destination] [BookBy]` click-to-insert legend + auto trip-link
+  footer on every outbound SMS.
 
----
+### Public invite (`/invite/[token]`)
+- Anon-friendly RSVP flow: split first/last name capture, back
+  nav with preserved answers, returning-airport pre-fill, 5-vibe
+  capture, dietary + budget.
+- **Activity feed v2:** comments, emoji reactions, threaded replies,
+  GIF picker (Tenor), photo upload. Realtime via Supabase publication.
+- Cookie-based identity threading: post once you've RSVPed, no name
+  re-entry.
 
-## What's deployed and runs autonomously
+### Calendar sync
+- Per-user ICS feed at `/api/calendar/<token>.ics`. Toggle which
+  RSVPs surface (Going / Maybe / Invited) from Settings. Hosted +
+  cohosted trips always included.
 
-| Surface | Status | Notes |
-|---|---|---|
-| Web app on Next.js 15 (planner side) | ✅ live | LAN-IP + localhost dev. Production deploy TBD. |
-| Public invitation page `/invite/[token]` | ✅ live | Anon RSVP + profile capture + activity feed + realtime comments. |
-| Twilio SMS outbound rail | ✅ live | `_sms-shared/dm-sender.ts` + `web/lib/twilio.ts`, both opt-out aware. |
-| STOP/REJOIN handling | ✅ live | `sms-inbound` + `users.opted_out`. End-to-end smoke test recommended once at alpha start. |
-| Polyglot reminder scheduler | ✅ live | Deployed + pg_cron-scheduled every 30 minutes. Handles all 5 reminder types. |
-| Planner blast pipeline | ✅ live | Opt-out enforcement + per-recipient 2/24h cap + auto-post to activity feed + per-recipient ledger. (Per-trip weekly/lifetime caps dropped 2026-05-12 — revisit if AI/SMS spend becomes an issue.) |
-| Cancel trip flow | ✅ live | Locks the trip, cancels pending reminders, notifies guests via SMS, blocks new writes on 5 routes. |
-| Stall detection + re-engagement | ✅ live | Both planner SMS + dashboard banner. |
-| Phase B AI tabs | ✅ live | Itinerary (Claude), Lodging (Gemini-grounded), Travel (per-member arrangements + Gemini flight suggestions), Meals (Claude + normalized ingredients), Shopping (auto-aggregated). |
-| Pre-filled deep-links | ✅ live | Lodging tab carries trip context into Airbnb / VRBO / Booking.com search; Travel tab pre-fills Google Flights per-member using home_airport (alpha+ Sprint 1). |
-| Venmo split deep-links | ✅ live | On each locked-lodging room assignment, per-assignee "Charge $N ↗" button opens Venmo with amount + descriptive note (alpha+ Sprint 2, Q27 B). |
-| Persistent profile pages | ✅ live | `/user/[id]` shows trip history + mutuals leaderboard + badges + travel-profile summary. Visibility gated on shared-respondents-row (Q29). Locked-state graceful UX (initial-letter avatar + first name + back nav). |
-| Badges + mini-leaderboard | ✅ live | 7 starter badges computed on-demand. Top-5 most-traveled-with list per profile (alpha+ Sprint 4). |
+### Branding
+- Italic Georgia serif "Rally" wordmark, dark green, no target
+  mark. System-font, pixel-consistent everywhere. Marketing
+  landing page already used the same spec.
 
----
+## Mobile QA checklist
 
-## Schema state
+When you open the deployed URL on your phone, walk these flows:
 
-134 → 140 migrations. All additive. Zero DROPs / RENAMEs / NOT-NULL flips.
+- [ ] Anon landing renders — tagline + Sign in button visible
+      without scroll.
+- [ ] Sign-in OTP flow — code arrives, exchange works.
+- [ ] `/trips` dashboard — cards render single-column,
+      filter pills horizontal-scrollable.
+- [ ] Create trip — date pickers usable, cover upload + AI
+      generate both work.
+- [ ] Theme picker — category chips fit, 3×3 grid responsive.
+- [ ] Trip dashboard — sticky cover behaves; see "Known mobile gaps".
+- [ ] Invite people modal — phone keyboard for phone input, send works.
+- [ ] Public invite page (`/invite/<token>`) — square cover + RSVP
+      buttons fit on a phone, no horizontal scroll.
+- [ ] RSVP flow — split-name fields, vibe cards tappable, airport
+      search returns results, back-button preserves selections.
+- [ ] Activity feed — composer, reactions, reply, GIF picker, photo
+      upload all work.
+- [ ] Top-right account dropdown — fits on mobile, menu doesn't clip.
+- [ ] Settings modal — sidebar tabs collapse to horizontal pill row
+      at small viewports.
 
-- 13 new tables across Phases A + B + C
-- 4 tables extended (`trips`, `respondents`, `traveler_profiles`, `thread_messages`, `lodging_options`, `itinerary_blocks`, `lodging_votes`)
-- 1 storage bucket (`trip-covers`)
-- 1 trigger (`trg_phase_a_mutuals_on_respondent_change`)
-- 0 Postgres enum types — `text + CHECK` everywhere per Q6
+## Known mobile gaps (flag for next pass)
 
----
+- **Sticky-center cover** on planner trip page uses
+  `lg:sticky lg:h-[100dvh]` — only kicks in at `lg+`. On mobile
+  the cover scrolls with content (intended). Spacing between cover
+  and the name might feel tight on narrow viewports.
+- **iOS bottom-bar occlusion** — most action buttons sit in the
+  natural document flow. iOS Safari's URL bar can clip the last
+  row of long forms. Consider sticky footers for destructive CTAs.
+- **iOS file-input behavior** — `<input type=file accept="image/*">`
+  without `capture` may not surface "Take Photo" cleanly on iOS.
+  Worth re-checking once you have the actual deploy on a phone.
+- **Activity feed virtualization** — currently renders all top-level
+  entries. Fine at alpha scale; revisit if feeds grow past ~200 entries.
 
-## Decisions log (Phases A + B + C — all RESOLVED)
+## Known scope gaps (intentional for alpha)
 
-| # | Phase | Locked to |
-|---|---|---|
-| Q1 | A | Planner FKs → `profiles(id)`, invitee/SMS FKs → `users(id)` |
-| Q2 | A | Extend `traveler_profiles` additively |
-| Q3 | A | Reuse `respondents`; new `trip_cohosts`; leave `trip_members` |
-| Q4 | A | New `activity_feed_entries` table |
-| Q5 | A | Reuse `thread_messages` for SMS log |
-| Q6 | A | `text + CHECK` for all enums |
-| Q7 | A | New `sms-rsvp-nudge-scheduler`, strict isolation from legacy |
-| Q8 | A | Design Gate approved (cream/green palette, SVG icons) |
-| Q9 | A | Phone-OTP login, no web signup; alpha cohort manually seeded |
-| Q10 | B | Extend `lodging_options` additively |
-| Q11 | B | Extend `itinerary_blocks` additively, keep `day_date` |
-| Q12 | B | Extend `lodging_votes` with `vote` text |
-| Q13 | B | Per-member FKs → `respondents(id)` |
-| Q14 | B | Claude for itinerary + meals, Gemini-grounded for lodging + flights |
-| Q15 | B | Flyer via `@vercel/og` *(removed entirely 2026-05-12 in b07afb3)* |
-| Q16 | B | Route-segment dashboard tabs |
-| Q17 | B | LLM-normalized ingredient names |
-| Q18 | C | Phase C per-member FKs → `respondents(id)` |
-| Q19 | C | SMS log stays on `thread_messages` |
-| Q20 | C | `planner_blasts.composed_by → profiles(id)` |
-| Q21 | C | Clean new `/api/trips/[id]/blasts` route; legacy `sms-broadcast` on cleanup list |
-| Q22 | C | Single polyglot scheduler |
-| Q23 | C | Every Phase C send checks `users.opted_out` |
-| Q24 | C | Auto-create planner self-respondent on trip create |
-| Q25 | C | `home_airport` required at profile capture; static `iata_to_tz` map |
-| Q25a | C | Recipients without a profile → sender's local timezone fallback |
-| Q26 | C | Suppress opted-out for cancellation notices |
-| Q27 | alpha+ | Venmo deep-link mode B — pre-fill amount + note only; no recipient param (Venmo doesn't accept phone). Booker picks from their contacts. |
-| Q28 | alpha+ | World map bumped to v4. Not shipped. |
-| Q29 | alpha+ | Profile visibility = "any shared respondents row, ever" (one-query simplification of mutuals + current-trip union). |
-| Q29 UX | alpha+ | Non-visible profiles render graceful locked state with first name + initial avatar + back nav. NOT 404 (uuid-gated → existence-leak risk is low). |
+- **GIF picker requires `TENOR_API_KEY`** — without it the picker
+  shows "GIF search isn't configured yet". Everything else in the
+  feed works.
+- **Soft-session promotion** uses a synthetic email
+  (`rally-<digits>@invalid.local`) as the auth.users key. Phone OTP
+  reclaims the account if it gets squatted by an invite-link
+  hijacker — acceptable at alpha scale, will harden post-alpha.
+- **Send-blast bug from backlog (#5)** is parked — no repro from
+  the user yet. Will pick up when symptoms surface in alpha.
+- **Budget reframe (#10)** deferred per user direction — keep total
+  min/max for v1, revisit based on alpha feedback.
 
----
+## Required env vars (Vercel dashboard)
 
-## Known issues and risks (ranked)
+See `web/.env.local.example`. For prod, set:
 
-### Real blockers if alpha grows beyond 10 people
+| Key | Notes |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://qxpbnixvjtwckuedlrfj.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | from Supabase dashboard |
+| `SUPABASE_SERVICE_ROLE_KEY` | **server-only**, never NEXT_PUBLIC_ |
+| `NEXT_PUBLIC_SITE_URL` | the deployed origin |
+| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_PHONE_NUMBER` | Twilio console |
+| `GEMINI_API_KEY` | Google AI Studio |
+| `ANTHROPIC_API_KEY` | Anthropic console |
+| `TENOR_API_KEY` | optional; disables GIF picker if unset |
 
-1. **Quiet-hours gating is not wired into the scheduler send loop.** IATA→TZ map is in `shared/iata_to_tz.ts`, the spec is clear, but the polyglot scheduler doesn't yet split sends into "send now" vs "reschedule for next morning in their local tz." For a small trusted-tester alpha this is acceptable; for any wider audience, layer it on before opening up.
+## Deploy command
 
-2. **Per-recipient 2/24h cross-source limit only applies to blasts.** A recipient could in theory get both an `rsvp_nudge` AND a `planner_blast` in the same 24h. With current cohort sizes this won't happen organically; with anything bigger it will.
+```sh
+cd web
+vercel --prod
+```
 
-3. **No per-trip blast cap.** Per user directive 2026-05-12, the build-guide's 3/week and 10/lifetime caps were dropped. A determined planner could send dozens of blasts per day. If Twilio cost becomes an issue, add a cap on `planner_blasts` row count per `(trip_id, day)` window — trivial single-query gate.
+(Run `vercel link` once first; see `web/DEPLOY.md` for the full
+setup.)
 
-### Will sting but won't break alpha
+## Post-deploy smoke test
 
-4. **Twilio rate-limit headroom not stress-tested.** Default Twilio outbound is 10 msgs/sec which is plenty for most patterns. Now that the per-trip weekly/lifetime caps are off, worst-case is a single trip sending hundreds of blasts in a burst. Confirm Twilio's toll-free per-day limit before opening to anyone past trusted alpha.
+```sh
+PROD=https://your-deploy.vercel.app
+curl -sS -o /dev/null -w "/ %{http_code}\n"          "$PROD/"
+curl -sS -o /dev/null -w "/login %{http_code}\n"     "$PROD/login"
+curl -sS -o /dev/null -w "/trips %{http_code}\n"     "$PROD/trips"        # 307 → /login
+curl -sS -o /dev/null -w "/whoami %{http_code}\n"    "$PROD/api/account/whoami"  # 401
+```
 
-5. **STOP/REJOIN smoke test deferred.** All the code is in place + `sms-inbound` is deployed. Send one real STOP from a real phone the first day of alpha to confirm carrier routing end-to-end.
-
-6. **`trip_reminder_settings` toggle UI is missing.** The table + RLS + scheduler-respect-the-toggles are all live; just no UI to flip them. Hosts can disable a reminder type by SQL. Build the panel before opening cohost permissions broadly.
-
-7. **AI cost ceiling is uncapped.** `phase_b_generation_log` tracks every Claude + Gemini call with tokens, duration, and error. There's no app-layer rate limit per planner per day. Build the daily-cost dashboard from `phase_b_generation_log` + a sane per-planner cap before alpha grows.
-
-### Latent but probably fine
-
-8. **Stalled-trip detection runs every 30 minutes against every active trip.** Scales to ~10K trips comfortably; past that, add an index or denormalize.
-
-9. **Legacy `sms-broadcast` + `sms-nudge-scheduler` + 4 other SMS edge functions still deployed.** They do nothing in v1 (no data feeds them) but eat code-search noise. Pull the trigger on [LEGACY_CLEANUP.md](LEGACY_CLEANUP.md) in a separate PR after alpha shakes out.
-
-10. **Mobile (`/mobile`, `/expo`) is paused but still in the repo.** That's per CLAUDE.md hard rule #2 (don't touch). Phase C didn't touch any of it.
-
-11. **3 traveler_profiles rows missing `home_airport`** (Q25 requirement). They're dev/seed rows from before the requirement landed. Profile-completion-nudge will eventually catch them; manual SQL fix is faster if alpha needs it.
-
----
-
-## Out-of-scope (intentional deferrals)
-
-Updated 2026-05-12 with the alpha+ scope shift (user pulled deep-links + Venmo splits + profile pages + badges forward; bumped the rest):
-
-- Pre-filled deep-links (lodging + flights) → **shipped in alpha+**
-- Lodging Venmo splits → **shipped in alpha+** (flights + activities + meals → v4)
-- Profile pages + badges + leaderboards → **shipped in alpha+**
-- World map on profile → **v4**
-- Integrated booking (in-app, affiliate-revenue) → **v2** (deep-link enhancement satisfies "pre-fill" half)
-- Two-way SMS / inbound parsing / NLU → **v4** (user bumped from v2)
-- On-trip mode → **v4** (user bumped from v2)
-- Post-trip recap → **v4** (user bumped from v2)
-- Public trip discovery → **v4**
-- Mobile app → **v4** (user bumped from v3)
-- Platform / partnerships → **v4**
-
----
-
-## Phase demo docs (for the alpha walk-through)
-
-- [PHASE_A_DEMO.md](PHASE_A_DEMO.md) — invitation + RSVP + profile capture + activity feed
-- [PHASE_B_DEMO.md](PHASE_B_DEMO.md) — AI-drafted dashboard tabs + clone trip + roster/mutuals upgrades
-- [PHASE_C_DEMO.md](PHASE_C_DEMO.md) — auto reminders + planner blasts + cancel trip + re-engagement
-
-The end-to-end alpha rehearsal walks A → B → C in one sitting.
-
----
-
-## Pre-alpha checklist (before opening to testers)
-
-- [ ] Walk the end-to-end scenario (Phase A → B → C) on your real phone
-- [ ] Confirm STOP routing with one real test (send STOP from a real phone, then trigger a reminder to confirm it's blocked)
-- [ ] Stamp the 3 dev `traveler_profiles` rows with `home_airport` values (or wait for profile-completion nudges to do it)
-- [ ] Decide on AI cost ceiling: per-planner daily call limit + alert threshold
-- [ ] Decide on Twilio rate ceiling: confirm toll-free per-day limit, lift if needed
-- [ ] Decide whether to fix quiet-hours before opening to a >10-person cohort
-- [ ] Build `trip_reminder_settings` toggle UI before granting cohost permissions broadly
-- [ ] Deploy `/web` to production hosting + set `NEXT_PUBLIC_SITE_URL` for the Twilio status callback domain
-- [ ] Confirm `TWILIO_STATUS_CALLBACK_URL` points at the live `sms-status-webhook` function so delivery receipts get logged
-
----
-
-## What ships at alpha
-
-A complete planner experience for an outbound-SMS-driven group trip product:
-
-1. **Sign in** (phone OTP, alpha cohort manually whitelisted).
-2. **Create a trip** with theme + dates + destination + cover image (AI-generated or uploaded).
-3. **Invite people** by phone + name. They receive a Twilio SMS with the invitation link.
-4. **Each invitee** lands on the public trip page, RSVPs (Going/Maybe/Can't go), walks the 25-second vibe + profile capture (home_airport now required).
-5. **Planner sees** the roster fill in live + a stat-tile dashboard + an activity feed.
-6. **Once enough people RSVP**, the dashboard's six AI-drafted tabs (Itinerary / Lodging / Travel / Meals / Shopping / Overview) come online. Each is votable + editable + assignable.
-7. **Auto reminders fire** every 30 minutes via pg_cron + the polyglot scheduler:
-   - `rsvp_nudge` to invitees 3 days after invitation
-   - `profile_completion_nudge` if RSVP-going but profile incomplete
-   - `booking_nudge` 14d and 7d before trip if no travel/lodging
-   - `pre_trip_summary` 3 days before trip
-   - `re_engagement` to planner if the trip stalls
-8. **Planner can send blasts** to any segment (Going / Maybe / Invited / Everyone) with rate limits, opt-out enforcement, and auto-post to feed.
-9. **Cancel trip** notifies everyone via SMS and locks the trip page.
-10. **STOP keyword** opts the recipient out from all future Rally SMS.
-
-The full outbound-SMS coverage matches the scope doc's voice-aligned, link-driven, no-NLU-needed pattern. Everything works against real Twilio + real Supabase Postgres.
-
----
-
-## Go/no-go
-
-**My recommendation:** ship to a 3–5 person trusted-tester alpha now. The remaining polish (quiet-hours, per-recipient cross-source rate limits, reminder-settings UI, AI cost dashboard) is real but ranked below the size of the audience at this stage. Each can land in a 30-minute follow-up commit.
-
-**If the user list is bigger or includes anyone not on the build team:** fix quiet-hours first. Everything else is acceptable to layer on while alpha is running.
-
-Per CLAUDE.md hard rule + scope: **stopping here for human go/no-go.**
+Then open `$PROD` on your phone, sign in via OTP, walk the
+checklist above.
