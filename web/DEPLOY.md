@@ -33,6 +33,25 @@ project pointed at `/web`.
 > No `release`-branch checkouts are needed locally — everything
 > goes through `git push origin <ref>:release`.
 
+## Trunk-only on origin
+
+Origin should have exactly three branches at rest:
+
+- **`main`** — trunk
+- **`release`** — deploy ref
+- Plus your **local** working branch on whatever machine you're on,
+  which exists only locally. Don't push it to origin.
+
+Do work on a local branch, push the diff straight to `main`:
+
+```sh
+git push origin <local-branch>:main
+```
+
+No `feature/*`, `chore/*`, or `claude/*` branches should accumulate
+on the remote. We swept 11 orphaned ones on 2026-05-16; don't be the
+session that starts the proliferation again.
+
 ## Hard rule — team
 
 > **Rally Netlify projects MUST live under the personal `driche01`
