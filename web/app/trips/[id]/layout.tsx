@@ -107,7 +107,7 @@ export default async function TripLayout({
               issue that made the cover sit too high on short
               tabs. */}
           <div className="lg:grid lg:grid-cols-[5fr_7fr] lg:gap-10">
-            <div className="lg:sticky lg:top-0 lg:h-[100dvh] lg:flex lg:flex-col lg:justify-center lg:gap-4 mb-6 lg:mb-0">
+            <div className="space-y-4 lg:space-y-0 lg:sticky lg:top-0 lg:h-[100dvh] lg:flex lg:flex-col lg:justify-center lg:gap-4 mb-6 lg:mb-0">
               <EditableCover
                 tripId={trip.id}
                 canEdit={canEdit}
