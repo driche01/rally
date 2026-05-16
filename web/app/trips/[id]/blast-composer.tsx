@@ -9,8 +9,9 @@
  * playful, personal, link-driven.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { Respondent, RecipientSegment } from "@shared/types";
+import VariableLegend from "@/lib/sms/variable-legend";
 
 interface SendResult {
   blast_id: string;
@@ -54,6 +55,23 @@ export default function BlastComposer({
 }) {
   const [segment, setSegment] = useState<RecipientSegment>(initialSegment ?? "going");
   const [body, setBody] = useState(initialBody ?? "");
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  /** Insert a literal token (e.g. "[Name]") at the textarea cursor.
+   *  Falls back to appending if the ref hasn't latched yet. */
+  function insertToken(token: string) {
+    const el = textareaRef.current;
+    if (!el) { setBody((b) => b + token); return; }
+    const start = el.selectionStart ?? body.length;
+    const end   = el.selectionEnd ?? body.length;
+    const next = body.slice(0, start) + token + body.slice(end);
+    setBody(next);
+    // Restore cursor to just after the inserted token on next tick.
+    requestAnimationFrame(() => {
+      el.focus();
+      el.selectionStart = el.selectionEnd = start + token.length;
+    });
+  }
   const [includePlanner, setIncludePlanner] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [sending, setSending] = useState(false);
@@ -190,6 +208,7 @@ export default function BlastComposer({
                     Message
                   </span>
                   <textarea
+                    ref={textareaRef}
                     rows={5}
                     maxLength={MAX_BODY}
                     value={body}
@@ -201,8 +220,9 @@ export default function BlastComposer({
                 <p className={`text-xs mt-1 text-right ${overRecommended ? "text-orange" : "text-muted"}`}>
                   {charsLeft} chars left {overRecommended && "· will span 2+ SMS segments"}
                 </p>
-                <p className="text-xs text-muted mt-1">
-                  Use <code className="bg-line/40 px-1 rounded">[Name]</code> to insert each recipient&rsquo;s first name.
+                <VariableLegend onInsert={insertToken} className="mt-2" />
+                <p className="text-[11px] text-muted mt-2">
+                  Every blast ends with a tap-able link back to the trip — you don&rsquo;t need to add one.
                 </p>
               </section>
 

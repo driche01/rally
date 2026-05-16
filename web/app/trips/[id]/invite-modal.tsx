@@ -10,8 +10,9 @@
  * email exists on the respondents row for future use.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Respondent, Mutual } from "@shared/types";
+import VariableLegend from "@/lib/sms/variable-legend";
 
 interface Recipient {
   name: string;
@@ -33,6 +34,19 @@ export default function InviteModal({
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [customMessage, setCustomMessage] = useState("");
+  const noteRef = useRef<HTMLTextAreaElement | null>(null);
+
+  function insertNoteToken(token: string) {
+    const el = noteRef.current;
+    if (!el) { setCustomMessage((m) => m + token); return; }
+    const start = el.selectionStart ?? customMessage.length;
+    const end   = el.selectionEnd ?? customMessage.length;
+    setCustomMessage(customMessage.slice(0, start) + token + customMessage.slice(end));
+    requestAnimationFrame(() => {
+      el.focus();
+      el.selectionStart = el.selectionEnd = start + token.length;
+    });
+  }
   const [mutuals, setMutuals] = useState<Mutual[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -219,6 +233,7 @@ export default function InviteModal({
                     Add a personal note (optional)
                   </span>
                   <textarea
+                    ref={noteRef}
                     rows={3}
                     maxLength={480}
                     value={customMessage}
@@ -230,6 +245,7 @@ export default function InviteModal({
                 <p className="text-xs text-muted mt-1 text-right">
                   {charsLeft} left
                 </p>
+                <VariableLegend onInsert={insertNoteToken} className="mt-2" />
               </section>
 
               {err && <p className="text-orange text-sm">{err}</p>}

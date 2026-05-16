@@ -24,6 +24,7 @@ import { cookies } from "next/headers";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import RallyLogo from "./logo";
 import AccountMenu from "./account-menu";
+import RespondentActions from "./respondent-actions";
 
 interface AppHeaderProps {
   /** Optional className for the outer <header>. */
@@ -99,21 +100,19 @@ export default async function AppHeader({
   }
 
   // Respondent-only branch: cookie present but no auth session.
+  // RespondentActions handles the click-to-promote flow; we just
+  // need the first name for the chip label.
   let respondentName: string | null = null;
-  let respondentPhone: string | null = null;
   if (!authUser) {
     const cookieStore = await cookies();
     const sessionToken = cookieStore.get("rally_session_token")?.value ?? null;
     if (sessionToken) {
-      // Newest respondent row for this session_token — the same session
-      // token is reused across re-RSVPs, but a planner who later re-
-      // shares the link to themselves could land on a different one;
-      // pick the most recent so the chip shows their freshest first
-      // name.
+      // Newest respondent row for this session_token — same token can
+      // be reused across re-RSVPs; pick the freshest first name.
       const svc = createServiceClient();
       const { data: respondent } = await svc
         .from("respondents")
-        .select("first_name, name, phone")
+        .select("first_name, name")
         .eq("session_token", sessionToken)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -121,7 +120,6 @@ export default async function AppHeader({
       if (respondent) {
         respondentName = respondent.first_name
           ?? (respondent.name ? respondent.name.split(" ")[0] : null);
-        respondentPhone = respondent.phone;
       }
     }
   }
@@ -148,28 +146,15 @@ export default async function AppHeader({
             />
           </>
         ) : respondentName ? (
-          <>
-            {!hideNewTrip && (
-              <Link
-                href={
-                  respondentPhone
-                    ? `/login?next=/trips/new&phone=${encodeURIComponent(respondentPhone)}`
-                    : "/login?next=/trips/new"
-                }
-                className="hidden sm:inline-flex h-9 px-3 items-center rounded-full bg-green text-cream text-sm font-bold hover:bg-green-2 active:scale-95 transition-transform"
-              >
-                + New trip
-              </Link>
-            )}
-            <span className="flex items-center gap-2 h-9 pl-1 pr-3 rounded-full bg-card border border-line text-sm text-ink">
-              <span className="h-7 w-7 rounded-full bg-green-soft text-green font-bold text-xs flex items-center justify-center">
-                {respondentName.charAt(0).toUpperCase()}
-              </span>
-              <span className="hidden sm:inline truncate max-w-[8rem]">
-                {respondentName}
-              </span>
-            </span>
-          </>
+          // Respondent-only: cookie present, no Supabase session yet.
+          // RespondentActions handles the promote-from-session flow on
+          // click — they go from cookie-only to fully Supabase-authed in
+          // one round-trip (no SMS round-trip required, since RSVP
+          // already proved phone-device association at alpha-grade).
+          <RespondentActions
+            name={respondentName}
+            showNewTrip={!hideNewTrip}
+          />
         ) : (
           <Link
             href="/login"

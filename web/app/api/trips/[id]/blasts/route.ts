@@ -27,6 +27,9 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { jsonOk, jsonErr } from "@/lib/http";
 import { sendSms } from "@/lib/twilio";
 import { filterRecipientsBy24hLimit } from "@/lib/blasts/rate-limits";
+import { personalizeBody } from "@/lib/personalize";
+import { appendTripFooterWithUrl } from "@/lib/sms-footer";
+import { getSiteUrl } from "@/lib/site-url";
 import type {
   PlannerBlast,
   RecipientSegment,
@@ -82,14 +85,27 @@ export async function POST(
 
   const svc = createServiceClient();
 
-  // 1. Host-or-cohost gate.
+  // 1. Host-or-cohost gate. Also pulls the fields personalizeBody +
+  // appendTripFooter need so [Planner]/[Trip]/[Destination]/[BookBy]
+  // substitution and the trip-link footer can run.
   const { data: trip } = await svc
     .from("trips")
-    .select("id, name, created_by, cancelled_at, share_token")
+    .select("id, name, created_by, cancelled_at, share_token, destination, book_by_date")
     .eq("id", trip_id)
     .maybeSingle();
   if (!trip) return jsonErr(404, "trip_not_found");
   if (trip.cancelled_at) return jsonErr(410, "trip_cancelled");
+
+  // Resolve planner first name (for [Planner]) + invite URL (for
+  // [Survey link] swaps + the footer). Both are constant across the
+  // recipient loop.
+  const { data: plannerProfile } = await svc
+    .from("profiles")
+    .select("name")
+    .eq("id", trip.created_by)
+    .maybeSingle();
+  const plannerName = plannerProfile?.name ?? null;
+  const inviteUrl = `${await getSiteUrl()}/invite/${trip.share_token}`;
 
   const isPlanner = trip.created_by === r.authUid;
   let isCohost = false;
@@ -160,11 +176,23 @@ export async function POST(
   const perRecipient: { phone: string; name: string; status: string; detail?: string }[] = [];
 
   for (const recipient of sendable) {
-    // Personalize per recipient.
-    const personalized = message_body.replace(/\[Name\]/g, firstName(recipient.name));
+    // Personalize per recipient using the full token set
+    // ([Name]/[Planner]/[Trip]/[Destination]/[BookBy]/[Survey link]).
+    // Then attach the standard trip-link footer so every blast has a
+    // tap-able way back to the trip page — idempotent if [Survey
+    // link] was already used inline.
+    const personalized = personalizeBody(message_body, {
+      recipientName: recipient.name,
+      plannerName,
+      tripName:      trip.name,
+      destination:   trip.destination,
+      bookByDate:    trip.book_by_date,
+      surveyUrl:     inviteUrl,
+    });
+    const withFooter = appendTripFooterWithUrl(personalized, inviteUrl);
     const send = await sendSms(svc, {
       to: recipient.phone!,
-      body: personalized,
+      body: withFooter,
       tripId: trip_id,
       messageType: "planner_blast",
       senderRole: "planner",
@@ -234,10 +262,6 @@ export async function POST(
     suppressed_24h: suppressed24h.length,
     recipients: perRecipient,
   });
-}
-
-function firstName(full: string): string {
-  return full.split(/\s+/)[0] ?? full;
 }
 
 async function safeJson(req: Request): Promise<Record<string, unknown> | null> {
