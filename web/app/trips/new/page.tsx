@@ -26,7 +26,7 @@ export default async function NewTripPage() {
           Set the trip.
         </h1>
         <p className="text-muted mb-8">
-          Just the load-bearing parts. You can edit anything later.
+          You can edit anything later.
         </p>
         <TripForm />
       </div>
