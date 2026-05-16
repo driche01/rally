@@ -5,6 +5,34 @@ Marketing pages on `rallysurveys.netlify.app` stay on Netlify
 (separate site, separate build); this app gets its own Netlify
 project pointed at `/web`.
 
+## Branch model — `main` ≠ deploy
+
+> **Netlify's production branch is `release`, NOT `main`.**
+>
+> - **`main`** is the working trunk. Every commit lands here. No
+>   deploy fires on a `main` push. Cheap. Worktrees stay clean.
+> - **`release`** is the deploy ref. Pushing to `release` triggers
+>   exactly one Netlify build. Otherwise the branch sits still.
+>
+> **Ship the latest main to prod:**
+>
+> ```sh
+> git fetch origin
+> git push origin origin/main:release
+> ```
+>
+> That's the only command that costs a build. Netlify auto-builds
+> + auto-publishes whatever is at `release` HEAD.
+>
+> **Rollback** — push the last-good `main` commit to `release`:
+>
+> ```sh
+> git push origin <good-sha>:release --force-with-lease
+> ```
+>
+> No `release`-branch checkouts are needed locally — everything
+> goes through `git push origin <ref>:release`.
+
 ## Hard rule — team
 
 > **Rally Netlify projects MUST live under the personal `driche01`

@@ -15,6 +15,7 @@ Rally is a group trip planning product launching as web + SMS (v1). Mobile app c
 7. **Do not proceed to a later phase without explicit human sign-off.** Phase A ends at its Definition of Done — stop, write the demo doc, wait. Same for B and C.
 8. **The Design Gate in Phase A is a hard stop.** Build the prototype, push to localhost, wait for review. Do not skip or rush past it.
 9. **Netlify deploys for Rally MUST go under the personal `driche01` team** (https://app.netlify.com/teams/driche01/projects). Never `cypress-health` or any other work team — Rally is personal infra, not work billing. Before running `netlify init`, `netlify sites:create`, or any deploy command that could create a new project: confirm with `netlify status` that the active CLI session is on `driche01`. If it isn't, `netlify logout && netlify login` with the `driche01@gmail.com` account FIRST. See `web/DEPLOY.md` for the full setup.
+10. **`main` does not deploy. `release` does.** The `rally-web` Netlify project's production branch is `release`. Push your work to `main` as usual — that's free, no build runs. To ship to prod, push `main` to `release`: `git push origin origin/main:release`. This is a hard cost-control decision, not a suggestion. Never fast-forward `main` directly to `release` on every commit. Wait for the human to say "ship it" (or equivalent) before promoting.
 
 ## Working agreement for every session
 
