@@ -69,8 +69,31 @@ export default async function AppHeader({
       usersId = byAuth.data?.id ?? null;
       if (!usersId && profile.phone) {
         const byPhone = await svc
-          .from("users").select("id").eq("phone", profile.phone).maybeSingle();
+          .from("users").select("id, auth_user_id").eq("phone", profile.phone).maybeSingle();
         usersId = byPhone.data?.id ?? null;
+        // If we found a phone-keyed row but it isn't linked to this
+        // auth user yet, backfill the FK so the lookup is fast next time.
+        if (usersId && !byPhone.data?.auth_user_id) {
+          await svc.from("users").update({ auth_user_id: authUser.id }).eq("id", usersId);
+        }
+      }
+      // Lazy-create a users row for accounts that have never been
+      // through any of the RPCs that create one (SMS session,
+      // traveler-profile self-heal, RSVP). Without this, the
+      // "View profile" menu item silently disappears for SSO users
+      // who haven't yet RSVPed or accepted an invite.
+      if (!usersId && profile.phone) {
+        const { data: created } = await svc
+          .from("users")
+          .insert({
+            phone:          profile.phone,
+            auth_user_id:   authUser.id,
+            display_name:   displayName,
+            rally_account:  true,
+          })
+          .select("id")
+          .single();
+        usersId = created?.id ?? null;
       }
     }
   }
