@@ -437,11 +437,11 @@ export default function TripForm() {
 
       <Field label="Description">
         <textarea
-          rows={3}
-          placeholder="Set the vibe in a sentence or three."
+          rows={5}
+          placeholder={`Set the vibe in 3–5 sentences. What's this trip about — chill cabin reset, foodie weekend, big birthday blowout? What are you planning to do and see? Any meals or experiences worth flagging? Anyone bringing kids, pets, or special asks? Give your group enough to know if they're in.`}
           value={s.description}
           onChange={(e) => set("description", e.target.value)}
-          className={inputCls + " min-h-24 py-3"}
+          className={inputCls + " min-h-32 py-3"}
         />
       </Field>
 
