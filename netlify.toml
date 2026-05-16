@@ -1,5 +1,9 @@
 [build]
-  command = "npx expo export --platform web"
+  # Wrap `expo export` — under `output: "static"` Metro keeps worker
+  # threads alive after rendering completes and the process never
+  # exits on its own. The wrapper kills it once "Exported: dist"
+  # appears so Netlify's build doesn't run to its 15-min timeout.
+  command = "bash scripts/build-web.sh"
   publish = "dist"
 
 # EXPO_PUBLIC_* vars are intentionally public — they're embedded in client-side
@@ -45,7 +49,76 @@
     Content-Type = "application/json"
     Cache-Control = "public, max-age=300"
 
-# SPA fallback — all other routes serve index.html
+# ─── Dynamic-route rewrites under `output: "static"` ──────────────────
+# Expo Router emits each dynamic route as a literal `[param].html`
+# file. Browsers requesting `/respond/abc123` won't match that file
+# automatically — Netlify rewrites the path while keeping the URL in
+# the address bar so the client hydrates with the correct params.
+[[redirects]]
+  from = "/respond/:tripId"
+  to = "/respond/[tripId].html"
+  status = 200
+
+[[redirects]]
+  from = "/t/:tripId"
+  to = "/t/[tripId].html"
+  status = 200
+
+[[redirects]]
+  from = "/status/:token"
+  to = "/status/[token].html"
+  status = 200
+
+[[redirects]]
+  from = "/results/:token"
+  to = "/results/[token].html"
+  status = 200
+
+[[redirects]]
+  from = "/summary/:token"
+  to = "/summary/[token].html"
+  status = 200
+
+# Auth-gated planner routes — these aren't really designed for web
+# but the static HTML lets the JS hydrate and bounce unauthenticated
+# users back to the landing page rather than 404.
+[[redirects]]
+  from = "/trips/:id"
+  to = "/trips/[id]/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/trips/:id/hub"
+  to = "/trips/[id]/hub.html"
+  status = 200
+
+[[redirects]]
+  from = "/trips/:id/edit"
+  to = "/trips/[id]/edit.html"
+  status = 200
+
+[[redirects]]
+  from = "/trips/:id/recap"
+  to = "/trips/[id]/recap.html"
+  status = 200
+
+[[redirects]]
+  from = "/trips/:id/activity"
+  to = "/trips/[id]/activity.html"
+  status = 200
+
+[[redirects]]
+  from = "/trips/:id/paywall"
+  to = "/trips/[id]/paywall.html"
+  status = 200
+
+[[redirects]]
+  from = "/trips/:id/ai-itinerary"
+  to = "/trips/[id]/ai-itinerary.html"
+  status = 200
+
+# Final fallback for anything not matched — serve the landing's
+# index.html so the client router can show /+not-found.
 [[redirects]]
   from = "/*"
   to = "/index.html"

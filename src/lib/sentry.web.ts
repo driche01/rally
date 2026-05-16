@@ -3,6 +3,8 @@ import * as Sentry from '@sentry/browser';
 declare const __DEV__: boolean;
 
 export function initSentry() {
+  // Skip during static-render (Node) — Sentry's browser SDK touches window.
+  if (typeof window === 'undefined') return;
   const dsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
   if (!dsn) return;
 
