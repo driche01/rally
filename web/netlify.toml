@@ -1,0 +1,37 @@
+# Netlify config for the Rally Next.js app at /web.
+#
+# This is separate from /netlify.toml at the repo root which
+# configures the Expo-web export hosted at rallysurveys.netlify.app.
+# The two sites live in the same monorepo, served from different
+# Netlify projects with different Base Directory settings.
+#
+# Setup once:
+#   cd web
+#   netlify init                # create a NEW Netlify site
+#                               #   base directory: web
+#                               #   build command:  (auto, picked up below)
+#                               #   publish dir:    (auto via the Next.js plugin)
+#
+# Every deploy:
+#   cd web
+#   netlify deploy --prod --build
+#
+# The @netlify/plugin-nextjs adapter is auto-installed by Netlify
+# when it detects a Next.js project, so no extra dep needed in
+# package.json.
+
+[build]
+  command = "next build"
+  publish = ".next"
+
+[build.environment]
+  # Anything that ends up in client JS lives behind NEXT_PUBLIC_.
+  # Netlify's secret scanner can skip the public-by-design vars so
+  # builds don't fail false-positive on the publishable key.
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,NEXT_PUBLIC_SITE_URL"
+
+# Next.js adapter — Netlify auto-installs this when it detects a
+# Next.js project. Declared explicitly so the intent is visible in
+# the repo.
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
