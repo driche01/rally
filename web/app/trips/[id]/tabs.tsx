@@ -5,9 +5,9 @@
  * Route-segment tabs: each tab is /trips/[id]/<segment>. Overview
  * is the bare /trips/[id] route.
  *
- * Phase B Step 4 ships Overview + Itinerary as functional tabs.
- * The remaining four (Lodging, Travel, Meals, Shopping) appear in
- * the nav with a "soon" pill — they'll be wired in Steps 5–8.
+ * All six tabs (Overview · Itinerary · Lodging · Travel · Meals ·
+ * Shopping) are live as of Phase B; previous "soon" gating was
+ * removed once Steps 5–8 shipped.
  */
 
 import Link from "next/link";
@@ -16,16 +16,15 @@ import { usePathname } from "next/navigation";
 interface TabDef {
   segment: string;       // empty string = Overview (no sub-segment)
   label: string;
-  ready: boolean;
 }
 
 const TABS: TabDef[] = [
-  { segment: "",           label: "Overview",  ready: true  },
-  { segment: "itinerary",  label: "Itinerary", ready: true  },
-  { segment: "lodging",    label: "Lodging",   ready: true  },
-  { segment: "travel",     label: "Travel",    ready: true  },
-  { segment: "meals",      label: "Meals",     ready: true  },
-  { segment: "shopping",   label: "Shopping",  ready: true  },
+  { segment: "",           label: "Overview"  },
+  { segment: "itinerary",  label: "Itinerary" },
+  { segment: "lodging",    label: "Lodging"   },
+  { segment: "travel",     label: "Travel"    },
+  { segment: "meals",      label: "Meals"     },
+  { segment: "shopping",   label: "Shopping"  },
 ];
 
 export default function TabNav({ tripId }: { tripId: string }) {
@@ -39,21 +38,6 @@ export default function TabNav({ tripId }: { tripId: string }) {
         {TABS.map((t) => {
           const active = t.segment === currentSeg;
           const href = t.segment === "" ? basePath : `${basePath}/${t.segment}`;
-          if (!t.ready) {
-            return (
-              <li key={t.segment || "overview"}>
-                <span
-                  className="h-9 px-4 inline-flex items-center gap-1 rounded-full text-sm text-muted/70 cursor-not-allowed"
-                  title="Wires up in a later Phase B step"
-                >
-                  {t.label}
-                  <span className="text-[10px] uppercase tracking-widest font-bold text-muted/60 ml-1">
-                    soon
-                  </span>
-                </span>
-              </li>
-            );
-          }
           return (
             <li key={t.segment || "overview"}>
               <Link
