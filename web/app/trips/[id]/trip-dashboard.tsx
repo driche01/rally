@@ -21,7 +21,6 @@ import { themeClass } from "@/lib/themes";
 import { EditableTextarea } from "@/lib/editable";
 import Roster from "./roster";
 import BlastComposer from "./blast-composer";
-import StatModal from "./stat-modal";
 
 export default function TripDashboard({
   trip, respondents: initialRespondents, activity, inviteUrl, stallSignal, canEdit,
@@ -42,10 +41,6 @@ export default function TripDashboard({
     segment: "going" | "maybe" | "invited" | "all" | "unresponded";
     source: string;
   } | null>(null);
-  // Which stat card's modal is open (null = none). The modal owns
-  // the per-respondent override + a group-nudge CTA that closes
-  // it and re-opens the BlastComposer pre-targeted at this status.
-  const [statModal, setStatModal] = useState<RsvpStatus | null>(null);
   const cancelled = Boolean(trip.cancelled_at);
 
   function openBlastFromBanner() {
@@ -101,7 +96,6 @@ export default function TripDashboard({
     }
   }
 
-  const counts = countByStatus(respondents);
   const t = themeClass(trip.theme);
 
   return (
@@ -164,15 +158,6 @@ export default function TripDashboard({
         </div>
       )}
 
-      {/* ─── Quick stats ───────────────────────────── */}
-      {/* Each card opens a status modal — see <Stat> below. */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
-        <Stat label="Going"    value={counts.going}   t={t} onClick={() => setStatModal("going")} />
-        <Stat label="Maybe"    value={counts.maybe}   t={t} onClick={() => setStatModal("maybe")} />
-        <Stat label="Invited"  value={counts.invited} t={t} onClick={() => setStatModal("invited")} />
-        <Stat label="Can't go" value={counts.cant_go} t={t} onClick={() => setStatModal("cant_go")} />
-      </div>
-
       {/* ─── Roster ────────────────────────────────── */}
       <Roster respondents={respondents} onOverride={handleOverride} />
 
@@ -208,72 +193,8 @@ export default function TripDashboard({
         />
       )}
 
-      {statModal && (
-        <StatModal
-          status={statModal}
-          respondents={respondents.filter(
-            (r) => ((r.rsvp_status ?? "invited") as RsvpStatus) === statModal,
-          )}
-          onClose={() => setStatModal(null)}
-          onOverride={handleOverride}
-          canManage={canEdit && !cancelled}
-          onSendNudge={() => {
-            // Close the stat modal and open the blast composer
-            // pre-targeted at this status. The segment names line
-            // up directly with RsvpStatus (going / maybe / invited),
-            // but cant_go isn't a valid blast segment — fall back
-            // to "invited" if the planner somehow opened a Can't-go
-            // nudge (the CTA is hidden in that case anyway).
-            const segment =
-              statModal === "going"   ? "going"
-            : statModal === "maybe"   ? "maybe"
-            : statModal === "invited" ? "invited"
-            : "all";
-            setBlastPrefill({
-              body: "",
-              segment,
-              source: `${statModal} status nudge`,
-            });
-            setStatModal(null);
-            setShowBlast(true);
-          }}
-        />
-      )}
     </div>
   );
-}
-
-function Stat({
-  label, value, t, onClick,
-}: {
-  label: string;
-  value: number;
-  t: ReturnType<typeof themeClass>;
-  onClick?: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`${t.surface} border ${t.surfaceBorder} rounded-2xl p-4 text-left hover:border-green active:scale-[0.98] transition-transform`}
-    >
-      <p className={`text-xs uppercase tracking-widest font-semibold ${t.meta}`}>
-        {label}
-      </p>
-      <p className={`text-3xl mt-1 ${t.display}`}>{value}</p>
-    </button>
-  );
-}
-
-function countByStatus(rs: Respondent[]): Record<RsvpStatus, number> {
-  const c: Record<RsvpStatus, number> = {
-    going: 0, maybe: 0, invited: 0, cant_go: 0,
-  };
-  for (const r of rs) {
-    const k = (r.rsvp_status ?? "invited") as RsvpStatus;
-    if (k in c) c[k]++;
-  }
-  return c;
 }
 
 function formatRelative(iso: string): string {
