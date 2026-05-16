@@ -191,6 +191,16 @@ export interface ActivityFeedEntry {
   entry_type: ActivityEntryType;
   content: Record<string, unknown>;
   created_at: string;
+  /** Parent entry for threaded replies. Null = top-level post. */
+  parent_id: string | null;
+}
+
+export interface ActivityReaction {
+  id: string;
+  entry_id: string;
+  user_id: string;                  // users.id
+  emoji: string;
+  created_at: string;
 }
 
 // ─── Mutuals ──────────────────────────────────────────────────────
