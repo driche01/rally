@@ -25,6 +25,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import RallyLogo from "./logo";
 import AccountMenu from "./account-menu";
 import RespondentActions from "./respondent-actions";
+import CreateTripButton from "./create-trip-button";
 
 interface AppHeaderProps {
   /** Optional className for the outer <header>. */
@@ -132,12 +133,11 @@ export default async function AppHeader({
         {authUser ? (
           <>
             {!hideNewTrip && (
-              <Link
-                href="/trips/new"
+              <CreateTripButton
                 className="hidden sm:inline-flex h-9 px-3 items-center rounded-full bg-green text-cream text-sm font-bold hover:bg-green-2 active:scale-95 transition-transform"
               >
                 + New trip
-              </Link>
+              </CreateTripButton>
             )}
             <AccountMenu
               usersId={usersId}

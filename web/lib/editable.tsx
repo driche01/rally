@@ -44,10 +44,15 @@ export function EditableText({
   inputClass = "", displayClass = "",
   renderDisplay,
   type = "text",
+  autoEdit = false,
 }: BaseProps<string | null> & {
   type?: "text" | "date" | "number";
+  /** When true AND canEdit, open in editing mode on first mount.
+   *  Used by the trip page when arriving at /trips/[id]?new=1 to
+   *  drop the cursor straight into the trip-name field. */
+  autoEdit?: boolean;
 }) {
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(autoEdit && canEdit);
   const [draft, setDraft]     = useState(value ?? "");
   const [busy, setBusy]       = useState(false);
   const [err, setErr]         = useState<string | null>(null);

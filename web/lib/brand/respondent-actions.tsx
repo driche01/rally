@@ -10,12 +10,14 @@
  *   2. Take the returned token_hash and exchange it via
  *      supabase.auth.verifyOtp({ type: 'magiclink', token_hash })
  *      — sets the Supabase session cookies.
- *   3. router.push() the target page.
+ *   3a. For "new trip": POST /api/trips to create a draft, then
+ *       router.push() to /trips/[id]?new=1.
+ *   3b. For "profile":  router.push() to /user/[id].
  *   4. router.refresh() so server components re-render in the new
  *      authed state.
  *
- * From the user's perspective: a single tap takes them to /trips/new
- * or their profile with no SMS friction.
+ * From the user's perspective: a single tap creates a trip / opens
+ * their profile, no SMS friction, no form to fill out.
  */
 
 import { useState } from "react";
@@ -35,7 +37,7 @@ export default function RespondentActions({ name, showNewTrip = true }: Props) {
   const [busy, setBusy] = useState<null | "profile" | "newtrip">(null);
   const [err, setErr] = useState<string | null>(null);
 
-  async function promoteThen(target: "/trips/new" | "__profile__", which: "profile" | "newtrip") {
+  async function promoteThen(target: "__newtrip__" | "__profile__", which: "profile" | "newtrip") {
     if (busy) return;
     setBusy(which);
     setErr(null);
@@ -58,13 +60,29 @@ export default function RespondentActions({ name, showNewTrip = true }: Props) {
         setErr(vErr.message);
         return;
       }
-      // Profile click: route directly to /user/<users.id> returned
-      // by the promote endpoint (no /trips bounce). Trip-creation
-      // click: /trips/new.
-      const next =
-        target === "__profile__"
-          ? body.data.users_id ? `/user/${body.data.users_id}` : "/trips"
-          : target;
+
+      let next: string;
+      if (target === "__profile__") {
+        // Profile click: route directly to /user/<users.id> returned
+        // by the promote endpoint (no /trips bounce).
+        next = body.data.users_id ? `/user/${body.data.users_id}` : "/trips";
+      } else {
+        // New-trip click: create the draft trip with the same fetch
+        // identity the promote step just minted, then drop the
+        // planner onto its edit surface with the name editor open.
+        const tripRes = await fetch("/api/trips", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "Untitled trip", status: "draft" }),
+        });
+        const tripBody = await tripRes.json();
+        if (!tripRes.ok || !tripBody.ok || !tripBody.data?.id) {
+          setErr(tripBody?.error?.code || "Couldn't create trip");
+          return;
+        }
+        next = `/trips/${tripBody.data.id}?new=1`;
+      }
+
       router.replace(next);
       router.refresh();
     } catch {
@@ -80,7 +98,7 @@ export default function RespondentActions({ name, showNewTrip = true }: Props) {
     <div className="flex items-center gap-2">
       {showNewTrip && (
         <button
-          onClick={() => promoteThen("/trips/new", "newtrip")}
+          onClick={() => promoteThen("__newtrip__", "newtrip")}
           disabled={busy !== null}
           className="hidden sm:inline-flex h-9 px-3 items-center rounded-full bg-green text-cream text-sm font-bold hover:bg-green-2 active:scale-95 transition-transform disabled:opacity-50"
         >

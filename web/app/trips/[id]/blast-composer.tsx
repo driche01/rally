@@ -12,6 +12,7 @@
 import { useMemo, useRef, useState } from "react";
 import type { Respondent, RecipientSegment } from "@shared/types";
 import VariableLegend from "@/lib/sms/variable-legend";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 
 interface SendResult {
   blast_id: string;
@@ -53,6 +54,7 @@ export default function BlastComposer({
   /** Tag the UI when a pre-fill is in play (small "From: stalled-trip nudge" eyebrow). */
   prefillSource?:  string;
 }) {
+  useBodyScrollLock();
   const [segment, setSegment] = useState<RecipientSegment>(initialSegment ?? "going");
   const [body, setBody] = useState(initialBody ?? "");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -129,7 +131,7 @@ export default function BlastComposer({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-ink/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+      className="fixed inset-0 z-50 bg-ink/75 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4"
       role="dialog"
       aria-modal="true"
       onClick={onClose}

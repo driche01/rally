@@ -51,11 +51,14 @@ export async function POST(req: Request) {
     return jsonErr(400, "end_before_start");
   }
 
-  // Q35: book_by_date REQUIRED at trip creation. DB column stays
-  // nullable to support legacy rows; new trips must provide it.
+  // book_by_date is OPTIONAL at draft creation (2026-05-16 — the
+  // /trips/new form was retired in favor of "create empty trip,
+  // edit inline"). Q35 originally required it; that requirement is
+  // now enforced at publish time by the PATCH endpoint when the
+  // planner flips status from draft to active. DB column has always
+  // been nullable so legacy rows + drafts both coexist.
   const book_by_date = strOrNull(body.book_by_date);
-  if (!book_by_date) return jsonErr(400, "book_by_date_required");
-  if (start_date && book_by_date > start_date) {
+  if (book_by_date && start_date && book_by_date > start_date) {
     return jsonErr(400, "book_by_after_start");
   }
 

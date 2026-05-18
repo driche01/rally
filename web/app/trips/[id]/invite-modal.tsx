@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Respondent, Mutual } from "@shared/types";
 import VariableLegend from "@/lib/sms/variable-legend";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 
 interface Recipient {
   name: string;
@@ -29,6 +30,7 @@ export default function InviteModal({
   onClose: () => void;
   onSent: (newRespondents: Respondent[], summary: import("@shared/types").ActivityFeedEntry | null) => void;
 }) {
+  useBodyScrollLock();
   const [recipients, setRecipients] = useState<Recipient[]>([]);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -122,7 +124,7 @@ export default function InviteModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-ink/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+      className="fixed inset-0 z-50 bg-ink/75 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4"
       role="dialog"
       aria-modal="true"
       onClick={onClose}
@@ -194,7 +196,20 @@ export default function InviteModal({
               </section>
 
               {/* ─── Past trip-mates ───────────────── */}
-              <PastTripmatesSection mutuals={mutuals} />
+              <PastTripmatesSection
+                mutuals={mutuals}
+                recipients={recipients}
+                onAdd={(m) => {
+                  if (!m.phone) return;
+                  setRecipients((prev) => {
+                    if (prev.some((r) => r.phone === m.phone)) return prev;
+                    return [
+                      ...prev,
+                      { name: m.name ?? "Friend", phone: m.phone ?? "" },
+                    ];
+                  });
+                }}
+              />
 
 
               {/* ─── Recipients list ───────────────── */}
@@ -276,13 +291,31 @@ export default function InviteModal({
   );
 }
 
-function PastTripmatesSection({ mutuals }: { mutuals: Mutual[] }) {
+function PastTripmatesSection({
+  mutuals,
+  recipients,
+  onAdd,
+}: {
+  mutuals: Mutual[];
+  recipients: Recipient[];
+  onAdd: (m: Mutual) => void;
+}) {
   type SortKey = "most_shared" | "most_recent" | "alpha";
   const [q, setQ] = useState("");
   const [sort, setSort] = useState<SortKey>("most_shared");
 
+  // Display label for filter + sort. The API joins users.display_name
+  // (with a respondents.name fallback); if both miss we degrade
+  // gracefully to "a friend" so the row stays clickable.
+  const displayName = (m: Mutual): string => m.name?.trim() || "a friend";
+
+  // Already in the recipients list? Used to grey out + disable the
+  // "+ Add" button. Match by phone since that's the cross-row key.
+  const inRecipients = (phone: string | null | undefined): boolean =>
+    !!phone && recipients.some((r) => r.phone === phone);
+
   const filtered = mutuals
-    .filter((m) => !q || m.mutual_user_id.toLowerCase().includes(q.toLowerCase()))
+    .filter((m) => !q || displayName(m).toLowerCase().includes(q.toLowerCase()))
     .sort((a, b) => {
       if (sort === "most_shared") return b.shared_trip_count - a.shared_trip_count;
       if (sort === "most_recent") {
@@ -290,7 +323,7 @@ function PastTripmatesSection({ mutuals }: { mutuals: Mutual[] }) {
         const tb = b.last_traveled_together_at ? new Date(b.last_traveled_together_at).getTime() : 0;
         return tb - ta;
       }
-      return a.mutual_user_id.localeCompare(b.mutual_user_id);
+      return displayName(a).localeCompare(displayName(b));
     });
 
   return (
@@ -325,12 +358,40 @@ function PastTripmatesSection({ mutuals }: { mutuals: Mutual[] }) {
             placeholder="Search past trip-mates…"
             className="w-full h-9 rounded-full border border-line bg-card px-3 text-xs text-ink placeholder:text-muted focus:border-green focus:outline-none mb-2"
           />
-          <ul className="grid gap-1 max-h-32 overflow-y-auto">
-            {filtered.slice(0, 12).map((m) => (
-              <li key={m.mutual_user_id} className="text-sm text-ink">
-                · {m.mutual_user_id} (shared {m.shared_trip_count})
-              </li>
-            ))}
+          <ul className="grid gap-1 max-h-40 overflow-y-auto">
+            {filtered.slice(0, 12).map((m) => {
+              const added   = inRecipients(m.phone);
+              const noPhone = !m.phone;
+              return (
+                <li
+                  key={m.mutual_user_id}
+                  className="flex items-center gap-2 text-sm text-ink"
+                >
+                  <span className="flex-1 min-w-0 truncate">
+                    {displayName(m)}
+                    <span className="text-muted text-xs ml-2">
+                      shared {m.shared_trip_count}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onAdd(m)}
+                    disabled={added || noPhone}
+                    className={
+                      "h-7 px-3 rounded-full text-xs font-semibold whitespace-nowrap transition-colors " +
+                      (added
+                        ? "bg-green-soft text-green cursor-default"
+                        : noPhone
+                          ? "bg-card border border-line text-muted cursor-not-allowed"
+                          : "bg-card border border-line text-ink hover:border-green hover:bg-green-soft/40")
+                    }
+                    aria-label={added ? `${displayName(m)} already added` : `Add ${displayName(m)}`}
+                  >
+                    {added ? "Added" : noPhone ? "No phone" : "+ Add"}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </>
       )}

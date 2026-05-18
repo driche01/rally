@@ -16,7 +16,15 @@
  * unique look at a glance.
  */
 
+import type { ComponentType } from "react";
 import type { TripTheme, ThemeCategory } from "@shared/types";
+
+/** Props passed to a theme's optional CoverArt component. */
+export interface CoverArtProps {
+  tripName: string;
+  startDate?: string | null;
+  endDate?: string | null;
+}
 
 export interface ThemeStyle {
   /** className applied to the outer <main> — page background tone */
@@ -45,6 +53,23 @@ export interface ThemeStyle {
   mood: string;
   /** Category bucket for the theme picker filter chips. */
   category: ThemeCategory;
+
+  // ─── Optional advanced slots ──────────────────────────────────────
+
+  /** If set, replaces the default cover content. Theme owns the full
+   * composition inside the cover container. When set, the `coverInk`
+   * and `display` classNames are unused for the cover. Only kicks in
+   * when no user-uploaded `cover_image_url` is present — uploaded
+   * covers still win. */
+  CoverArt?: ComponentType<CoverArtProps>;
+
+  /** Theme-specific display font. Body/UI stays on Fredoka for
+   * cross-theme brand cohesion. Only loaded when this theme is
+   * active (the trip layout injects a <link> for the URL). */
+  fontDisplay?: {
+    googleFontsUrl: string;
+    fontFamily: string;
+  };
 }
 
 // Classic doubles as the fallback when a trip has no theme set.
@@ -55,7 +80,7 @@ const CLASSIC: ThemeStyle = {
   meta:          "text-muted",
   cover:         "bg-gradient-to-br from-green-soft to-cream-2",
   coverInk:      "font-display text-green",
-  eyebrow:       "text-green tracking-[0.18em] uppercase font-bold",
+  eyebrow:       "font-display text-green tracking-[0.18em] uppercase font-bold",
   accent:        "bg-green-soft text-green",
   surface:       "bg-card",
   surfaceBorder: "border-line",
@@ -77,7 +102,7 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
     meta:          "text-[#6B5530]",
     cover:         "bg-gradient-to-br from-green via-[var(--color-gold)] to-green-soft",
     coverInk:      "font-display text-cream drop-shadow-[0_2px_8px_rgba(0,0,0,0.25)]",
-    eyebrow:       "text-green tracking-[0.3em] uppercase font-bold",
+    eyebrow:       "font-display text-green tracking-[0.3em] uppercase font-bold",
     accent:        "bg-[var(--color-gold)]/30 text-green",
     surface:       "bg-[#FFFBF1]",
     surfaceBorder: "border-[#E8D9B8]",
@@ -96,7 +121,7 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
     // hits ~5.5:1 contrast on cream-gold.
     cover:         "bg-[#F8F1E0] border-2 border-[var(--color-gold)]/50",
     coverInk:      "font-display italic text-green-2",
-    eyebrow:       "text-[#8B5A1E] tracking-[0.4em] uppercase text-[10px] font-bold",
+    eyebrow:       "font-display text-[#8B5A1E] tracking-[0.4em] uppercase text-[10px] font-bold",
     accent:        "bg-[var(--color-gold)]/20 text-[color:color-mix(in_oklab,var(--color-gold)_70%,black)]",
     surface:       "bg-[#FCF6E5]",
     surfaceBorder: "border-[var(--color-gold)]/30",
@@ -106,25 +131,49 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
   },
 
   literary: {
-    root:          "bg-[#F4ECDF]",
-    display:       "font-display text-ink",
+    // Parchment texture as the page background. Tiled at 512px so
+    // the grain stays consistent at any viewport size; fallback
+    // color (#E8D5A8) matches the texture's average amber tone so
+    // the swap is invisible while the asset streams in.
+    root:          "bg-[#E8D5A8] bg-[url(/themes/literary-paper.jpg)] bg-repeat [background-size:512px_512px]",
+
+    // Playfair Display for the trip name + cover overlay — italic
+    // serif against the parchment reads as a journal headline.
+    // Body/UI stays on Fredoka via global defaults.
+    display:       "[font-family:'Playfair_Display',serif] italic text-ink tracking-tight",
+
     body:          "text-ink",
-    meta:          "text-[#5F4F40]",
-    cover:         "bg-[#F4ECDF] border-[3px] border-double border-ink/40",
-    coverInk:      "font-display text-ink",
-    eyebrow:       "font-display italic text-ink/70 text-[13px] normal-case tracking-normal",
-    accent:        "bg-cream-2 text-ink border border-ink/20",
+    meta:          "text-[#5F4F40] italic tracking-wide",
+
+    // Cover stays cream — reads as "white paper laid on parchment"
+    // when there's no uploaded image. User-uploaded covers / AI-
+    // generated / pasted-link covers all still work, untouched.
+    cover:         "bg-cream border border-ink/30",
+    coverInk:      "[font-family:'Playfair_Display',serif] italic text-ink",
+
+    eyebrow:       "[font-family:'Playfair_Display',serif] italic text-ink/70 text-[13px]",
+    accent:        "bg-cream-2 text-ink",
     surface:       "bg-cream",
     surfaceBorder: "border-ink/15",
     label:         "Literary",
-    mood:          "magazine, serif",
+    mood:          "parchment, serif",
     category:      "vibes",
+
+    fontDisplay: {
+      googleFontsUrl:
+        "https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap",
+      fontFamily: '"Playfair Display", serif',
+    },
   },
 
   digital: {
     root:          "bg-[#F5F5F1]",
-    display:       "font-body font-bold text-ink tracking-tight",
-    body:          "text-ink",
+    // Digital is the one theme that fully commits to a mono
+    // aesthetic — every text slot uses font-mono so the trip page
+    // reads as a coherent terminal/retro surface instead of mixing
+    // Fredoka headings with mono eyebrows.
+    display:       "font-mono uppercase text-ink tracking-tight font-semibold",
+    body:          "font-mono text-ink",
     meta:          "font-mono text-muted text-xs",
     cover:         "bg-[#1A2520]",
     coverInk:      "font-mono uppercase text-[#7DDDB1] tracking-tight",
@@ -164,7 +213,7 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
     meta:          "text-[#54667A]",
     cover:         "bg-gradient-to-b from-[#CCDCEA] via-[#E8EEF5] to-[#F0F4F8]",
     coverInk:      "font-display text-[#1F3447]",
-    eyebrow:       "text-[#2A5C82] tracking-[0.2em] uppercase font-semibold text-[11px]",
+    eyebrow:       "font-display text-[#2A5C82] tracking-[0.2em] uppercase font-semibold text-[11px]",
     accent:        "bg-[#CCDCEA] text-[#1F3447]",
     surface:       "bg-white/70 backdrop-blur-sm",
     surfaceBorder: "border-[#D9E3ED]",
@@ -184,7 +233,7 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
     coverInk:      "font-display text-[#5C1F2A]",
     // Eyebrow pink (#C56A7E) was a hair under 4.5:1 on pink-cream.
     // Deepen for clear AA contrast.
-    eyebrow:       "text-[#9F3A52] tracking-[0.22em] uppercase font-bold text-[11px]",
+    eyebrow:       "font-display text-[#9F3A52] tracking-[0.22em] uppercase font-bold text-[11px]",
     accent:        "bg-[#FFD5E5] text-[#5C1F2A]",
     surface:       "bg-[#FFF9F7]",
     surfaceBorder: "border-[#EFD5D0]",
@@ -202,7 +251,7 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
     meta:          "text-[#4E5E50]",
     cover:         "bg-gradient-to-br from-[#C8D4BA] via-[#DFE8D2] to-[#EFF2EB]",
     coverInk:      "font-display text-[#1F3526]",
-    eyebrow:       "text-[#385140] tracking-[0.22em] uppercase font-semibold text-[11px]",
+    eyebrow:       "font-display text-[#385140] tracking-[0.22em] uppercase font-semibold text-[11px]",
     accent:        "bg-[#DFE8D2] text-[#1F3526]",
     surface:       "bg-[#F6F8F2]",
     surfaceBorder: "border-[#D5DCC9]",
@@ -219,7 +268,7 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
     meta:          "text-[#8B96AE]",
     cover:         "bg-gradient-to-b from-[#0A1326] via-[#1A2A4A] to-[#2C3E66]",
     coverInk:      "font-display text-[#F3C96A]",
-    eyebrow:       "text-[#F3C96A] tracking-[0.3em] uppercase font-bold text-[10px]",
+    eyebrow:       "font-display text-[#F3C96A] tracking-[0.3em] uppercase font-bold text-[10px]",
     accent:        "bg-[#1A2A4A] text-[#F3C96A] border border-[#F3C96A]/30",
     surface:       "bg-[#1A2438]",
     surfaceBorder: "border-[#2A3550]",
@@ -235,7 +284,7 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
     meta:          "text-[#7B8C7E]",
     cover:         "bg-gradient-to-b from-[#0A1812] via-[#163024] to-[#264838]",
     coverInk:      "font-display text-[#C8E6BB]",
-    eyebrow:       "text-[#C8E6BB] tracking-[0.25em] uppercase font-bold text-[10px]",
+    eyebrow:       "font-display text-[#C8E6BB] tracking-[0.25em] uppercase font-bold text-[10px]",
     accent:        "bg-[#163024] text-[#C8E6BB]",
     surface:       "bg-[#162820]",
     surfaceBorder: "border-[#2A3F32]",
@@ -251,7 +300,7 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
     meta:          "text-[#7A7560]",
     cover:         "bg-[#0A0A0A] border-2 border-[#E5DDBB]/30",
     coverInk:      "font-display tracking-[0.06em] text-[#E5DDBB]",
-    eyebrow:       "text-[#E5DDBB] tracking-[0.4em] uppercase font-bold text-[10px]",
+    eyebrow:       "font-display text-[#E5DDBB] tracking-[0.4em] uppercase font-bold text-[10px]",
     accent:        "bg-[#1A1810] text-[#E5DDBB] border border-[#E5DDBB]/30",
     surface:       "bg-[#141410]",
     surfaceBorder: "border-[#2A2820]",
@@ -272,7 +321,7 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
     cover:         "bg-gradient-to-br from-[var(--color-gold)] via-[#C18A2E] to-green",
     // Cream ink with a layered shadow so it reads across gold→amber→green.
     coverInk:      "font-display text-cream drop-shadow-[0_1px_2px_rgba(20,30,20,0.55)] [text-shadow:0_0_12px_rgba(40,30,10,0.45)]",
-    eyebrow:       "text-[#8B5A1E] tracking-[0.3em] uppercase font-bold text-[11px]",
+    eyebrow:       "font-display text-[#8B5A1E] tracking-[0.3em] uppercase font-bold text-[11px]",
     accent:        "bg-[var(--color-gold)]/30 text-[#5C3F12]",
     surface:       "bg-[#FFF8E8]",
     surfaceBorder: "border-[#E8D5A8]",
@@ -288,7 +337,7 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
     meta:          "text-[#9F87C9]",
     cover:         "bg-[#0B0420] bg-[radial-gradient(circle_at_30%_30%,rgba(255,69,159,0.5),transparent_50%),radial-gradient(circle_at_70%_70%,rgba(0,255,201,0.4),transparent_50%)]",
     coverInk:      "font-body font-bold uppercase text-[#FF459F] tracking-widest",
-    eyebrow:       "text-[#00FFC9] tracking-[0.4em] uppercase font-bold text-[10px]",
+    eyebrow:       "font-display text-[#00FFC9] tracking-[0.4em] uppercase font-bold text-[10px]",
     accent:        "bg-[#FF459F]/20 text-[#FF459F] border border-[#FF459F]/40",
     surface:       "bg-[#160830]",
     surfaceBorder: "border-[#3A1A60]",
@@ -308,7 +357,7 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
     // hues without fighting the gradient.
     cover:         "bg-gradient-to-br from-[#E8F0C7] via-[#FFD7DD] to-[#C8E6D2]",
     coverInk:      "font-display text-[#264028] drop-shadow-[0_1px_2px_rgba(255,255,255,0.6)]",
-    eyebrow:       "text-[#A93D5A] tracking-[0.22em] uppercase font-bold text-[11px]",
+    eyebrow:       "font-display text-[#A93D5A] tracking-[0.22em] uppercase font-bold text-[11px]",
     accent:        "bg-[#E8F0C7] text-[#264028]",
     surface:       "bg-[#F8FBF2]",
     surfaceBorder: "border-[#DCE5D1]",
@@ -328,7 +377,7 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
     // Layer two shadows: a tight dark one (for crispness on the
     // yellow stop) + a soft glow (for the orange/pink stops).
     coverInk:      "font-display text-white drop-shadow-[0_1px_2px_rgba(60,30,0,0.55)] [text-shadow:0_0_12px_rgba(60,30,0,0.45)]",
-    eyebrow:       "text-[#B53F00] tracking-[0.25em] uppercase font-bold text-[11px]",
+    eyebrow:       "font-display text-[#B53F00] tracking-[0.25em] uppercase font-bold text-[11px]",
     accent:        "bg-[#FFE0A2] text-[#6B380F]",
     surface:       "bg-[#FFFBF0]",
     surfaceBorder: "border-[#F2DCB0]",
@@ -344,7 +393,7 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
     meta:          "text-[#7A5235]",
     cover:         "bg-gradient-to-br from-[#D8722A] via-[#A8421A] to-[#5F2E1A]",
     coverInk:      "font-display text-[#F7E0BC]",
-    eyebrow:       "text-[#8B3110] tracking-[0.25em] uppercase font-bold text-[11px]",
+    eyebrow:       "font-display text-[#8B3110] tracking-[0.25em] uppercase font-bold text-[11px]",
     accent:        "bg-[#E8C8A0] text-[#4A210C]",
     surface:       "bg-[#FCF6EC]",
     surfaceBorder: "border-[#E0CCB0]",
@@ -360,7 +409,7 @@ const STYLES: Record<TripTheme, ThemeStyle> = {
     meta:          "text-[#54667E]",
     cover:         "bg-gradient-to-b from-[#D5E2EE] via-[#E8EEF5] to-[#F0F4F8] border border-[#283F58]/15",
     coverInk:      "font-display text-[#1B2F44]",
-    eyebrow:       "text-[#365F8B] tracking-[0.28em] uppercase font-bold text-[10px]",
+    eyebrow:       "font-display text-[#365F8B] tracking-[0.28em] uppercase font-bold text-[10px]",
     accent:        "bg-[#D5E2EE] text-[#1B2F44]",
     surface:       "bg-white/80 backdrop-blur-sm",
     surfaceBorder: "border-[#D5DDE5]",

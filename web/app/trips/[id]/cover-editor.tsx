@@ -13,6 +13,7 @@
 
 import { useRef, useState } from "react";
 import { useGeneration } from "@/lib/generation/provider";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 
 type Mode = "upload" | "generate" | "url";
 
@@ -29,6 +30,7 @@ export default function CoverEditor({
   onClose: () => void;
   onSave: (newUrl: string | null) => Promise<void>;
 }) {
+  useBodyScrollLock();
   const generation = useGeneration();
   const [mode, setMode] = useState<Mode>("upload");
   const [busy, setBusy] = useState(false);
@@ -126,7 +128,7 @@ export default function CoverEditor({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-ink/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+      className="fixed inset-0 z-50 bg-ink/75 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4"
       role="dialog" aria-modal="true"
       onClick={onClose}
     >

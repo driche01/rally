@@ -1,20 +1,18 @@
 /**
  * Rally wordmark — canonical "● RALLY" mark.
  *
- * Green filled dot + uppercase Georgia "RALLY" with letterspacing.
- * Identical spec to the mobile app's BrandMark
- * (src/components/ui/BrandMark.tsx) — the two platforms render the
- * same identifier pixel-for-pixel so users see one Rally, not two.
+ * Green filled dot + uppercase Fredoka "RALLY" with letterspacing.
  *
- *   font-family: Georgia, "Times New Roman", serif
+ *   font-family: var(--font-display)  →  Fredoka (Google Fonts)
  *   font-weight: 700
  *   text-transform: uppercase
  *   letter-spacing: 1px
  *   color: --color-green
  *
- * Georgia is system-installed on every target platform (macOS, iOS,
- * Windows, Android, ChromeOS) so the wordmark renders consistent
- * without bundling a webfont.
+ * Fredoka is loaded via @import in globals.css. Falls back to Inter →
+ * system sans while the webfont is fetching. The mobile app's
+ * BrandMark renders Georgia; once we add Fredoka there too, the two
+ * platforms will be identical again.
  *
  * NEVER render the wordmark as a raw <span>Rally</span> or
  * <span>rally</span>. Lower/title case forms are off-brand and
@@ -27,10 +25,14 @@
  *   <RallyLogo variant="cream"> for photo/dark backgrounds
  *   <RallyLogo asLink={false}> passive brand mark, no link
  *
- * Sizes (dot diameter / fontSize / gap, in px — mirrors mobile):
- *   sm  →  8 / 16 / 5
- *   md  → 10 / 20 / 6   (default)
- *   lg  → 14 / 28 / 8
+ * Sizes (dot diameter / fontSize / gap / tracking, in px):
+ *   sm  →  8 / 16 / 5 / 0.5
+ *   md  → 10 / 20 / 6 / 0.5  (default)
+ *   lg  → 14 / 28 / 8 / 1
+ *
+ * Tracking is tuned for Fredoka's wider/rounder letterforms — Georgia
+ * needed 1px across the board, Fredoka reads tighter so sm/md drop
+ * to 0.5px and only lg keeps the full 1px for hero presence.
  */
 
 import Link from "next/link";
@@ -47,10 +49,10 @@ interface LogoProps {
   className?: string;
 }
 
-const SIZE_MAP: Record<RallyLogoSize, { dot: number; font: number; gap: number }> = {
-  sm: { dot: 8,  font: 16, gap: 5 },
-  md: { dot: 10, font: 20, gap: 6 },
-  lg: { dot: 14, font: 28, gap: 8 },
+const SIZE_MAP: Record<RallyLogoSize, { dot: number; font: number; gap: number; tracking: number }> = {
+  sm: { dot: 8,  font: 16, gap: 5, tracking: 0.5 },
+  md: { dot: 10, font: 20, gap: 6, tracking: 0.5 },
+  lg: { dot: 14, font: 28, gap: 8, tracking: 1 },
 };
 
 export default function RallyLogo({
@@ -59,7 +61,7 @@ export default function RallyLogo({
   asLink = true,
   className = "",
 }: LogoProps) {
-  const { dot, font, gap } = SIZE_MAP[size];
+  const { dot, font, gap, tracking } = SIZE_MAP[size];
   const color =
     variant === "cream" ? "var(--color-cream)" : "var(--color-green)";
 
@@ -82,11 +84,11 @@ export default function RallyLogo({
       />
       <span
         style={{
-          fontFamily: 'Georgia, "Times New Roman", serif',
+          fontFamily: "var(--font-display)",
           fontWeight: 700,
           textTransform: "uppercase",
           fontSize: font,
-          letterSpacing: "1px",
+          letterSpacing: `${tracking}px`,
           lineHeight: 1,
           color,
         }}

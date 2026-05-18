@@ -23,6 +23,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import type { Trip, RsvpStatus } from "@shared/types";
 import { themeClass } from "@/lib/themes";
+import CreateTripButton from "@/lib/brand/create-trip-button";
 
 export interface DashboardTrip {
   trip: Trip;
@@ -32,14 +33,13 @@ export interface DashboardTrip {
   myStatus: RsvpStatus | null;
 }
 
-type Bucket = "upcoming" | "invites" | "hosting" | "attended" | "past";
+type Bucket = "upcoming" | "hosting" | "attending" | "past";
 
 const BUCKETS: { id: Bucket; label: string }[] = [
-  { id: "upcoming", label: "Upcoming" },
-  { id: "invites",  label: "Invites" },
-  { id: "hosting",  label: "Hosting" },
-  { id: "attended", label: "Attended" },
-  { id: "past",     label: "All past" },
+  { id: "upcoming",  label: "Upcoming"  },
+  { id: "hosting",   label: "Hosting"   },
+  { id: "attending", label: "Attending" },
+  { id: "past",      label: "Past"      },
 ];
 
 export default function TripsDashboard({
@@ -52,20 +52,23 @@ export default function TripsDashboard({
   trips: DashboardTrip[];
 }) {
   const [bucket, setBucket] = useState<Bucket>("upcoming");
-  const [query, setQuery]   = useState("");
 
   const today = todayISO();
 
   const counts = useMemo(() => bucketCounts(trips, today), [trips, today]);
 
-  const visible = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const base = filterByBucket(trips, bucket, today);
-    if (!q) return base;
-    return base.filter((t) =>
-      (t.trip.name + " " + (t.trip.destination ?? "")).toLowerCase().includes(q),
-    );
-  }, [trips, bucket, today, query]);
+  // Pending invites no longer have a dedicated bucket — they merge
+  // into Upcoming. We still surface the count in the greeting line +
+  // a red dot on the card itself so they don't get lost.
+  const pendingInvites = useMemo(
+    () => countPendingInvites(trips, today),
+    [trips, today],
+  );
+
+  const visible = useMemo(
+    () => filterByBucket(trips, bucket, today),
+    [trips, bucket, today],
+  );
 
   const isEmpty = trips.length === 0;
   const bucketEmpty = !isEmpty && visible.length === 0;
@@ -79,36 +82,27 @@ export default function TripsDashboard({
       <p className="text-muted mb-6">
         {isEmpty
           ? "You haven't planned a trip yet — kick one off below."
-          : counts.upcoming === 0 && counts.invites === 0
-            ? `Nothing on the calendar. You've got ${counts.past} past trip${counts.past === 1 ? "" : "s"} in the archive.`
+          : counts.upcoming === 0 && pendingInvites === 0
+            ? "Nothing on the calendar. Plan one below."
             : <>You have <strong className="text-ink">{counts.upcoming}</strong> upcoming trip{counts.upcoming === 1 ? "" : "s"}
-                {counts.invites > 0 && <> and <strong className="text-ink">{counts.invites}</strong> invite{counts.invites === 1 ? "" : "s"} waiting</>}.
+                {pendingInvites > 0 && <> and <strong className="text-ink">{pendingInvites}</strong> invite{pendingInvites === 1 ? "" : "s"} waiting</>}.
               </>}
       </p>
 
-      {/* ─── Filter pills + search ─────────────────────────────── */}
-      {/* Sticky to the top of the scroll viewport. When the user
-          scrolls past the greeting, this bar pins under the
-          AppHeader and stays accessible for filtering + search
-          without scrolling back up. The bg-cream/95 backdrop-blur
-          gives a clean separator over the cards behind it; the
-          negative -mx + px combo lets the bar visually bleed to
-          the edges of the page padding while keeping its content
-          aligned to the page gutter. */}
+      {/* ─── Filter pills ──────────────────────────────────────── */}
+      {/* Sticky to the top of the scroll viewport so the pills stay
+          accessible as the user scrolls through cards. The bg-cream/95
+          backdrop-blur gives a clean separator over the cards behind
+          it; the negative -mx + px combo bleeds the bar to the page
+          edges while keeping content aligned to the gutter.
+          2026-05-17: search bar dropped — for the typical user with
+          <20 trips, scanning a 3-pill filter beats typing. */}
       {!isEmpty && (
-        <div className="sticky top-0 z-20 -mx-5 sm:-mx-8 px-5 sm:px-8 pt-3 pb-3 mb-3 bg-cream/95 backdrop-blur-sm border-b border-line/60 grid gap-3 sm:flex sm:flex-wrap sm:items-center sm:gap-2">
-          <SearchInput value={query} onChange={setQuery} />
-          {/* Mobile: pills are a single horizontal-scrolling strip
-              (no wrap) so "All past" never gets orphaned on its own
-              line. Bleed the edges with -mx-5 sm:-mx-0 so the scroll
-              touches the screen edges. sm+: revert to the existing
-              flex-wrap layout where everything inlines next to the
-              search box. */}
-          <div className="-mx-5 sm:mx-0 px-5 sm:px-0 overflow-x-auto sm:overflow-visible flex flex-nowrap sm:flex-wrap sm:contents items-center gap-2">
+        <div className="sticky top-0 z-20 -mx-5 sm:-mx-8 px-5 sm:px-8 pt-3 pb-3 mb-3 bg-cream/95 backdrop-blur-sm border-b border-line/60">
+          <div className="-mx-5 sm:mx-0 px-5 sm:px-0 overflow-x-auto flex flex-nowrap items-center gap-2">
             {BUCKETS.map((b) => {
               const n = counts[b.id];
               const active = bucket === b.id;
-              const hasUnread = b.id === "invites" && n > 0;
               return (
                 <button
                   key={b.id}
@@ -126,12 +120,6 @@ export default function TripsDashboard({
                       {n}
                     </span>
                   )}
-                  {hasUnread && !active && (
-                    <span
-                      aria-hidden="true"
-                      className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-orange ring-2 ring-cream"
-                    />
-                  )}
                 </button>
               );
             })}
@@ -139,30 +127,11 @@ export default function TripsDashboard({
         </div>
       )}
 
-      {/* Live search feedback — visible whenever a query is active so
-          the user has a clear "yes, the filter applied" cue. Renders
-          right above the grid; counts update as they type. (#3) */}
-      {!isEmpty && query.trim() && (
-        <p className="text-xs text-muted mb-3" aria-live="polite">
-          Showing <strong className="text-ink">{visible.length}</strong> of{" "}
-          {trips.length} trip{trips.length === 1 ? "" : "s"} for{" "}
-          <strong className="text-ink">&ldquo;{query.trim()}&rdquo;</strong>
-          {" — "}
-          <button
-            type="button"
-            onClick={() => setQuery("")}
-            className="underline underline-offset-2 hover:text-ink"
-          >
-            clear
-          </button>
-        </p>
-      )}
-
       {/* ─── Grid / empty state ────────────────────────────────── */}
       {isEmpty ? (
         <EmptyFirstTrip greetingName={greetingName} />
       ) : bucketEmpty ? (
-        <BucketEmpty bucket={bucket} query={query} />
+        <BucketEmpty bucket={bucket} />
       ) : (
         <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {visible.map((t) => (
@@ -176,43 +145,21 @@ export default function TripsDashboard({
 
 // ─── Sub-components ─────────────────────────────────────────────
 
-function SearchInput({
-  value, onChange,
-}: { value: string; onChange: (v: string) => void }) {
-  return (
-    <div className="relative w-full sm:w-44">
-      <span
-        aria-hidden="true"
-        className="absolute left-3 top-1/2 -translate-y-1/2 text-muted"
-      >
-        🔍
-      </span>
-      <input
-        type="search"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        // Enter dismisses the keyboard on mobile (matches the
-        // mobile-app feel — the filter already applied while typing,
-        // there's no submit to wait for).
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            (e.target as HTMLInputElement).blur();
-          }
-        }}
-        placeholder="Search trips"
-        className="h-9 w-full pl-8 pr-3 rounded-full bg-card border border-line text-sm text-ink placeholder:text-muted focus:border-green focus:outline-none"
-      />
-    </div>
-  );
-}
-
 function TripCard({ dt, today }: { dt: DashboardTrip; today: string }) {
   const { trip } = dt;
   const t = themeClass(trip.theme);
   const past = isPast(trip, today);
   const cancelled = !!trip.cancelled_at;
   const dateLabel = formatCardDate(trip);
+  // Pending invite = on the respondent list, never RSVPed, not a
+  // host or cohost. We tag these with a red dot in the top-right of
+  // the card so they don't get lost in the merged Upcoming list now
+  // that the dedicated Invites pill is gone.
+  const pendingInvite =
+    !past && !cancelled
+    && dt.isInvitee
+    && !dt.isHost && !dt.isCohost
+    && (dt.myStatus === null || dt.myStatus === "invited");
   // Hosts + cohosts → planner dashboard; pure invitees → public
   // invite view (designed for them, no editing chrome).
   const href = (dt.isHost || dt.isCohost)
@@ -249,6 +196,17 @@ function TripCard({ dt, today }: { dt: DashboardTrip; today: string }) {
           </span>
         )}
 
+        {/* Pending-invite red dot (top-right). Notification-style cue
+            that this trip needs your attention. Pairs with the gold
+            "Invited" StatusChip in the bottom-right corner — together
+            they replace the lost "Invites" pill + filter dot. */}
+        {pendingInvite && (
+          <span
+            aria-hidden="true"
+            className="absolute top-1.5 right-1.5 sm:top-3 sm:right-3 h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full bg-error ring-2 ring-cream"
+          />
+        )}
+
         {/* Status chip (bottom-right) */}
         <StatusChip dt={dt} past={past} cancelled={cancelled} />
       </div>
@@ -269,17 +227,32 @@ function StatusChip({
   let label = "";
   let cls = "bg-ink/80 text-cream";
 
+  // Cancelled wins regardless of date or role — the trip isn't
+  // happening, that's the most important fact to surface.
   if (cancelled) {
     label = "Cancelled";
     cls = "bg-orange text-cream";
   } else if (dt.isHost) {
-    label = "Hosting";
+    label = past ? "Hosted" : "Hosting";
     cls = "bg-green text-cream";
   } else if (dt.isCohost) {
-    label = "Cohost";
+    label = past ? "Cohosted" : "Cohost";
     cls = "bg-green text-cream";
+  } else if (past) {
+    // For past trips with no host/cohost role, collapse all the
+    // future-tense states into two clear past-tense labels so the
+    // Past pill reads cleanly: did I go, or didn't I?
+    //   "going"  → Attended (bg-green-soft, soft success)
+    //   anything else → Invited (neutral, was-on-the-list but didn't make it)
+    if (dt.myStatus === "going") {
+      label = "Attended";
+      cls = "bg-green-soft text-green";
+    } else {
+      label = "Invited";
+      cls = "bg-card text-muted border border-line";
+    }
   } else if (dt.myStatus === "going") {
-    label = past ? "Went" : "👍 Going";
+    label = "👍 Going";
     cls = "bg-green text-cream";
   } else if (dt.myStatus === "maybe") {
     label = "Maybe";
@@ -318,41 +291,31 @@ function EmptyFirstTrip({ greetingName }: { greetingName: string }) {
         Pick a destination, lock the dates, and Rally handles the
         rest — invites, RSVPs, itinerary, lodging, the works.
       </p>
-      <Link
-        href="/trips/new"
+      <CreateTripButton
         className="inline-flex h-12 px-6 items-center rounded-full bg-green text-cream font-bold hover:bg-green-2 active:scale-95 transition-transform"
       >
         + Start a trip
-      </Link>
+      </CreateTripButton>
     </div>
   );
 }
 
-function BucketEmpty({ bucket, query }: { bucket: Bucket; query: string }) {
-  if (query) {
-    return (
-      <p className="text-muted text-sm py-8">
-        No trips matching <strong className="text-ink">&ldquo;{query}&rdquo;</strong> in this bucket.
-      </p>
-    );
-  }
+function BucketEmpty({ bucket }: { bucket: Bucket }) {
   const copy: Record<Bucket, string> = {
-    upcoming: "Nothing on the calendar yet.",
-    invites:  "No pending invites — you're all caught up.",
-    hosting:  "You're not hosting any trips yet. Start one to fix that.",
-    attended: "No past trips you've been to. The first one's the hardest.",
-    past:     "No archived trips yet.",
+    upcoming:  "Nothing on the calendar yet.",
+    hosting:   "You're not hosting any trips yet. Start one to fix that.",
+    attending: "Nothing on your schedule as a guest yet — RSVP yes to a trip and it'll show up here.",
+    past:      "No past trips yet. They'll show up here once they wrap.",
   };
   return (
     <div className="py-10 text-center">
       <p className="text-muted text-sm mb-4">{copy[bucket]}</p>
       {(bucket === "hosting" || bucket === "upcoming") && (
-        <Link
-          href="/trips/new"
+        <CreateTripButton
           className="inline-flex h-10 px-5 items-center rounded-full bg-green text-cream font-bold text-sm hover:bg-green-2 active:scale-95 transition-transform"
         >
           + Start a trip
-        </Link>
+        </CreateTripButton>
       )}
     </div>
   );
@@ -383,30 +346,52 @@ function filterByBucket(
     const cancelled = !!dt.trip.cancelled_at;
     switch (bucket) {
       case "upcoming":
+        // Every future / undated, non-cancelled trip. Pending invites
+        // merge here (with a red dot on the card) since the dedicated
+        // Invites pill is gone.
         return !past && !cancelled;
-      case "invites":
-        // Pure "invited" = on the respondent list but never RSVPed.
-        return !past && !cancelled && dt.isInvitee
-          && (dt.myStatus === null || dt.myStatus === "invited")
-          && !dt.isHost && !dt.isCohost;
       case "hosting":
+        // Anything I host or cohost — past or future. The cards
+        // themselves show "Went" / cancelled / etc. status so the
+        // bucket doesn't need to gate on time.
         return dt.isHost || dt.isCohost;
-      case "attended":
-        return past && dt.myStatus === "going";
+      case "attending":
+        // Future trips I've RSVPed "going" to as a guest. Excludes
+        // host/cohost so the count doesn't double up with the Hosting
+        // pill (planner-self-respondent has rsvp_status='going').
+        return !past && !cancelled
+          && dt.myStatus === "going"
+          && !dt.isHost && !dt.isCohost;
       case "past":
-        return past;
+        // Guest-perspective history: past or cancelled trips where I
+        // wasn't the host/cohost. Past hosted trips live under
+        // Hosting (no double-counting). The card chip differentiates:
+        // "Attended" (went), "Invited" (didn't go), "Cancelled".
+        return (past || cancelled) && !dt.isHost && !dt.isCohost;
     }
   });
 }
 
 function bucketCounts(trips: DashboardTrip[], today: string): Record<Bucket, number> {
   return {
-    upcoming: filterByBucket(trips, "upcoming", today).length,
-    invites:  filterByBucket(trips, "invites",  today).length,
-    hosting:  filterByBucket(trips, "hosting",  today).length,
-    attended: filterByBucket(trips, "attended", today).length,
-    past:     filterByBucket(trips, "past",     today).length,
+    upcoming:  filterByBucket(trips, "upcoming",  today).length,
+    hosting:   filterByBucket(trips, "hosting",   today).length,
+    attending: filterByBucket(trips, "attending", today).length,
+    past:      filterByBucket(trips, "past",      today).length,
   };
+}
+
+/** Pending invites — formerly its own bucket. Now folded into
+ *  Upcoming but still useful as a top-of-page nudge ("you have N
+ *  invites waiting"). */
+function countPendingInvites(trips: DashboardTrip[], today: string): number {
+  return trips.filter((dt) => {
+    const past = isPast(dt.trip, today);
+    const cancelled = !!dt.trip.cancelled_at;
+    return !past && !cancelled && dt.isInvitee
+      && !dt.isHost && !dt.isCohost
+      && (dt.myStatus === null || dt.myStatus === "invited");
+  }).length;
 }
 
 function formatCardDate(trip: Trip): string {

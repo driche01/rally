@@ -18,7 +18,7 @@
  */
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { themeClass } from "@/lib/themes";
 import { EditableText } from "@/lib/editable";
 import { useGeneration } from "@/lib/generation/provider";
@@ -30,6 +30,10 @@ interface CoverFields {
   name:            string;
   cover_image_url: string | null;
   theme:           Trip["theme"];
+  // Optional date hints — themes with a CoverArt component (e.g.
+  // Literary) use these to render issue dates, season callouts, etc.
+  start_date?:     string | null;
+  end_date?:       string | null;
 }
 
 interface HeaderFields {
@@ -129,13 +133,26 @@ export function EditableCover({
           className={`${FRAME} ${t.cover} group ${canEdit ? "cursor-pointer" : ""}`}
           aria-label={canEdit ? "Add cover image" : undefined}
         >
-          <div className="h-full flex items-center justify-center px-6">
-            <span className={`text-3xl sm:text-4xl text-center ${t.coverInk}`}>
-              {initial.name}
-            </span>
-          </div>
+          {t.CoverArt ? (
+            // Theme owns the entire composition — coverInk + the
+            // default centered-name overlay are skipped. The theme's
+            // `cover` classes still provide the container (border,
+            // background tone, overflow-hidden), so the CoverArt
+            // component just paints inside.
+            <t.CoverArt
+              tripName={initial.name}
+              startDate={initial.start_date ?? null}
+              endDate={initial.end_date ?? null}
+            />
+          ) : (
+            <div className="h-full flex items-center justify-center px-6">
+              <span className={`text-3xl sm:text-4xl text-center ${t.coverInk}`}>
+                {initial.name}
+              </span>
+            </div>
+          )}
           {canEdit && (
-            <span className="absolute bottom-3 right-3 bg-ink/70 text-cream text-xs font-semibold px-3 py-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+            <span className="absolute bottom-3 right-3 bg-ink/70 text-cream text-xs font-semibold px-3 py-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10">
               ✎ Add cover
             </span>
           )}
@@ -167,7 +184,14 @@ export function EditableTripHeader({
   initial: HeaderFields;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // ?new=1 is set by CreateTripButton when redirecting from the
+  // "+ New trip" action. Treat it as "open the name editor on first
+  // paint so the planner starts typing immediately." Stays per-mount
+  // (React state, not URL-derived on every render) so the editor
+  // doesn't re-open after the planner has dismissed it once.
   const [fields, setFields] = useState<HeaderFields>(initial);
+  const [autoEditName] = useState(() => searchParams.get("new") === "1");
   const t = themeClass(fields.theme);
 
   async function patch(p: Partial<HeaderFields>) {
@@ -202,7 +226,12 @@ export function EditableTripHeader({
           placeholder="Trip name"
           onSave={async (v) => { if (v) await patch({ name: v }); }}
           inputClass="text-3xl sm:text-4xl"
-          displayClass="font-display"
+          // displayClass intentionally NOT set to "font-display" — the
+          // outer <h1> carries the theme's `t.display` class, which is
+          // what we want to win (mono for digital, Fredoka One for
+          // every other theme). Hard-coding font-display here would
+          // override the theme and force Fredoka One regardless.
+          autoEdit={autoEditName}
         />
       </h1>
 

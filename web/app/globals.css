@@ -58,21 +58,43 @@
   /* ─── Shadows ───────────────────────────────────────────────────
      Warm-tinted to blend with cream surface. Cool/neutral shadows
      on a warm palette read as "off." The brown-tinted shadow color
-     (#3A2D14) complements cream/card without darkening to gray. */
+     (#3A2D14) complements cream/card without darkening to gray.
+     md was re-tuned 2026-05-16 for surface cards laid over the
+     Literary theme's amber parchment — slightly tighter blur,
+     warmer tint, lower alpha. Still reads correctly on cream-on-
+     cream surfaces in every other theme. */
   --shadow-sm: 0 3px 8px  rgba(58, 45, 20, 0.06);
-  --shadow-md: 0 6px 16px rgba(58, 45, 20, 0.09);
+  --shadow-md: 0 4px 14px rgba(58, 40, 12, 0.06);
   --shadow-lg: 0 18px 40px rgba(58, 45, 20, 0.14);
 
-  --font-display: "Georgia", "Iowan Old Style", "Apple Garamond", ui-serif, "Times New Roman", serif;
-  --font-body:    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Fredoka One", "Fredoka", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-body:    "Fredoka", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+/* Fredoka One = bubbly chunky display (one weight only, 400).
+   Fredoka = the modern variable family (400/500/600/700) — used for
+   body + as the fallback when a display element asks for a weight
+   Fredoka One doesn't ship. font-synthesis: none below prevents the
+   browser from faking bold for Fredoka One; the cascade walks to
+   Fredoka instead. */
+@import url("https://fonts.googleapis.com/css2?family=Fredoka+One&family=Fredoka:wght@400;500;600;700&display=swap");
 
 html, body {
   background-color: var(--color-cream);
   color: var(--color-ink);
   font-family: var(--font-body);
+  /* Fredoka baseline weight. 600 is the deliberately-chunky body
+     setting — every paragraph + form input + button label inherits
+     this unless it specifies its own font-weight. Display headlines
+     using Fredoka One render at its only weight (400) regardless
+     of what's requested, so this knob only affects body text. */
+  font-weight: 600;
+  /* Suppress synthetic bold/italic. When a display element uses
+     Fredoka One (which only ships weight 400) but asks for 700, we
+     don't want the browser faking a heavy stroke — it looks awful
+     on a thick rounded font. The cascade walks to Fredoka instead,
+     which has a real 700. */
+  font-synthesis: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   /* Belt-and-suspenders horizontal-overflow guard. Some descendant
@@ -87,6 +109,20 @@ html, body {
 ::selection {
   background-color: var(--color-green-soft);
   color: var(--color-green);
+}
+
+/* Form controls don't inherit font-family from the page by default —
+   every browser falls back to its own UA font on <input>, <textarea>,
+   <select>, and <button>. Without this rule, the auto-opened name
+   editor for a fresh "Untitled trip" rendered in system sans / Times
+   instead of Fredoka, and editing any field caused a visible
+   font-swap mid-edit. Inheriting from the page restores brand
+   consistency across display + edit modes. */
+input,
+textarea,
+select,
+button {
+  font-family: inherit;
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -136,3 +172,10 @@ button:disabled,
 a[aria-disabled="true"] {
   cursor: not-allowed;
 }
+
+/* Literary theme's pilcrow/scan/paper utilities retired 2026-05-16
+   in favor of the dedicated LiteraryCoverArt component
+   (web/lib/themes/literary/CoverArt.tsx). Any future theme that
+   needs heavy CSS hooks should follow that pattern instead — own
+   the composition inside a CoverArt component rather than
+   sprawling `.theme-*` utilities across globals.css. */

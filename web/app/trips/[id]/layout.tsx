@@ -15,6 +15,7 @@ import type { Trip } from "@shared/types";
 import TabNav from "./tabs";
 import { EditableCover, EditableTripHeader } from "./editable-hero";
 import TripActions from "./trip-actions";
+import SaveTripBanner from "./save-trip-banner";
 import GenerationProvider from "@/lib/generation/provider";
 import EffectOverlay from "@/lib/effects/effect-overlay";
 import StylePicker from "./style-picker";
@@ -79,6 +80,14 @@ export default async function TripLayout({
 
   return (
     <main className={`min-h-dvh ${t.root} relative`}>
+      {/* Theme-specific display font — only ship the bytes for the
+          font this theme actually uses. Next.js App Router hoists
+          <link> elements into <head> automatically, so the font
+          streams in the same response as the HTML — no FOUT flicker
+          on first paint, no cost to themes that don't define one. */}
+      {t.fontDisplay && (
+        <link rel="stylesheet" href={t.fontDisplay.googleFontsUrl} />
+      )}
       <ScrollResetOnMount />
       <EffectOverlay effect={trip.effect ?? null} />
       <StylePicker
@@ -88,8 +97,19 @@ export default async function TripLayout({
         currentEffect={trip.effect ?? null}
       />
       <GenerationProvider>
-        <div className="max-w-6xl mx-auto px-6 pt-6 relative">
+        <div className="max-w-7xl mx-auto px-6 pt-6 relative">
           <AppHeader />
+
+          {/* Draft banner — sticky at the top of the trip page until
+              the planner clicks Save. Only renders when status='draft'
+              + canEdit + not cancelled (those gates live inside the
+              component so this call site stays a one-liner). */}
+          <SaveTripBanner
+            tripId={trip.id}
+            status={trip.status}
+            cancelled={Boolean(trip.cancelled_at)}
+            canEdit={canEdit}
+          />
 
 
           {/* 2-column layout on lg+: cover sticks on the left,
@@ -131,7 +151,7 @@ export default async function TripLayout({
             />
           </div>
 
-          <div className="lg:grid lg:grid-cols-[5fr_7fr] lg:gap-10">
+          <div className="lg:grid lg:grid-cols-[7fr_5fr] lg:gap-10">
             <div className="space-y-4 lg:space-y-0 lg:sticky lg:top-0 lg:h-[100dvh] lg:flex lg:flex-col lg:justify-center lg:gap-4 mb-6 lg:mb-0">
               <EditableCover
                 tripId={trip.id}
@@ -140,6 +160,8 @@ export default async function TripLayout({
                   name:            trip.name,
                   cover_image_url: trip.cover_image_url,
                   theme:           trip.theme,
+                  start_date:      trip.start_date,
+                  end_date:        trip.end_date,
                 }}
               />
               {canEdit && (

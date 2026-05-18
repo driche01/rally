@@ -212,6 +212,14 @@ export interface Mutual {
   last_traveled_together_at: string | null;
   created_at: string;
   updated_at: string;
+  // Enriched by /api/mutuals (joined from users + respondents) so the
+  // invite-modal "past trip-mates" list can render a real name + offer
+  // a one-tap "+ Add" instead of showing a raw UUID. Optional because
+  // the underlying mutuals table doesn't store these — the API joins
+  // them in. Mobile / older callers reading the bare table won't see
+  // these fields.
+  name?: string | null;
+  phone?: string | null;
 }
 
 // ─── SMS log (reusing thread_messages — see Q5) ───────────────────

@@ -88,6 +88,14 @@ export async function PATCH(
     if (e && !ALLOWED_EFFECTS.has(e)) return jsonErr(400, "invalid_effect");
     patch.effect = e;
   }
+  if ("status" in body) {
+    // The DB CHECK still allows 'closed' as a legacy value, but the
+    // app-layer enum is narrowed to active/draft — saving a draft
+    // (status: 'active') is the promotion flow used by the SaveTripBanner.
+    const s = strOrNull(body.status);
+    if (s !== "active" && s !== "draft") return jsonErr(400, "invalid_status");
+    patch.status = s;
+  }
 
   // Date-coherence validation.
   if (patch.start_date && patch.end_date && (patch.start_date as string) > (patch.end_date as string)) {
