@@ -474,3 +474,98 @@ Per CLAUDE.md hard rule #1: no DROPs in active development. If migration 135 or 
 - [ ] Verification queries are well-defined.
 
 **Human approval required before running.** When you sign off, I'll execute the migrations one at a time via `supabase db query --linked < supabase/migrations/135_*.sql` (etc.) and run the verification queries between each.
+
+---
+
+## Addendum — 2026-05-18 (alpha: web destination autocomplete)
+
+**Status:** **DDL preview only — nothing has been executed.** Awaiting human sign-off per hard rule #3.
+**Why:** Wire Google Places autocomplete into the web destination editor (mobile already has it). Stable `place_id` enables future "fetch place details" / "find nearest airport" lookups without re-geocoding, and unblocks the `suggest-flights` Gemini endpoint that fails (`no_options`) when given vague freeform destinations.
+**Reads from:** `SCHEMA_REPORT.md` 2026-05-18 addendum + existing mobile component `src/components/ui/PlacesAutocompleteInput.tsx` + edge function `supabase/functions/places-autocomplete/index.ts`.
+
+### Single migration: `150_alpha_trips_destination_place_id.sql`
+
+```sql
+-- 150_alpha_trips_destination_place_id.sql
+-- Add Google Places stable identifier to trips.
+-- Additive only; existing rows get NULL; no constraints, no indexes.
+-- Idempotent via IF NOT EXISTS.
+
+BEGIN;
+
+ALTER TABLE public.trips
+  ADD COLUMN IF NOT EXISTS destination_place_id text NULL;
+
+COMMENT ON COLUMN public.trips.destination_place_id IS
+  'Google Places stable place_id for the trip destination. Set by the '
+  'web + mobile autocomplete on selection. NULL = freeform destination '
+  'never reconciled to a Google Place (legacy rows + manual edits).';
+
+COMMIT;
+```
+
+### Compliance against hard rule #1 (additive only)
+
+| Operation | Used? | Status |
+|---|---|---|
+| `ADD COLUMN` (nullable, no default) | ✅ | allowed |
+| `DROP COLUMN` | — | not used |
+| `RENAME COLUMN` | — | not used |
+| `ALTER COLUMN ... TYPE` | — | not used |
+| `ALTER COLUMN ... NOT NULL` | — | not used |
+| `DROP CONSTRAINT` | — | not used |
+| Adding CHECK | — | not used (place_id formats vary across Google's API history; freeform text is safer) |
+| Adding INDEX | — | not used (no query pattern justifies it yet — YAGNI) |
+| `CREATE TABLE` | — | not used |
+| RLS policy change | — | not used (existing trips RLS policies cover the new column automatically) |
+
+✅ Fully additive. Safe to re-run (`IF NOT EXISTS` guards against duplicate-column errors).
+
+### Verification queries to run after migration
+
+```sql
+-- 1. Confirm the column landed
+SELECT column_name, data_type, is_nullable
+FROM   information_schema.columns
+WHERE  table_schema = 'public' AND table_name = 'trips'
+  AND  column_name  = 'destination_place_id';
+-- expected: 1 row, text, YES
+
+-- 2. Confirm existing rows are NULL on the new column (no surprise backfill)
+SELECT count(*) FILTER (WHERE destination_place_id IS NULL) AS null_count,
+       count(*) FILTER (WHERE destination_place_id IS NOT NULL) AS not_null_count
+FROM   public.trips;
+-- expected: null_count = total trip count, not_null_count = 0
+
+-- 3. Confirm no new CHECK appeared
+SELECT con.conname
+FROM   pg_constraint con
+JOIN   pg_class      cls ON cls.oid = con.conrelid
+WHERE  cls.relname = 'trips' AND con.contype = 'c'
+  AND  pg_get_constraintdef(con.oid) ILIKE '%destination_place_id%';
+-- expected: zero rows
+```
+
+### Downstream code changes (post-migration, no DB impact)
+
+| File | Change |
+|---|---|
+| `shared/types.ts` | Add `destination_place_id?: string \| null` to `Trip` interface |
+| `web/app/api/trips/route.ts` (POST) | Accept `destination_place_id` + `destination_address` on insert |
+| `web/app/api/trips/[id]/route.ts` (PATCH) | Accept `destination_place_id` + `destination_address` on update |
+| `web/lib/api/places.ts` (NEW) | Web wrapper calling the existing `places-autocomplete` edge function |
+| `web/lib/ui/places-autocomplete-input.tsx` (NEW) | React (DOM) port of the mobile component |
+| `web/app/trips/[id]/editable-hero.tsx` | Replace destination `EditableText` with `EditablePlace` (custom) for canEdit mode; falls back to plain text display when not editing |
+| `web/app/api/trips/[id]/travel/suggest-flights/route.ts` | When `destination_address` is set, pass it to the Gemini prompt instead of the short `destination` — fixes the `no_options` ambiguity |
+
+### Sign-off checklist
+
+- [x] Schema inspection complete (SCHEMA_REPORT.md addendum).
+- [x] Pure additive (rule #1).
+- [x] No NULL→NOT NULL transitions, no DROPs, no RENAMEs.
+- [x] Idempotent (`IF NOT EXISTS`).
+- [x] Verification queries defined.
+- [x] RLS automatically covers the new column (no policy change needed).
+- [ ] **Human approval — awaiting sign-off.**
+
+**On approval**: paste the migration block into the Supabase SQL editor → run → paste back the three verification query results → I commit the migration file at `supabase/migrations/150_alpha_trips_destination_place_id.sql` so the migration history matches prod → build the web components.

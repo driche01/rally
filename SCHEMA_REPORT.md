@@ -115,3 +115,32 @@ All tables have RLS enabled in line with the existing convention. Phase C new ta
 See [SCHEMA_PLAN.md](SCHEMA_PLAN.md) for the full DDL of migrations `135_phase_c_trips_cancelled.sql` through `140_phase_c_self_respondent_backfill.sql`.
 
 Plan must be human-signed-off before any DDL runs (hard rule #3).
+
+---
+
+## Addendum — 2026-05-18 (alpha: web destination autocomplete)
+
+**Source:** live Supabase Postgres 17.6, results pasted by human from the Supabase SQL editor on 2026-05-18.
+**Scope:** focused on `public.trips`, specifically the destination-related columns + any CHECK/index constraints that would interfere with adding a place_id column.
+
+### `public.trips` — relevant destination columns (current state)
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `destination` | text | YES | freeform short name (e.g. "Paris") |
+| `destination_address` | text | YES | **already exists** — full address (e.g. "Paris, France"). Populated by mobile via `PlacesAutocompleteInput.onSelectPlace(mainText, fullAddress)`. Web doesn't populate this yet. |
+
+### CHECK constraints involving destination
+
+**None.** No CHECK references `destination`, `destination_address`, or any proposed new column name. New columns can be added cleanly.
+
+### Indexes involving destination
+
+**None.** Current indexes are on `id`, `share_token`, `created_by`, and a partial index `idx_trips_active`. No destination-related indexes.
+
+### Implications for the alpha plan
+
+1. **`destination_address` is already there** — the web autocomplete just needs to populate it from Google's `description` field when the user picks a suggestion. No migration needed for the full-address column.
+2. **`destination_place_id` is genuinely new** — needs an additive ALTER TABLE. See `SCHEMA_PLAN.md`'s 2026-05-18 addendum for the DDL.
+3. **No constraint conflicts** — new column slots in as another `text NULL`, no CHECK, no index needed at alpha scale.
+4. **Backfill is trivial** — all existing rows get NULL on the new column; existing trips can opt in to a real place_id by re-editing destination.

@@ -52,6 +52,8 @@ export async function PATCH(
   const patch: Record<string, unknown> = {};
   if ("name"            in body) patch.name            = strOrNull(body.name);
   if ("destination"     in body) patch.destination     = strOrNull(body.destination);
+  if ("destination_address"  in body) patch.destination_address  = strOrNull(body.destination_address);
+  if ("destination_place_id" in body) patch.destination_place_id = strOrNull(body.destination_place_id);
   if ("description"     in body) patch.description     = strOrNull(body.description);
   if ("cover_image_url" in body) patch.cover_image_url = strOrNull(body.cover_image_url);
   if ("start_date"      in body) patch.start_date      = strOrNull(body.start_date);

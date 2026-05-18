@@ -52,7 +52,7 @@ export async function POST(
   // Authorize.
   const { data: trip } = await r.supabase
     .from("trips")
-    .select("id, name, destination, start_date, end_date, created_by")
+    .select("id, name, destination, destination_address, start_date, end_date, created_by")
     .eq("id", trip_id).maybeSingle();
   if (!trip) return jsonErr(404, "trip_not_found");
   if (trip.created_by !== r.authUid) {
@@ -91,9 +91,17 @@ export async function POST(
   }
 
   const destinationAirport = body.override_destination_airport?.trim().toUpperCase();
+  // Prefer the full address ("Paris, France") over the short
+  // destination ("Paris") so Gemini's grounded search has enough
+  // context to disambiguate. The short destination is the fallback
+  // for trips created before the autocomplete shipped (migration 150)
+  // or when the planner typed freeform without picking a suggestion.
+  const destinationLabel = (trip.destination_address as string | null)?.trim()
+    || trip.destination?.trim()
+    || "the trip's destination";
   const destinationText = destinationAirport
     ? `airport code ${destinationAirport}`
-    : `${trip.destination ?? "the trip's destination"}${destinationAirport ? ` (${destinationAirport})` : ""}`;
+    : `${destinationLabel}${destinationAirport ? ` (${destinationAirport})` : ""}`;
 
   const prompt = `Find 3-5 real flight options for one person attending a group trip.
 
@@ -149,7 +157,17 @@ Output strict JSON only (no prose, no fences):
   if (!result.ok) return jsonErr(502, "gemini_failed", result.error);
 
   const options = Array.isArray(result.data.options) ? result.data.options : [];
-  if (options.length === 0) return jsonErr(502, "no_options");
+  if (options.length === 0) {
+    // Gemini answered, just with zero options — almost always because
+    // the destination is too vague (e.g., "Italy" with no airport
+    // code), the dates are outside Google Flights' search window
+    // (more than ~330 days out / in the past), or the origin airport
+    // wasn't recognized. Surface the model's own `note` field so the
+    // planner sees the actual reason instead of a bare "no_options".
+    const reason = result.data.note?.trim()
+      || `No flight options came back from ${origin} → ${destinationText}. Try a more specific destination (city or airport code) or check the trip dates.`;
+    return jsonErr(502, "no_options", reason);
+  }
 
   return jsonOk({
     respondent_id: resp.id,

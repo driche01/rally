@@ -25,6 +25,7 @@ import { useGeneration } from "@/lib/generation/provider";
 import TravelLoadingDance from "@/lib/generation/loading-art";
 import type { Trip } from "@shared/types";
 import CoverEditor from "./cover-editor";
+import PlacesAutocompleteInput from "@/lib/ui/places-autocomplete-input";
 
 interface CoverFields {
   name:            string;
@@ -37,13 +38,18 @@ interface CoverFields {
 }
 
 interface HeaderFields {
-  name:         string;
-  destination:  string | null;
-  start_date:   string | null;
-  end_date:     string | null;
-  book_by_date: string | null;
-  theme:        Trip["theme"];
-  status:       string;
+  name:                  string;
+  destination:           string | null;
+  // Alpha+ — populated by the places autocomplete when the planner
+  // picks a suggestion. Full address ("Paris, France") + Google's
+  // stable place_id. NULL = freeform destination never reconciled.
+  destination_address:   string | null;
+  destination_place_id:  string | null;
+  start_date:            string | null;
+  end_date:              string | null;
+  book_by_date:          string | null;
+  theme:                 Trip["theme"];
+  status:                string;
 }
 
 // ─── EditableCover ─────────────────────────────────────────────────
@@ -235,12 +241,35 @@ export function EditableTripHeader({
         />
       </h1>
 
-      <p className={`mb-1 ${t.body}`}>
-        <EditableText
+      {/* The destination/dates row used to be a <p>, but the Places
+          autocomplete (and its <ul> dropdown) can't legally nest inside
+          <p> per HTML spec — that triggers a React hydration error.
+          <div> is the right semantic anyway: this is a metadata strip
+          of editable controls, not a paragraph of text. */}
+      <div className={`mb-1 ${t.body}`}>
+        <EditableDestination
           value={fields.destination}
           canEdit={canEdit}
-          placeholder="Add a destination"
-          onSave={(v) => patch({ destination: v })}
+          onPickPlace={async (mainText, fullAddress, placeId) => {
+            // Atomic write — all three fields land in one PATCH so we
+            // never have a moment where destination is set but the
+            // structured place data is stale from a prior selection.
+            await patch({
+              destination:          mainText,
+              destination_address:  fullAddress,
+              destination_place_id: placeId,
+            });
+          }}
+          onCommitFreeform={async (text) => {
+            // The planner typed something and committed without picking
+            // a suggestion. Save the text but null the structured fields
+            // so we don't carry stale place data forward.
+            await patch({
+              destination:          text,
+              destination_address:  null,
+              destination_place_id: null,
+            });
+          }}
         />
         {" · "}
         <EditableText
@@ -260,7 +289,7 @@ export function EditableTripHeader({
           renderDisplay={(v) => v ? formatDate(v) : <span className="opacity-50">End date</span>}
           onSave={(v) => patch({ end_date: v })}
         />
-      </p>
+      </div>
 
       {canEdit && (
         <p className={`mb-4 text-xs ${t.meta}`}>
@@ -306,6 +335,92 @@ export default function EditableHero({
         <EditableTripHeader tripId={tripId} canEdit={canEdit} initial={initial} />
       </div>
     </>
+  );
+}
+
+// ─── EditableDestination ───────────────────────────────────────────
+//
+// Tap-to-edit destination row that uses the Google Places autocomplete
+// in edit mode. Mirrors the EditableText display/edit toggle pattern,
+// but the editor is the places dropdown instead of a bare <input>.
+//
+// Two save paths:
+//   - onPickPlace        — user picked a suggestion; structured data lands
+//   - onCommitFreeform   — user typed + blurred without picking; freeform text
+
+function EditableDestination({
+  value,
+  canEdit,
+  onPickPlace,
+  onCommitFreeform,
+}: {
+  value: string | null;
+  canEdit: boolean;
+  onPickPlace:      (mainText: string, fullAddress: string, placeId: string) => Promise<void>;
+  onCommitFreeform: (text: string | null) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft]     = useState(value ?? "");
+  const [err, setErr]         = useState<string | null>(null);
+
+  if (!canEdit) {
+    return value
+      ? <span>{value}</span>
+      : <span className="opacity-50">Add a destination</span>;
+  }
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => { setDraft(value ?? ""); setEditing(true); }}
+        className="inline-flex items-baseline gap-1 text-left cursor-text rounded-md hover:bg-green-soft/40 hover:px-1.5 -mx-1.5 px-1.5 transition-colors"
+        aria-label="Edit destination"
+      >
+        <span>{value ?? <span className="opacity-50">Add a destination</span>}</span>
+        <span aria-hidden className="text-xs opacity-30 ml-0.5">✎</span>
+      </button>
+    );
+  }
+
+  async function handlePick(mainText: string, fullAddress: string, placeId: string) {
+    setErr(null);
+    try {
+      await onPickPlace(mainText, fullAddress, placeId);
+      setEditing(false);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+    }
+  }
+
+  async function handleFreeformCommit(text: string) {
+    const trimmed = text.trim();
+    // No-op if unchanged.
+    if (trimmed === (value ?? "")) {
+      setEditing(false);
+      return;
+    }
+    setErr(null);
+    try {
+      await onCommitFreeform(trimmed === "" ? null : trimmed);
+      setEditing(false);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+    }
+  }
+
+  return (
+    <span className="inline-block min-w-[12rem] align-middle">
+      <PlacesAutocompleteInput
+        value={draft}
+        onChangeText={setDraft}
+        onSelectPlace={handlePick}
+        onCommit={handleFreeformCommit}
+        placeholder="Search a city, region, or venue…"
+        autoFocus
+      />
+      {err && <span className="block text-xs text-orange mt-1">{err}</span>}
+    </span>
   );
 }
 

@@ -38,7 +38,7 @@ export default async function TripLayout({
 
   const { data: tripRow, error } = await r.supabase
     .from("trips")
-    .select("id, name, destination, start_date, end_date, book_by_date, theme, effect, cover_image_url, status, share_token, created_by, cancelled_at")
+    .select("id, name, destination, destination_address, destination_place_id, start_date, end_date, book_by_date, theme, effect, cover_image_url, status, share_token, created_by, cancelled_at")
     .eq("id", id)
     .maybeSingle();
   if (error) {
@@ -49,7 +49,7 @@ export default async function TripLayout({
     );
   }
   if (!tripRow) notFound();
-  const trip = tripRow as Pick<Trip, "id" | "name" | "destination" | "start_date" | "end_date" | "book_by_date" | "theme" | "effect" | "cover_image_url" | "status" | "share_token" | "created_by" | "cancelled_at">;
+  const trip = tripRow as Pick<Trip, "id" | "name" | "destination" | "destination_address" | "destination_place_id" | "start_date" | "end_date" | "book_by_date" | "theme" | "effect" | "cover_image_url" | "status" | "share_token" | "created_by" | "cancelled_at">;
 
   // Host-or-cohost gate for edit affordances.
   let canEdit = trip.created_by === r.authUid;
@@ -140,13 +140,15 @@ export default async function TripLayout({
               tripId={trip.id}
               canEdit={canEdit}
               initial={{
-                name:         trip.name,
-                destination:  trip.destination,
-                start_date:   trip.start_date,
-                end_date:     trip.end_date,
-                book_by_date: trip.book_by_date,
-                theme:        trip.theme,
-                status:       trip.status,
+                name:                 trip.name,
+                destination:          trip.destination,
+                destination_address:  trip.destination_address,
+                destination_place_id: trip.destination_place_id,
+                start_date:           trip.start_date,
+                end_date:             trip.end_date,
+                book_by_date:         trip.book_by_date,
+                theme:                trip.theme,
+                status:               trip.status,
               }}
             />
           </div>

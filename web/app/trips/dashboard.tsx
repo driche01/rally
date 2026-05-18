@@ -255,10 +255,10 @@ function StatusChip({
     label = "👍 Going";
     cls = "bg-green text-cream";
   } else if (dt.myStatus === "maybe") {
-    label = "Maybe";
+    label = "🤔 Maybe";
     cls = "bg-gold text-ink";
   } else if (dt.myStatus === "cant_go") {
-    label = "Can't go";
+    label = "👎 Can't go";
     cls = "bg-card text-muted border border-line";
   } else if (dt.isInvitee) {
     label = "Invited";

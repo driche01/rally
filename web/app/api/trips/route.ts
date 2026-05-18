@@ -87,21 +87,26 @@ export async function POST(req: Request) {
   }
 
   const insert = {
-    created_by:      r.authUid,
+    created_by:           r.authUid,
     name,
     group_size_bucket,
     group_size_precise,
     theme,
-    destination:     strOrNull(body.destination),
-    description:     strOrNull(body.description),
-    cover_image_url: strOrNull(body.cover_image_url),
-    is_public:       Boolean(body.is_public ?? false),
+    destination:          strOrNull(body.destination),
+    // Alpha+ — structured place data from the Google Places autocomplete.
+    // Either of these can be set independently; freeform destinations
+    // leave both NULL.
+    destination_address:  strOrNull(body.destination_address),
+    destination_place_id: strOrNull(body.destination_place_id),
+    description:          strOrNull(body.description),
+    cover_image_url:      strOrNull(body.cover_image_url),
+    is_public:            Boolean(body.is_public ?? false),
     start_date,
     end_date,
     book_by_date,
     budget_min,
     budget_max,
-    status:          body.status === "draft" ? "draft" : "active",
+    status:               body.status === "draft" ? "draft" : "active",
   };
 
   const { data, error } = await r.supabase

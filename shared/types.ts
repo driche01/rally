@@ -66,6 +66,16 @@ export interface Trip {
   created_by: string | null;        // profiles.id
   name: string;
   destination: string | null;
+  // Alpha+ — full address string from the places autocomplete
+  // ("Paris, France" vs the short `destination` "Paris"). Populated
+  // when the planner picks a suggestion; null for freeform edits.
+  // Mobile app has populated this since the PlacesAutocompleteInput
+  // shipped; web populates it as of migration 150.
+  destination_address: string | null;
+  // Alpha+ — Google Places stable place_id (migration 150). Lets
+  // future features look up details/photos/airports without re-
+  // geocoding. Null = freeform destination never reconciled.
+  destination_place_id: string | null;
   start_date: string | null;        // ISO date
   end_date: string | null;          // ISO date
   budget_min: number | null;

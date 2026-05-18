@@ -7,7 +7,7 @@
  *
  * Three primary CTAs stay visible in a single line:
  *   • Invite people →
- *   • Copy share link
+ *   • Copy link
  *   • Send blast →
  *
  * Two secondary actions move to an overflow menu (⋯):
@@ -140,7 +140,7 @@ export default function TripActions({
           className={`h-11 px-3 rounded-full ${t.surface} text-ink border ${t.surfaceBorder} hover:border-green text-sm inline-flex items-center justify-center gap-2 sm:flex-1 sm:min-w-0`}
         >
           <IconLink className="h-4 w-4" />
-          <span>{copied ? "Copied" : "Copy share link"}</span>
+          <span>{copied ? "Copied" : "Copy link"}</span>
         </button>
         <button
           onClick={() => setShowBlast(true)}
