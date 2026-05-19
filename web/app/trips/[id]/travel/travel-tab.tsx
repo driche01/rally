@@ -9,6 +9,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { themeClass } from "@/lib/themes";
 import { flightSearchFor } from "@/lib/deep-links";
+import TravelLoadingDance from "@/lib/generation/loading-art";
 import type { Trip } from "@shared/types";
 
 export interface TravelMember {
@@ -311,7 +312,16 @@ export default function TravelTab({
         )}
       </section>
 
-      {/* Flight suggestion modal-ish panel */}
+      {/* Flight suggestion panel — shows a loading state (travel-emoji
+          dance + caption) while the Gemini call is in flight, then
+          swaps to the results panel when suggestions arrive. */}
+      {suggestionsFor && !suggestions && (
+        <FlightSuggestionsLoading
+          memberName={members.find((m) => m.respondent_id === suggestionsFor)?.name ?? "this person"}
+          t={t}
+          onClose={() => { setSuggestionsFor(null); setSuggestions(null); setSuggestionsNote(null); }}
+        />
+      )}
       {suggestionsFor && suggestions && (
         <FlightSuggestionsPanel
           memberName={members.find((m) => m.respondent_id === suggestionsFor)?.name ?? "this person"}
@@ -627,6 +637,40 @@ function EditArrangementForm({
   );
 }
 
+function FlightSuggestionsLoading({
+  memberName, t, onClose,
+}: {
+  memberName: string;
+  t: ReturnType<typeof themeClass>;
+  onClose: () => void;
+}) {
+  // Matches the cover-generation loading pattern — bouncing travel
+  // emojis (TravelLoadingDance) inside the same panel chrome that the
+  // results panel will use, so swapping in the results when they
+  // arrive is a visual replace, not a jump.
+  return (
+    <section className={`${t.surface} border ${t.surfaceBorder} rounded-2xl p-5 mb-10`}>
+      <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+        <h3 className={`text-xs ${t.eyebrow}`}>
+          Flight options for {memberName}
+        </h3>
+        <button onClick={onClose} className={`text-xs ${t.meta} hover:text-ink`}>Close</button>
+      </div>
+      <div className="flex flex-col items-center justify-center gap-3 py-8">
+        <div className="scale-150">
+          <TravelLoadingDance />
+        </div>
+        <p className={`text-sm font-semibold ${t.body}`}>
+          Searching for flights…
+        </p>
+        <p className={`text-xs ${t.meta} text-center max-w-[28ch]`}>
+          Asking AI for rough options — this usually takes 5–15 seconds.
+        </p>
+      </div>
+    </section>
+  );
+}
+
 function FlightSuggestionsPanel({
   memberName, options, note, t, onClose,
 }: {
@@ -644,7 +688,14 @@ function FlightSuggestionsPanel({
         </h3>
         <button onClick={onClose} className={`text-xs ${t.meta} hover:text-ink`}>Close</button>
       </div>
-      {note && <p className={`text-xs italic ${t.meta} mb-3`}>{note}</p>}
+      {/* Fixed brand-controlled disclaimer. Gemini's grounded search
+          returns plausible-looking flight data, not live inventory
+          (no public Google Flights API exists). Always show the same
+          honest one-liner regardless of what the model's `note`
+          field says. */}
+      <p className={`text-xs italic ${t.meta} mb-3`}>
+        Rough flight ideas — select &ldquo;Book&rdquo; to verify on Google Flights
+      </p>
       <ul className="grid gap-2">
         {options.map((o, i) => (
           <li key={i} className="bg-cream border border-line/60 rounded-xl p-3">
