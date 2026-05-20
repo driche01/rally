@@ -1,7 +1,6 @@
 /**
  * POST /api/trips/[id]/travel/groupings
- *   Planner/cohost OR a respondent creating their own driver ride
- *   creates a car/shuttle grouping.
+ *   Any trip participant creates a car/shuttle grouping.
  *   Body: {
  *     direction: 'outbound'|'return',
  *     departure_datetime: ISO,
@@ -17,9 +16,13 @@
  *
  * DELETE /api/trips/[id]/travel/groupings
  *   Body: { grouping_id: string }
+ *
+ * Auth (alpha, 2026-05-19): any trip participant — planner, cohost,
+ * or respondent — can create/delete groupings. resolveTripParticipant
+ * is the single gate.
  */
 
-import { requireAuthUid } from "@/lib/auth";
+import { resolveTripParticipant } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/server";
 import { jsonErr, jsonOk } from "@/lib/http";
 
@@ -27,9 +30,9 @@ export async function POST(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const r = await requireAuthUid();
-  if (!r.ok) return jsonErr(r.status, "unauthenticated");
   const { id: trip_id } = await ctx.params;
+  const r = await resolveTripParticipant(trip_id);
+  if (!r.ok) return jsonErr(r.status, r.status === 401 ? "unauthenticated" : "forbidden");
 
   const body = (await req.json().catch(() => null)) as
     | {
@@ -52,22 +55,6 @@ export async function POST(
   }
 
   const svc = createServiceClient();
-
-  // Permission: planner / cohost, OR the respondent_id being named as
-  // driver matches the caller (a driver creating their own ride).
-  const isManager = await canManage(r, trip_id);
-  let isDriverCreatingOwn = false;
-  if (!isManager && body.driver_respondent_id) {
-    const { data: userRow } = await svc.from("users")
-      .select("id").eq("auth_user_id", r.authUid).maybeSingle();
-    const userId = userRow?.id as string | undefined;
-    if (userId) {
-      const { data: caller } = await svc.from("respondents")
-        .select("id").eq("trip_id", trip_id).eq("user_id", userId).maybeSingle();
-      isDriverCreatingOwn = caller?.id === body.driver_respondent_id;
-    }
-  }
-  if (!isManager && !isDriverCreatingOwn) return jsonErr(403, "forbidden");
 
   // Default seats_total from driver's vehicle_capacity if available.
   let seatsTotal: number | null = body.seats_total ?? null;
@@ -104,10 +91,9 @@ export async function DELETE(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const r = await requireAuthUid();
-  if (!r.ok) return jsonErr(r.status, "unauthenticated");
   const { id: trip_id } = await ctx.params;
-  if (!(await canManage(r, trip_id))) return jsonErr(403, "forbidden");
+  const r = await resolveTripParticipant(trip_id);
+  if (!r.ok) return jsonErr(r.status, r.status === 401 ? "unauthenticated" : "forbidden");
 
   const body = (await req.json().catch(() => null)) as { grouping_id?: string } | null;
   if (!body?.grouping_id) return jsonErr(400, "grouping_id_required");
@@ -120,18 +106,4 @@ export async function DELETE(
     .eq("trip_id", trip_id);
   if (error) return jsonErr(500, "delete_failed", error.message);
   return jsonOk({ deleted: true });
-}
-
-async function canManage(
-  r: { authUid: string; supabase: { from: (t: string) => any } },
-  trip_id: string,
-): Promise<boolean> {
-  const { data: trip } = await r.supabase
-    .from("trips").select("id, created_by").eq("id", trip_id).maybeSingle();
-  if (!trip) return false;
-  if (trip.created_by === r.authUid) return true;
-  const { data: cohost } = await r.supabase
-    .from("trip_cohosts").select("trip_id")
-    .eq("trip_id", trip_id).eq("user_id", r.authUid).maybeSingle();
-  return !!cohost;
 }

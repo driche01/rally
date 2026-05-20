@@ -12,7 +12,7 @@
  * booking via the arrangements endpoint).
  */
 
-import { requireAuthUid } from "@/lib/auth";
+import { resolveTripParticipant } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/server";
 import { callGeminiJson } from "@/lib/ai/gemini";
 import { jsonErr, jsonOk } from "@/lib/http";
@@ -40,33 +40,30 @@ export async function POST(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const r = await requireAuthUid();
-  if (!r.ok) return jsonErr(r.status, "unauthenticated");
   const { id: trip_id } = await ctx.params;
+
+  // Auth (alpha, 2026-05-19): any trip participant can run flight
+  // suggestions for any member. Planner/cohost/respondent all welcome.
+  const r = await resolveTripParticipant(trip_id);
+  if (!r.ok) return jsonErr(r.status, r.status === 401 ? "unauthenticated" : "forbidden");
 
   const body = (await req.json().catch(() => null)) as
     | { respondent_id?: string; override_origin?: string; override_destination_airport?: string }
     | null;
   if (!body?.respondent_id) return jsonErr(400, "respondent_id_required");
 
-  // Authorize.
-  const { data: trip } = await r.supabase
+  const svc = createServiceClient();
+
+  // Trip details for the Gemini prompt.
+  const { data: trip } = await svc
     .from("trips")
-    .select("id, name, destination, destination_address, start_date, end_date, created_by")
+    .select("id, name, destination, destination_address, start_date, end_date")
     .eq("id", trip_id).maybeSingle();
   if (!trip) return jsonErr(404, "trip_not_found");
-  if (trip.created_by !== r.authUid) {
-    const { data: cohost } = await r.supabase
-      .from("trip_cohosts").select("trip_id")
-      .eq("trip_id", trip_id).eq("user_id", r.authUid).maybeSingle();
-    if (!cohost) return jsonErr(403, "forbidden");
-  }
 
   if (!trip.start_date || !trip.end_date) {
     return jsonErr(400, "dates_required");
   }
-
-  const svc = createServiceClient();
 
   // Get the member's name + phone for the traveler_profile lookup.
   const { data: resp } = await svc
@@ -148,7 +145,9 @@ Output strict JSON only (no prose, no fences):
   const result = await callGeminiJson<FlightResponse>({
     admin: svc,
     tripId: trip_id,
-    callerUserId: r.authUid,
+    // Anonymous respondent callers may not have an authUid — pass null
+    // in that case; the generation log just records "anon" for the caller.
+    callerUserId: r.participant.authUid ?? null,
     kind: "flight_suggest",
     user: prompt,
     grounded: true,

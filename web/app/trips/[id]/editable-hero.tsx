@@ -17,7 +17,7 @@
  * shared concern is the PATCH endpoint, which both call directly.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { themeClass } from "@/lib/themes";
 import { EditableText } from "@/lib/editable";
@@ -69,6 +69,16 @@ export function EditableCover({
   const generation = useGeneration();
   const coverBusy = generation.isRunning("cover-image");
   const t = themeClass(initial.theme);
+
+  // Re-sync local state when the server prop changes. Background
+  // generation (e.g., AI cover image) finishes outside this component,
+  // calls router.refresh() in the GenerationProvider, and the new URL
+  // arrives via fresh server props. Without this effect, the local
+  // `cover` state stays stuck on the original value and the planner
+  // has to reload the page to see the generated cover.
+  useEffect(() => {
+    setCover(initial.cover_image_url);
+  }, [initial.cover_image_url]);
 
   async function patch(fields: { cover_image_url: string | null }) {
     const res = await fetch(`/api/trips/${tripId}`, {

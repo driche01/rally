@@ -2,8 +2,8 @@
  * POST /api/trips/[id]/travel/arrangements
  *   Upsert a per-member travel arrangement.
  *   Body: {
- *     respondent_id?: string,   // planner only — edit on someone's behalf
- *     session_token?: string,   // member self-edit (anon-friendly)
+ *     respondent_id?: string,   // target arrangement (omit = caller's own)
+ *     session_token?: string,   // legacy path — cookie now supplies this
  *     arrival_mode?: 'flight'|'drive'|'train'|'other',
  *     arrival_datetime?: string,    // ISO
  *     departure_datetime?: string,  // ISO
@@ -14,11 +14,14 @@
  *     gear_notes?: string,
  *   }
  *
- * Auth: planner/cohost can edit any arrangement by passing
- * respondent_id. Members edit their own by passing session_token.
+ * Auth (alpha, 2026-05-19): any trip participant can edit any
+ * arrangement. The participant is resolved via resolveTripParticipant
+ * which checks auth.uid() first, then the rally_session_token cookie.
+ * The body.session_token path is kept for clients that pass the token
+ * explicitly rather than via cookie.
  */
 
-import { requireAuthUid } from "@/lib/auth";
+import { resolveTripParticipant } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/server";
 import { jsonErr, jsonOk } from "@/lib/http";
 
@@ -47,45 +50,38 @@ export async function POST(
 
   const svc = createServiceClient();
 
-  // Resolve respondent_id by either path.
-  let respondent_id: string | null = null;
+  // Authorize: who's making this call?
+  // Path A: legacy body.session_token (some clients pass the cookie
+  // value explicitly). Maps to a respondent on this trip.
+  // Path B: cookie or auth — resolveTripParticipant figures it out.
+  let callerRespondentId: string | null = null;
   if (typeof body.session_token === "string" && body.session_token.trim()) {
     const { data } = await svc
       .from("respondents").select("id")
       .eq("trip_id", trip_id).eq("session_token", body.session_token.trim())
       .maybeSingle();
     if (!data) return jsonErr(404, "respondent_not_found");
-    respondent_id = data.id;
-  } else if (typeof body.respondent_id === "string" && body.respondent_id.trim()) {
-    // Planner-on-behalf path — auth required, planner/cohost.
-    const r = await requireAuthUid();
-    if (!r.ok) return jsonErr(r.status, "unauthenticated");
-    const { data: trip } = await r.supabase
-      .from("trips").select("id, created_by").eq("id", trip_id).maybeSingle();
-    if (!trip) return jsonErr(404, "trip_not_found");
-    if (trip.created_by !== r.authUid) {
-      const { data: cohost } = await r.supabase
-        .from("trip_cohosts").select("trip_id")
-        .eq("trip_id", trip_id).eq("user_id", r.authUid).maybeSingle();
-      if (!cohost) return jsonErr(403, "forbidden");
-    }
-    const { data: resp } = await svc
+    callerRespondentId = data.id;
+  } else {
+    const r = await resolveTripParticipant(trip_id);
+    if (!r.ok) return jsonErr(r.status, r.status === 401 ? "unauthenticated" : "forbidden");
+    callerRespondentId = r.participant.respondentId;
+  }
+
+  // Resolve target arrangement. Explicit respondent_id wins; otherwise
+  // edit caller's own row. Any participant can edit any target (alpha
+  // policy — every trip member is a planner-equivalent collaborator).
+  let respondent_id: string | null = null;
+  if (typeof body.respondent_id === "string" && body.respondent_id.trim()) {
+    const { data: target } = await svc
       .from("respondents").select("id, trip_id")
       .eq("id", body.respondent_id).maybeSingle();
-    if (!resp || resp.trip_id !== trip_id) return jsonErr(404, "respondent_not_found");
-    respondent_id = resp.id;
+    if (!target || target.trip_id !== trip_id) return jsonErr(404, "respondent_not_found");
+    respondent_id = target.id;
+  } else if (callerRespondentId) {
+    respondent_id = callerRespondentId;
   } else {
-    // No session_token, no respondent_id → try authed-self path.
-    const r = await requireAuthUid();
-    if (!r.ok) return jsonErr(r.status, "unauthenticated_no_token");
-    const { data: u } = await svc
-      .from("users").select("id").eq("auth_user_id", r.authUid).maybeSingle();
-    if (!u?.id) return jsonErr(404, "rally_user_not_found");
-    const { data: resp } = await svc
-      .from("respondents").select("id")
-      .eq("trip_id", trip_id).eq("user_id", u.id).maybeSingle();
-    if (!resp?.id) return jsonErr(404, "respondent_not_found_for_authed_user");
-    respondent_id = resp.id;
+    return jsonErr(400, "respondent_id_required");
   }
 
   // Validate inputs.

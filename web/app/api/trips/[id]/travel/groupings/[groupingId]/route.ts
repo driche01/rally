@@ -1,14 +1,17 @@
 /**
  * PATCH /api/trips/[id]/travel/groupings/[groupingId]
  *
- * Driver-of-the-ride OR planner/cohost edits ride metadata:
- *   seats_total, space_comfort, ride_notes, departure_datetime, notes
+ * Edit ride metadata:
+ *   seats_total, space_comfort, ride_notes, departure_datetime, notes,
+ *   driver_respondent_id
  *
- * Per Q32 (RESOLVED 2026-05-14): driver of a grouping gains edit
- * rights on their own ride alongside the planner.
+ * Auth (alpha, 2026-05-19): any trip participant can edit any ride —
+ * superseded the prior planner-or-driver gate when the equal-edit
+ * policy landed. Q32's driver-edit carve-out is now subsumed by the
+ * broader participant-edit rule.
  */
 
-import { requireAuthUid } from "@/lib/auth";
+import { resolveTripParticipant } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/server";
 import { jsonErr, jsonOk } from "@/lib/http";
 
@@ -25,9 +28,9 @@ export async function PATCH(
   req: Request,
   ctx: { params: Promise<{ id: string; groupingId: string }> },
 ) {
-  const r = await requireAuthUid();
-  if (!r.ok) return jsonErr(r.status, "unauthenticated");
   const { id: trip_id, groupingId } = await ctx.params;
+  const r = await resolveTripParticipant(trip_id);
+  if (!r.ok) return jsonErr(r.status, r.status === 401 ? "unauthenticated" : "forbidden");
 
   const body = (await req.json().catch(() => null)) as
     | Record<string, unknown>
@@ -36,35 +39,13 @@ export async function PATCH(
 
   const svc = createServiceClient();
 
-  // Authorize: planner / cohost OR driver of this grouping.
-  const { data: trip } = await svc.from("trips")
-    .select("id, created_by").eq("id", trip_id).maybeSingle();
-  if (!trip) return jsonErr(404, "trip_not_found");
-
+  // Verify the grouping exists + belongs to this trip.
   const { data: grouping } = await svc.from("travel_groupings")
     .select("id, trip_id, driver_respondent_id")
     .eq("id", groupingId).maybeSingle();
   if (!grouping || grouping.trip_id !== trip_id) {
     return jsonErr(404, "grouping_not_found");
   }
-
-  let allowed = trip.created_by === r.authUid;
-  if (!allowed) {
-    const { data: cohost } = await svc.from("trip_cohosts")
-      .select("trip_id").eq("trip_id", trip_id).eq("user_id", r.authUid).maybeSingle();
-    if (cohost) allowed = true;
-  }
-  if (!allowed && grouping.driver_respondent_id) {
-    const { data: userRow } = await svc.from("users")
-      .select("id").eq("auth_user_id", r.authUid).maybeSingle();
-    const userId = userRow?.id as string | undefined;
-    if (userId) {
-      const { data: caller } = await svc.from("respondents")
-        .select("id").eq("trip_id", trip_id).eq("user_id", userId).maybeSingle();
-      if (caller?.id === grouping.driver_respondent_id) allowed = true;
-    }
-  }
-  if (!allowed) return jsonErr(403, "forbidden");
 
   // Filter body to allowed fields + sanity-check each.
   const patch: Record<string, unknown> = {};

@@ -207,9 +207,6 @@ export default function CoverEditor({
               >
                 Generate cover →
               </button>
-              <p className="text-xs text-muted">
-                Generation runs in the background. You can keep planning while it cooks.
-              </p>
             </div>
           )}
 

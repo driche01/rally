@@ -23,6 +23,7 @@ import type {
 } from "@shared/types";
 import RsvpButtons from "./rsvp-buttons";
 import ActivitySection from "./activity-section";
+import RespondentTabNav from "./tabs";
 import { themeClass, type ThemeStyle } from "@/lib/themes";
 import AppHeader from "@/lib/brand/app-header";
 
@@ -109,8 +110,11 @@ export default async function InvitePage({ params }: PageProps) {
             sits in the right column. */}
         <div className="lg:grid lg:grid-cols-[5fr_7fr] lg:gap-10">
 
-          {/* ── Left column: cover + RSVP / cancellation slot ── */}
-          <div className="lg:sticky lg:top-0 lg:h-[100dvh] lg:flex lg:flex-col lg:justify-center lg:gap-4 mb-6 lg:mb-0">
+          {/* ── Left column: cover + RSVP / cancellation slot ──
+              Mobile: space-y-4 puts a 16 px gap between the cover and
+              the RSVP CTA below it (the lg:gap-4 only fires at lg+).
+              Matches the spacing on the planner's trip layout. */}
+          <div className="space-y-4 lg:space-y-0 lg:sticky lg:top-0 lg:h-[100dvh] lg:flex lg:flex-col lg:justify-center lg:gap-4 mb-6 lg:mb-0">
             {trip.cover_image_url ? (
               <div
                 className={`block aspect-square w-full rounded-[28px] bg-cover bg-center ${t.cover}`}
@@ -148,8 +152,13 @@ export default async function InvitePage({ params }: PageProps) {
 
           {/* ── Right column: trip details + crew + activity ── */}
           <div>
+            {/* Tab nav mirror of the planner side — Overview active,
+                rest disabled as "· soon" placeholders so respondents
+                see what's coming. Rendered above the eyebrow so the
+                "You're invited" intro still sits closest to the title. */}
+            <RespondentTabNav token={token} />
             <p className={`text-[11px] mb-3 ${t.eyebrow}`}>
-              {t.label} · You&apos;re invited
+              You&apos;re invited
             </p>
             <h1 className={`text-4xl sm:text-5xl leading-[1.05] mb-3 ${t.display}`}>
               {trip.name}

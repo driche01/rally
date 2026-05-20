@@ -68,52 +68,47 @@ export default function RsvpButtons({
   if (confirmed) {
     const confirmedOpt = OPTIONS.find((o) => o.value === confirmed)!;
     const greeting = myFirstName ? `${myFirstName}, ` : "";
+    const editing  = pending !== null;
+    // Whole confirmation chip is the CTA — tapping re-opens the RSVP
+    // flow so the respondent can change their answer (or update their
+    // profile/notes). The three smaller per-option pills below were
+    // retired here on 2026-05-19 in favor of this single-tap target;
+    // the guiding caption inside the chip ("Select to edit your RSVP")
+    // signals that the chip is interactive.
     return (
-      <div className="grid gap-2">
-        <div
-          aria-live="polite"
-          className="flex items-center justify-between gap-3 py-4 px-4 rounded-[18px] bg-green text-cream border border-green shadow-md"
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <span className="text-2xl leading-none" aria-hidden="true">
-              {confirmedOpt.emoji}
-            </span>
-            <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-widest font-bold opacity-80 leading-none mb-0.5">
-                Your RSVP
-              </p>
-              <p className="font-bold text-base leading-tight truncate">
-                {greeting}{CONFIRM_LABELS[confirmed as Exclude<RsvpStatus, "invited">]}
-              </p>
-            </div>
+      <button
+        type="button"
+        onClick={() => onTap(confirmed)}
+        disabled={editing}
+        aria-live="polite"
+        aria-label={`Your RSVP: ${CONFIRM_LABELS[confirmed as Exclude<RsvpStatus, "invited">]} — tap to edit`}
+        className={
+          "w-full flex items-center justify-between gap-3 py-4 px-4 rounded-[18px] border shadow-md text-left transition-colors disabled:cursor-not-allowed " +
+          (editing
+            ? "bg-green-2 text-cream border-green-2"
+            : "bg-green text-cream border-green hover:bg-green-2")
+        }
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="text-2xl leading-none" aria-hidden="true">
+            {confirmedOpt.emoji}
+          </span>
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase tracking-widest font-bold opacity-80 leading-none mb-0.5">
+              Your RSVP
+            </p>
+            <p className="font-bold text-base leading-tight truncate">
+              {greeting}{CONFIRM_LABELS[confirmed as Exclude<RsvpStatus, "invited">]}
+            </p>
+            <p className="text-[11px] opacity-80 leading-tight mt-0.5">
+              {editing ? "Opening…" : "Select to edit your RSVP"}
+            </p>
           </div>
-          <span aria-hidden="true" className="text-cream/90 text-xl leading-none">✓</span>
         </div>
-        <div className="grid grid-cols-3 gap-2 sm:gap-3">
-          {OPTIONS.map((o) => {
-            const isCurrent = o.value === confirmed;
-            const isPending = pending === o.value;
-            return (
-              <button
-                key={o.value}
-                onClick={() => onTap(o.value)}
-                disabled={pending !== null}
-                className={
-                  "flex items-center justify-center gap-1.5 py-2.5 rounded-full border text-xs font-semibold transition-colors disabled:cursor-not-allowed " +
-                  (isPending
-                    ? "bg-green text-cream border-green"
-                    : isCurrent
-                      ? "bg-green-soft/40 border-green text-ink"
-                      : "bg-card border-line text-ink hover:border-green")
-                }
-              >
-                <span aria-hidden="true" className="text-sm">{o.emoji}</span>
-                <span>{isCurrent ? "Change" : o.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+        <span aria-hidden="true" className="text-cream/90 text-xl leading-none flex-shrink-0">
+          {editing ? "…" : "✎"}
+        </span>
+      </button>
     );
   }
 
