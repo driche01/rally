@@ -15,7 +15,7 @@ import type { Trip } from "@shared/types";
 import TabNav from "./tabs";
 import { EditableCover, EditableTripHeader } from "./editable-hero";
 import TripActions from "./trip-actions";
-import SaveTripBanner from "./save-trip-banner";
+import DraftGuard from "./draft-guard";
 import GenerationProvider from "@/lib/generation/provider";
 import EffectOverlay from "@/lib/effects/effect-overlay";
 import StylePicker from "./style-picker";
@@ -51,8 +51,12 @@ export default async function TripLayout({
   if (!tripRow) notFound();
   const trip = tripRow as Pick<Trip, "id" | "name" | "destination" | "destination_address" | "destination_place_id" | "start_date" | "end_date" | "book_by_date" | "theme" | "effect" | "cover_image_url" | "status" | "share_token" | "created_by" | "cancelled_at">;
 
-  // Host-or-cohost gate for edit affordances.
-  let canEdit = trip.created_by === r.authUid;
+  // Host-or-cohost gate for edit affordances. isPlanner is the
+  // narrower check — needed by the DraftGuard, since discarding a
+  // draft is a planner-only destructive action (cohosts can edit but
+  // can't delete the trip out from under the planner).
+  const isPlanner = trip.created_by === r.authUid;
+  let canEdit = isPlanner;
   const svc = createServiceClient();
   if (!canEdit) {
     const { data: cohost } = await svc.from("trip_cohosts")
@@ -100,15 +104,18 @@ export default async function TripLayout({
         <div className="max-w-7xl mx-auto px-6 pt-6 relative">
           <AppHeader />
 
-          {/* Draft banner — sticky at the top of the trip page until
-              the planner clicks Save. Only renders when status='draft'
-              + canEdit + not cancelled (those gates live inside the
-              component so this call site stays a one-liner). */}
-          <SaveTripBanner
+          {/* Draft navigation guard — intercepts navigation away from
+              a draft trip with no invitations and asks the planner to
+              save (promote to active) or discard (hard-delete). The
+              guard is planner-only since discard is destructive.
+              hasInvitations is true once any non-planner respondent
+              exists. The component is invisible until it intercepts a
+              navigation event. */}
+          <DraftGuard
             tripId={trip.id}
             status={trip.status}
-            cancelled={Boolean(trip.cancelled_at)}
-            canEdit={canEdit}
+            hasInvitations={respondents.some((r) => !r.is_planner)}
+            canEdit={isPlanner}
           />
 
 

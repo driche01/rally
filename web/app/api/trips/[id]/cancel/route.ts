@@ -20,6 +20,7 @@ import { requireAuthUid } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/server";
 import { jsonOk, jsonErr } from "@/lib/http";
 import { sendSms } from "@/lib/twilio";
+import { getSiteUrl } from "@/lib/site-url";
 
 export async function POST(
   _req: Request,
@@ -82,9 +83,13 @@ export async function POST(
   const respondents = respRows ?? [];
 
   // 5. Resolve site URL for the cancellation-link in the SMS body.
-  const proto = "https";
-  const host  = req_host_for(svc) || "rallysurveys.netlify.app";
-  const inviteUrl = `${proto}://${host}/invite/${trip.share_token}`;
+  //    Uses the canonical getSiteUrl() helper (env var → request
+  //    headers → localhost fallback). Critical fix: previously this
+  //    route used a local helper that fell back to
+  //    "rallysurveys.netlify.app" — the Expo marketing site, not the
+  //    Next.js web app. Resulted in cancellation SMS links 404ing.
+  const baseUrl = await getSiteUrl();
+  const inviteUrl = `${baseUrl}/invite/${trip.share_token}`;
 
   // 6. Send cancellation_notice to each (skipping the planner —
   //    they just clicked the button, don't ping them).
@@ -149,6 +154,6 @@ export async function POST(
  * The cancellation-notice link doesn't need to be LAN-IP-perfect
  * since the trip is being torn down anyway.
  */
-function req_host_for(_svc: ReturnType<typeof createServiceClient>): string | null {
-  return process.env.NEXT_PUBLIC_SITE_URL?.replace(/^https?:\/\//, "") ?? null;
-}
+// req_host_for was retired 2026-05-19 in favor of the canonical
+// getSiteUrl() helper — its rallysurveys.netlify.app fallback was
+// causing cancellation-notice SMS links to 404.

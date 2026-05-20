@@ -1,13 +1,20 @@
 /**
  * /api/trips/[id]
- *   GET   — read a trip. Anon allowed via ?token=<share_token> for
- *           the invitation page. Authed planner/cohost reads also
- *           work via RLS.
- *   PATCH — planner/cohost edits trip metadata.
+ *   GET    — read a trip. Anon allowed via ?token=<share_token> for
+ *            the invitation page. Authed planner/cohost reads also
+ *            work via RLS.
+ *   PATCH  — planner/cohost edits trip metadata.
+ *   DELETE — planner discards a draft. Hard-deletes the trip row and
+ *            cascades children (respondents, activity, blasts, etc.)
+ *            via the existing FK CASCADE rules. Only safe to call on
+ *            drafts with no invitees — callers are responsible for
+ *            that gate; the route lets planner-owned trips be deleted
+ *            unconditionally (the chrome calls it from the
+ *            DraftGuard modal flow).
  */
 
 import { requireAuthUid } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { jsonErr, jsonOk } from "@/lib/http";
 import { ALLOWED_THEMES } from "@/lib/themes";
 import type { Trip, TripTheme, TripEffect } from "@shared/types";
@@ -135,4 +142,41 @@ function numOrNull(v: unknown): number | null {
 async function safeJson(req: Request): Promise<Record<string, unknown> | null> {
   try { return (await req.json()) as Record<string, unknown>; }
   catch { return null; }
+}
+
+// ─── DELETE ─────────────────────────────────────────────────────
+//
+// Planner-only discard for draft trips. The DraftGuard modal calls
+// this when the planner picks "Discard" before any invitations have
+// been sent. We don't enforce the no-invitees / draft-only invariants
+// here — the client-side guard is the source of truth for when the
+// modal fires. The server still gates on planner ownership.
+//
+// Cascade: existing FKs on respondents, activity_feed_entries,
+// trip_cohosts, travel_*, day_rsvps, itinerary_blocks, blasts,
+// invitations, etc. all reference trips.id ON DELETE CASCADE, so
+// a single DELETE on trips cleans up everything.
+
+export async function DELETE(
+  _req: Request,
+  ctx: { params: Promise<{ id: string }> },
+) {
+  const r = await requireAuthUid();
+  if (!r.ok) return jsonErr(r.status, "unauthenticated");
+  const { id } = await ctx.params;
+
+  // Confirm caller owns the trip. Cohosts can edit but not delete —
+  // discard is a planner-only action since it's destructive.
+  const { data: trip } = await r.supabase
+    .from("trips")
+    .select("id, created_by")
+    .eq("id", id)
+    .maybeSingle();
+  if (!trip) return jsonErr(404, "trip_not_found");
+  if (trip.created_by !== r.authUid) return jsonErr(403, "forbidden");
+
+  const svc = createServiceClient();
+  const { error } = await svc.from("trips").delete().eq("id", id);
+  if (error) return jsonErr(500, "delete_failed", error.message);
+  return jsonOk({ deleted: true });
 }
