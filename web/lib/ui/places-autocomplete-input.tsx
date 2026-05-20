@@ -118,8 +118,9 @@ export default function PlacesAutocompleteInput({
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") {
       e.preventDefault();
-      if (suggestions.length > 0) {
-        handleSelect(suggestions[0]);
+      const first = suggestions[0];
+      if (first) {
+        handleSelect(first);
       } else if (onCommit) {
         onCommit(value);
         inputRef.current?.blur();

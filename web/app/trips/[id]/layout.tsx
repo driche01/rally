@@ -195,13 +195,15 @@ export default async function TripLayout({
                   tripId={trip.id}
                   canEdit={canEdit}
                   initial={{
-                    name:         trip.name,
-                    destination:  trip.destination,
-                    start_date:   trip.start_date,
-                    end_date:     trip.end_date,
-                    book_by_date: trip.book_by_date,
-                    theme:        trip.theme,
-                    status:       trip.status,
+                    name:                 trip.name,
+                    destination:          trip.destination,
+                    destination_address:  trip.destination_address,
+                    destination_place_id: trip.destination_place_id,
+                    start_date:           trip.start_date,
+                    end_date:             trip.end_date,
+                    book_by_date:         trip.book_by_date,
+                    theme:                trip.theme,
+                    status:               trip.status,
                   }}
                 />
               </div>
