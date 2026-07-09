@@ -1,6 +1,18 @@
 # Batch A — Launch-Blocker Fixes: Implementation & Signoff
 
-_Companion to `CODE_REVIEW_2026-07-08.md`. Covers the Tier 1 fixes you approved. Nothing here touches the database; the one DB change (1.2) is prepared for your signoff, not applied._
+_Companion to `CODE_REVIEW_2026-07-08.md`. Covers the Tier 1 fixes you approved._
+
+## ✅ DEPLOYED TO PRODUCTION (2026-07-09)
+
+All of Batch A is live and verified in prod:
+
+- **Edge functions** deployed (`--no-verify-jwt`): `sms-inbound`, `sms-status-webhook`, `sms-rsvp-nudge-scheduler`. Verified: both webhooks now return **403** to unsigned requests (were processing forged messages before).
+- **Web** promoted `main` → `release`; Netlify deploy `3eddbae` published to https://rally-web.netlify.app.
+- **Migration 152 applied** and recorded in `schema_migrations`. Verified before/after with the browser's publishable key:
+  - **Before:** anon could read **8/8 trips** including their private `share_token`s.
+  - **After:** anon reads **0 trips** (`content-range: */0`); the `trips` "Unauthenticated users can read trips via share link" policy is gone; the live invite page still returns **200** via service-role.
+
+Deploy order honored: web (service-role reads) went live before the policy drop, so the public invite page never broke.
 
 ## Integration note (what actually shipped to `main`)
 
