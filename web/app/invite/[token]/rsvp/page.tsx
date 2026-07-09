@@ -6,7 +6,7 @@
  */
 
 import { notFound, redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import RsvpFlow from "./rsvp-flow";
 import type { Trip, RsvpStatus } from "@shared/types";
 
@@ -29,8 +29,12 @@ export default async function RsvpPage({
     redirect(`/invite/${token}`);
   }
 
-  const anon = await createClient();
-  const { data: tripRow } = await anon
+  // Service-role (server-side): the trip is looked up by its secret
+  // share_token here. RLS no longer grants anon a blanket SELECT on
+  // trips (migration 152), so this read goes through service-role,
+  // scoped to the token. Token stays server-side.
+  const svc = createServiceClient();
+  const { data: tripRow } = await svc
     .from("trips")
     .select("id, name")
     .eq("share_token", token)

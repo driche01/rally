@@ -48,6 +48,13 @@ export default function RespondentActions({ name, showNewTrip = true }: Props) {
       });
       const body = await res.json();
       if (!res.ok || !body.ok) {
+        // A real account already exists for this phone — promotion isn't
+        // allowed to log into it (that would need proof of phone
+        // ownership). Send them to the OTP login instead.
+        if (body?.error?.code === "account_exists") {
+          router.push(`/login?next=${encodeURIComponent("/trips")}`);
+          return;
+        }
         setErr(body?.error?.code || "Couldn't sign you in.");
         return;
       }

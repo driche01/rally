@@ -22,13 +22,17 @@
  *      supabase.auth.verifyOtp({ type: 'magiclink', token_hash })
  *      which sets the Supabase session cookies.
  *
- * Security note: a respondent's identity is "verified" only insofar
- * as they possess the invite URL + a phone they typed at RSVP. An
- * attacker who has both could squat the account. When the real
- * owner later runs the OTP login flow with the same phone, they
- * reclaim it (phone OTP is the authoritative identity check). For
- * the alpha cohort (whitelisted phones) the surface is acceptable;
- * post-alpha we'll harden with phone-OTP at RSVP.
+ * Security note: a respondent's identity here is only as strong as
+ * "possesses the invite URL + typed a phone at RSVP" — the phone is
+ * NOT verified. Therefore promotion may only ever mint / reuse the
+ * synthetic cookie-only tier (`rally-<digits>@invalid.local`). If a
+ * REAL account already exists for the typed phone, this endpoint
+ * refuses (409 `account_exists`) and the client routes to phone-OTP
+ * login, which authoritatively proves possession of the number via an
+ * SMS code. This blocks the takeover path where an attacker RSVPs with
+ * a victim's phone and promotes into the victim's account. (Squatting
+ * an as-yet-unregistered phone with a synthetic account remains an
+ * accepted alpha tradeoff; the real owner reclaims via OTP signup.)
  */
 
 import { cookies } from "next/headers";
@@ -75,7 +79,23 @@ export async function POST() {
   let email: string;
 
   if (existingProfile?.email) {
-    // Already provisioned — reuse the auth user.
+    // SECURITY: the RSVP phone bound to this cookie was self-typed and
+    // never verified. If a profile already exists for that phone with a
+    // REAL email, it belongs to an authenticatable account — reusing it
+    // here would mint a session for someone whose number we never proved
+    // the caller owns (account takeover). Only the synthetic cookie-only
+    // tier (`rally-<digits>@invalid.local`, created solely by this
+    // endpoint) is the same low-assurance identity and safe to reuse.
+    // Real accounts must authenticate through phone-OTP login, which
+    // proves possession of the number via an SMS code.
+    if (!isSyntheticEmail(existingProfile.email)) {
+      return jsonErr(
+        409,
+        "account_exists",
+        "An account already exists for this phone. Sign in with a text code.",
+      );
+    }
+    // Synthetic account previously provisioned for this phone — reuse it.
     authUserId = existingProfile.id;
     email = existingProfile.email;
   } else {
@@ -171,6 +191,15 @@ export async function POST() {
 }
 
 // ─── helpers ─────────────────────────────────────────────────────
+
+/**
+ * True for the synthetic address this endpoint mints for cookie-only
+ * respondents (`rally-<digits>@invalid.local`). Real accounts carry a
+ * genuine email; only synthetic ones may be reused without phone-OTP.
+ */
+function isSyntheticEmail(email: string): boolean {
+  return /@invalid\.local$/i.test(email.trim());
+}
 
 async function findAuthUserByEmail(
   svc: ReturnType<typeof createServiceClient>,

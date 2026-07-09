@@ -173,11 +173,17 @@ Deno.serve(async (req: Request) => {
       continue;
     }
 
+    // personalizeBody keys on PersonalizeContext field names
+    // (recipientName/tripName/destination/surveyUrl) — NOT the bracket
+    // token spellings. Passing the token spellings leaves every
+    // placeholder unresolved: [Name]→"there", [Trip]→"the trip", and
+    // (because surveyUrl is absent) [Survey link] never expands, so the
+    // reminder ships with no name, no trip, and no tappable link.
     const finalBody = personalizeBody(body, {
-      Name:        firstName(respondent.name),
-      Trip:        trip.name,
-      Destination: trip.destination ?? '',
-      ['Survey link']: `${siteUrl()}/invite/${trip.share_token}`,
+      recipientName: respondent.name,
+      tripName:      trip.name,
+      destination:   trip.destination ?? '',
+      surveyUrl:     `${siteUrl()}/invite/${trip.share_token}`,
     });
 
     // Send via the shared rail. dm-sender enforces opt-out via
@@ -484,10 +490,6 @@ function buildBody(
 }
 
 // ─── helpers ──────────────────────────────────────────────────────
-
-function firstName(full: string): string {
-  return full.split(/\s+/)[0] ?? full;
-}
 
 async function markSkipped(admin: SupabaseClient, id: string, reason: string): Promise<void> {
   await admin.from('scheduled_reminders').update({

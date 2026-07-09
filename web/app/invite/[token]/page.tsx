@@ -35,9 +35,13 @@ export default async function InvitePage({ params }: PageProps) {
   const { token } = await params;
 
   const anon = await createClient();
+  const svc = createServiceClient();
 
-  // 1. Trip by share token (anon-allowed per existing RLS).
-  const { data: tripRow } = await anon
+  // 1. Trip by share token. Read via service-role (server-side),
+  //    scoped to the secret token. RLS no longer grants anon a blanket
+  //    SELECT on trips (migration 152) — the token, not the anon role,
+  //    is the access boundary. Token stays server-side.
+  const { data: tripRow } = await svc
     .from("trips")
     .select("*")
     .eq("share_token", token)
@@ -50,7 +54,6 @@ export default async function InvitePage({ params }: PageProps) {
   let plannerName = "A friend";
   let plannerAvatar: string | null = null;
   if (trip.created_by) {
-    const svc = createServiceClient();
     const { data: planner } = await svc
       .from("profiles")
       .select("name, last_name, avatar_url")

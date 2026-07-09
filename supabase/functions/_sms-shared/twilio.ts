@@ -41,8 +41,26 @@ export async function validateTwilioSignature(
   // 3. Base64 encode
   const computed = btoa(String.fromCharCode(...new Uint8Array(sig)));
 
-  // 4. Compare (timing-safe comparison via string equality on fixed-length base64)
-  return computed === signature;
+  // 4. Constant-time compare. Plain `===` short-circuits on the first
+  //    differing byte and leaks timing; compare the full length instead.
+  return timingSafeEqual(computed, signature);
+}
+
+/**
+ * Constant-time string equality. Compares every position regardless of
+ * where the first mismatch is, so comparison time does not reveal how
+ * many leading bytes matched. Length mismatch still returns false, but
+ * only after a fixed-length scan of the computed value.
+ */
+function timingSafeEqual(a: string, b: string): boolean {
+  const len = a.length;
+  // Fold the length check into the accumulator so an early return can't
+  // leak it. Any out-of-range index on `b` yields NaN → non-zero diff.
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < len; i++) {
+    diff |= a.charCodeAt(i) ^ (b.charCodeAt(i) || 0);
+  }
+  return diff === 0;
 }
 
 /**

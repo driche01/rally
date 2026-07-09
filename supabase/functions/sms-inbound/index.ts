@@ -46,9 +46,18 @@ Deno.serve(async (req: Request) => {
     }
 
     // ─── Validate Twilio signature ─────────────────────────────────────────
+    // The signature is this webhook's ONLY authentication (deployed
+    // --no-verify-jwt). When TWILIO_AUTH_TOKEN is configured (i.e. prod),
+    // a valid signature is MANDATORY — a missing header must be rejected,
+    // not treated as "skip validation". Only the local-dev path (no token
+    // set) is allowed to run unsigned.
     const signature = req.headers.get('X-Twilio-Signature') ?? '';
     const publicUrl = 'https://qxpbnixvjtwckuedlrfj.supabase.co/functions/v1/sms-inbound';
-    if (twilioAuthToken && signature) {
+    if (twilioAuthToken) {
+      if (!signature) {
+        console.error('[sms-inbound] Missing Twilio signature');
+        return jsonResponse({ error: 'Missing signature' }, 403);
+      }
       const paramsObj: Record<string, string> = {};
       params.forEach((v, k) => { paramsObj[k] = v; });
 

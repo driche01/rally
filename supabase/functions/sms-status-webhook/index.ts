@@ -47,13 +47,20 @@ Deno.serve(async (req: Request) => {
       return new Response('missing_fields', { status: 400, headers: CORS_HEADERS });
     }
 
-    // Twilio signature validation. The webhook URL Twilio is configured
-    // to call must match what we sign against. Skip in dev if no auth
-    // token configured.
+    // Twilio signature validation — this webhook's only authentication
+    // (deployed --no-verify-jwt). When TWILIO_AUTH_TOKEN is set (prod), a
+    // valid signature is MANDATORY: a missing header is rejected, not
+    // waved through. Only local dev (no token) may run unsigned. Without
+    // this, anyone could forge "delivered"/"failed" statuses to mask real
+    // send failures.
     const twilioAuthToken = Deno.env.get('TWILIO_AUTH_TOKEN') ?? '';
     const signature = req.headers.get('X-Twilio-Signature') ?? '';
     const publicUrl = 'https://qxpbnixvjtwckuedlrfj.supabase.co/functions/v1/sms-status-webhook';
-    if (twilioAuthToken && signature) {
+    if (twilioAuthToken) {
+      if (!signature) {
+        console.error('[sms-status-webhook] missing signature for', messageSid);
+        return new Response('missing_signature', { status: 403, headers: CORS_HEADERS });
+      }
       const paramsObj: Record<string, string> = {};
       params.forEach((v, k) => { paramsObj[k] = v; });
       const valid = await validateTwilioSignature(twilioAuthToken, signature, publicUrl, paramsObj);
